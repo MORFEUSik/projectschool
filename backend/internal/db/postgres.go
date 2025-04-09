@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yourusername/project/config"
+	"github.com/MORFEUSik/projectschool/backend/config"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
