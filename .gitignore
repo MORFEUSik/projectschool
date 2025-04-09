@@ -1,0 +1,33 @@
+# === Общие ===
+*.log
+*.tmp
+*.swp
+*.DS_Store
+
+# === Go ===
+/backend/bin/
+/backend/pkg/
+/backend/.idea/
+/backend/.vscode/
+*.exe
+*.out
+*.test
+*.mod
+*.sum
+vendor/
+
+# === Node.js / React (frontend) ===
+/frontend/node_modules/
+frontend/.next/
+frontend/.nuxt/
+frontend/.turbo/
+frontend/.cache/
+frontend/.eslintcache
+frontend/dist/
+frontend/build/
+frontend/.env.local
+frontend/.env*
+
+# === Git ===
+.env
+
