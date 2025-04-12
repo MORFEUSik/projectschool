@@ -1,22 +1,23 @@
-// internal/jwt/jwt.go
-
+// backend/internal/jwt/jwt.go
 package jwt
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 )
 
-var secretKey = []byte("your_secret_key") // Задай свой секретный ключ
+var secretKey = []byte(os.Getenv("JWT_SECRET"))
 
-// Создание JWT
 func GenerateToken(userID uint) (string, error) {
 	claims := jwt.MapClaims{
-		"sub": userID, // user ID
+		"sub": userID,
+		"iss": "projectschool",
+		"aud": "api",
 		"iat": time.Now().Unix(),
-		"exp": time.Now().Add(time.Hour * 24).Unix(), // Время истечения токена (24 часа)
+		"exp": time.Now().Add(time.Hour * 24).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -28,10 +29,8 @@ func GenerateToken(userID uint) (string, error) {
 	return tokenString, nil
 }
 
-// Проверка JWT
 func ValidateToken(tokenString string) (uint, error) {
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-		// Проверка метода подписи
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("не поддерживаемый метод подписи")
 		}
@@ -46,7 +45,6 @@ func ValidateToken(tokenString string) (uint, error) {
 		return 0, fmt.Errorf("неверные претензии")
 	}
 
-	// Возвращаем ID пользователя
 	userID := uint(claims["sub"].(float64))
 	return userID, nil
 }

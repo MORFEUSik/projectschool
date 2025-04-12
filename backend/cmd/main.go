@@ -1,38 +1,59 @@
-// cmd/main.go
-
+// backend/cmd/main.go
 package main
 
 import (
 	"fmt"
 
-	"github.com/MORFEUSik/projectschool/backend/config" // Импорт config
+	"github.com/MORFEUSik/projectschool/backend/config"
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
-	"github.com/MORFEUSik/projectschool/backend/internal/handler" // Импорт обработчиков
+	"github.com/MORFEUSik/projectschool/backend/internal/handler"
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/service"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// Загружаем конфигурацию
 	cfg := config.LoadConfig()
-
-	// Инициализируем базу данных
 	db.Init(cfg)
-
-	// Создаем новый роутер Gin
 	r := gin.Default()
 
-	// Роут для логина
-	r.POST("/login", handler.Login)
+	r.Use(cors.Default())
 
-	// Роут для регистрации нового пользователя
-	r.POST("/register", handler.Register) // Новый роут для регистрации
+	userRepo := repository.NewUserRepository()
+	courseRepo := repository.NewCourseRepository()
+	assignmentRepo := repository.NewAssignmentRepository()
+	submissionRepo := repository.NewSubmissionRepository()
 
-	// Роут для главной страницы
+	authService := service.NewAuthService(userRepo)
+	courseService := service.NewCourseService(courseRepo)
+	assignmentService := service.NewAssignmentService(assignmentRepo)
+	submissionService := service.NewSubmissionService(submissionRepo)
+
+	r.POST("/login", handler.Login(authService))
+	r.POST("/register", handler.Register(authService))
 	r.GET("/", func(c *gin.Context) {
 		c.String(200, "🎓 Backend для ProjectSchool работает!")
 	})
 
-	// Запускаем сервер на порту 8080
+	api := r.Group("/api", handler.AuthMiddleware())
+	{
+		courses := api.Group("/courses")
+		{
+			courses.GET("", handler.ListCourses(courseService))
+			courses.POST("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.CreateCourse(courseService))
+			courses.GET("/:id", handler.ListCourses(courseService))
+			courses.GET("/:id/assignments", handler.ListAssignments(assignmentService))
+		}
+
+		assignments := api.Group("/assignments")
+		{
+			assignments.POST("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.CreateAssignment(assignmentService))
+			assignments.POST("/:id/submit", handler.RoleMiddleware(model.Student), handler.SubmitAssignment(submissionService))
+		}
+	}
+
 	fmt.Println("🚀 Сервер запущен на http://localhost:8080")
 	if err := r.Run(":8080"); err != nil {
 		panic(err)
