@@ -10,66 +10,71 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Register создаёт нового пользователя и возвращает JWT-токен
 func Register(authService service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var user model.User
 		if err := c.ShouldBindJSON(&user); err != nil {
-			logger.Log.Errorf("Failed to bind JSON: %v", err)
+			logger.Log.Errorf("Invalid JSON input: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
 
+		logger.Log.Infof("Registering user: %s", user.Email)
+
 		if err := authService.Register(&user); err != nil {
 			logger.Log.Errorf("Failed to register user: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			if err.Error() == "пользователь с таким email уже существует" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при регистрации"})
 			return
 		}
 
 		token, err := jwt.GenerateToken(user.ID)
 		if err != nil {
-			logger.Log.Errorf("Failed to generate token for user %s: %v", user.Username, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при генерации токена"})
+			logger.Log.Errorf("Failed to generate token: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при создании токена"})
 			return
 		}
 
-		logger.Log.Infof("User registered: %s", user.Username)
+		logger.Log.Infof("User %s registered successfully", user.Email)
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Пользователь успешно зарегистрирован",
-			"user":    user,
 			"token":   token,
 		})
 	}
 }
 
-// Login аутентифицирует пользователя и возвращает JWT-токен
 func Login(authService service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var input struct {
+		var credentials struct {
 			Email    string `json:"email" binding:"required,email"`
 			Password string `json:"password" binding:"required"`
 		}
-		if err := c.ShouldBindJSON(&input); err != nil {
-			logger.Log.Errorf("Failed to bind JSON: %v", err)
+		if err := c.ShouldBindJSON(&credentials); err != nil {
+			logger.Log.Errorf("Invalid JSON input: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
 
-		user, err := authService.Login(input.Email, input.Password)
+		logger.Log.Infof("Attempting login for user: %s", credentials.Email)
+
+		user, err := authService.Login(credentials.Email, credentials.Password)
 		if err != nil {
-			logger.Log.Errorf("Failed to login for email %s: %v", input.Email, err)
+			logger.Log.Errorf("Login failed: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный email или пароль"})
 			return
 		}
 
 		token, err := jwt.GenerateToken(user.ID)
 		if err != nil {
-			logger.Log.Errorf("Failed to generate token for user %d: %v", user.ID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при генерации токена"})
+			logger.Log.Errorf("Failed to generate token: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при создании токена"})
 			return
 		}
 
-		logger.Log.Info("User logged in")
+		logger.Log.Infof("User %s logged in successfully", credentials.Email)
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Успешный вход",
 			"token":   token,
@@ -77,32 +82,34 @@ func Login(authService service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// AuthMiddleware проверяет JWT-токен и устанавливает userID в контекст
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("Authorization")
-		if token == "" {
-			logger.Log.Error("Authorization token is missing")
+		tokenString := c.GetHeader("Authorization")
+		if tokenString == "" {
+			logger.Log.Warn("Authorization header missing")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Токен отсутствует"})
 			c.Abort()
 			return
 		}
 
-		// Убираем "Bearer " если есть
-		if len(token) > 7 && token[:7] == "Bearer " {
-			token = token[7:]
+		if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
+			tokenString = tokenString[7:]
+		} else {
+			logger.Log.Warn("Invalid token format")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный формат токена"})
+			c.Abort()
+			return
 		}
 
-		userID, err := jwt.ValidateToken(token)
+		userID, err := jwt.ValidateToken(tokenString)
 		if err != nil {
 			logger.Log.Errorf("Invalid token: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный токен"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен"})
 			c.Abort()
 			return
 		}
 
 		c.Set("userID", userID)
-		logger.Log.Infof("Authenticated user %d", userID)
 		c.Next()
 	}
 }
