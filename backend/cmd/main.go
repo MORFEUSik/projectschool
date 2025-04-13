@@ -1,4 +1,3 @@
-// backend/cmd/main.go
 package main
 
 import (
@@ -7,6 +6,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/config"
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/handler"
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
@@ -15,6 +15,9 @@ import (
 )
 
 func main() {
+	logger.Init()
+	logger.Log.Info("Starting server...")
+
 	cfg := config.LoadConfig()
 	db.Init(cfg)
 	r := gin.Default()
@@ -29,7 +32,8 @@ func main() {
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo)
 	assignmentService := service.NewAssignmentService(assignmentRepo)
-	submissionService := service.NewSubmissionService(submissionRepo)
+	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo)
+	userService := service.NewUserService(userRepo)
 
 	r.POST("/login", handler.Login(authService))
 	r.POST("/register", handler.Register(authService))
@@ -39,6 +43,8 @@ func main() {
 
 	api := r.Group("/api", handler.AuthMiddleware())
 	{
+		api.GET("/users/me", handler.GetProfile(userService))
+
 		courses := api.Group("/courses")
 		{
 			courses.GET("", handler.ListCourses(courseService))
@@ -56,6 +62,6 @@ func main() {
 
 	fmt.Println("🚀 Сервер запущен на http://localhost:8080")
 	if err := r.Run(":8080"); err != nil {
-		panic(err)
+		logger.Log.Fatalf("Failed to start server: %v", err)
 	}
 }

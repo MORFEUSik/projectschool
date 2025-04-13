@@ -1,4 +1,3 @@
-// backend/internal/repository/submission.go
 package repository
 
 import (
@@ -10,6 +9,7 @@ import (
 type SubmissionRepository interface {
 	Create(submission *model.Submission) error
 	FindByAssignmentID(assignmentID uint) ([]model.Submission, error)
+	FindByAssignmentAndUser(assignmentID, userID uint) (*model.Submission, error)
 }
 
 type submissionRepository struct {
@@ -28,4 +28,10 @@ func (r *submissionRepository) FindByAssignmentID(assignmentID uint) ([]model.Su
 	var submissions []model.Submission
 	err := r.db.Where("assignment_id = ?", assignmentID).Find(&submissions).Error
 	return submissions, err
+}
+
+func (r *submissionRepository) FindByAssignmentAndUser(assignmentID, userID uint) (*model.Submission, error) {
+	var submission model.Submission
+	err := r.db.Where("assignment_id = ? AND user_id = ?", assignmentID, userID).First(&submission).Error
+	return &submission, err
 }

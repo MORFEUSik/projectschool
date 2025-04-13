@@ -27,7 +27,8 @@ func (s *authService) Register(user *model.User) error {
 		return err
 	}
 
-	existingUser, err := s.repo.FindByEmail(user.Email)
+	var existingUser model.User
+	err := s.repo.FindByEmail(user.Email, &existingUser)
 	if err == nil && existingUser.ID != 0 {
 		return errors.New("пользователь с таким email уже существует")
 	}
@@ -42,7 +43,8 @@ func (s *authService) Register(user *model.User) error {
 }
 
 func (s *authService) Login(email, password string) (*model.User, error) {
-	user, err := s.repo.FindByEmail(email)
+	var user model.User
+	err := s.repo.FindByEmail(email, &user)
 	if err != nil {
 		return nil, errors.New("неверные учетные данные")
 	}
@@ -51,5 +53,5 @@ func (s *authService) Login(email, password string) (*model.User, error) {
 		return nil, errors.New("неверные учетные данные")
 	}
 
-	return user, nil
+	return &user, nil
 }

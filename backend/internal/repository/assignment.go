@@ -1,4 +1,3 @@
-// backend/internal/repository/assignment.go
 package repository
 
 import (
@@ -10,6 +9,7 @@ import (
 type AssignmentRepository interface {
 	Create(assignment *model.Assignment) error
 	FindByCourseID(courseID uint) ([]model.Assignment, error)
+	FindByID(id uint) (*model.Assignment, error)
 }
 
 type assignmentRepository struct {
@@ -28,4 +28,10 @@ func (r *assignmentRepository) FindByCourseID(courseID uint) ([]model.Assignment
 	var assignments []model.Assignment
 	err := r.db.Where("course_id = ?", courseID).Find(&assignments).Error
 	return assignments, err
+}
+
+func (r *assignmentRepository) FindByID(id uint) (*model.Assignment, error) {
+	var assignment model.Assignment
+	err := r.db.First(&assignment, id).Error
+	return &assignment, err
 }

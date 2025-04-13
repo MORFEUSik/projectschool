@@ -21,10 +21,10 @@ type User struct {
 	Password  string    `gorm:"type:varchar(255)" validate:"required,min=6"`
 	Email     string    `gorm:"type:varchar(255);unique" validate:"required,email"`
 	Role      Role      `gorm:"type:varchar(50)" validate:"required,oneof=admin teacher student"`
+	Points    uint      `gorm:"default:0"` // Новое поле для баллов
 	CreatedAt time.Time `gorm:"default:current_timestamp"`
 }
 
-// Validate валидирует структуру User
 func (u *User) Validate() error {
 	validate := validator.New()
 	return validate.Struct(u)
