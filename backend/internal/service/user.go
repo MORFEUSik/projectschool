@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"regexp"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -28,18 +29,37 @@ func NewUserService(repo repository.UserRepository) UserService {
 func (s *userService) Register(user *model.User) error {
 	logger.Log.Infof("Registering user: %s", user.Email)
 
+	// Валидация email
+	if user.Email == "" {
+		logger.Log.Warn("Empty email provided")
+		return errors.New("email обязателен")
+	}
+	if !isValidEmail(user.Email) {
+		logger.Log.Warnf("Invalid email format: %s", user.Email)
+		return errors.New("некорректный формат email")
+	}
+
 	// Проверка: существует ли пользователь
-	_, err := s.FindByEmail(user.Email)
-	if err == nil {
+	logger.Log.Info("Checking if user exists")
+	userExists, err := s.repo.FindByEmail(user.Email)
+	if err == nil && userExists != nil {
 		logger.Log.Warnf("User with email %s already exists", user.Email)
 		return errors.New("пользователь с таким email уже существует")
 	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Log.Errorf("Error checking user existence: %v", err)
 		return err
 	}
+	logger.Log.Info("No existing user found")
+
+	// Валидация пароля
+	if user.Password == "" {
+		logger.Log.Warn("Empty password provided")
+		return errors.New("пароль обязателен")
+	}
 
 	// Хеширование пароля
+	logger.Log.Info("Hashing password")
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		logger.Log.Errorf("Failed to hash password: %v", err)
@@ -48,6 +68,7 @@ func (s *userService) Register(user *model.User) error {
 	user.Password = string(hashedPassword)
 
 	// Создание пользователя
+	logger.Log.Info("Creating user")
 	if err := s.repo.Create(user); err != nil {
 		logger.Log.Errorf("Failed to create user: %v", err)
 		return err
@@ -78,4 +99,11 @@ func (s *userService) FindByID(id uint) (*model.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+// isValidEmail проверяет формат email
+func isValidEmail(email string) bool {
+	const emailRegex = `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	re := regexp.MustCompile(emailRegex)
+	return re.MatchString(email)
 }
