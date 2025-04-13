@@ -10,6 +10,7 @@ type SubmissionRepository interface {
 	Create(submission *model.Submission) error
 	FindByAssignmentID(assignmentID uint) ([]model.Submission, error)
 	FindByAssignmentAndUser(assignmentID, userID uint) (*model.Submission, error)
+	FindByUserID(userID uint) ([]model.Submission, error)
 }
 
 type submissionRepository struct {
@@ -34,4 +35,10 @@ func (r *submissionRepository) FindByAssignmentAndUser(assignmentID, userID uint
 	var submission model.Submission
 	err := r.db.Where("assignment_id = ? AND user_id = ?", assignmentID, userID).First(&submission).Error
 	return &submission, err
+}
+
+func (r *submissionRepository) FindByUserID(userID uint) ([]model.Submission, error) {
+	var submissions []model.Submission
+	err := r.db.Where("user_id = ?", userID).Find(&submissions).Error
+	return submissions, err
 }

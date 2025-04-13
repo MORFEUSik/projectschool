@@ -22,6 +22,13 @@ func SubmitAssignment(submissionService service.SubmissionService) gin.HandlerFu
 		}
 		logger.Log.Infof("Received submission: content=%s, grade=%.2f", submission.Content, submission.Grade)
 
+		// Валидация grade
+		if submission.Grade < 0 || submission.Grade > 5 {
+			logger.Log.Errorf("Invalid grade: %.2f, must be between 0 and 5", submission.Grade)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Оценка должна быть от 0 до 5"})
+			return
+		}
+
 		userID, exists := c.Get("userID")
 		if !exists {
 			logger.Log.Error("User not authenticated")

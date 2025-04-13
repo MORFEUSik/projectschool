@@ -12,21 +12,24 @@ import (
 
 type SubmissionService interface {
 	Create(submission *model.Submission) error
+	FindByUserID(userID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
-	repo       repository.SubmissionRepository
-	userRepo   repository.UserRepository
-	assignRepo repository.AssignmentRepository
-	db         *gorm.DB
+	repo        repository.SubmissionRepository
+	userRepo    repository.UserRepository
+	assignRepo  repository.AssignmentRepository
+	achieveRepo repository.AchievementRepository
+	db          *gorm.DB
 }
 
-func NewSubmissionService(repo repository.SubmissionRepository, userRepo repository.UserRepository, assignRepo repository.AssignmentRepository) SubmissionService {
+func NewSubmissionService(repo repository.SubmissionRepository, userRepo repository.UserRepository, assignRepo repository.AssignmentRepository, achieveRepo repository.AchievementRepository) SubmissionService {
 	return &submissionService{
-		repo:       repo,
-		userRepo:   userRepo,
-		assignRepo: assignRepo,
-		db:         db.DB,
+		repo:        repo,
+		userRepo:    userRepo,
+		assignRepo:  assignRepo,
+		achieveRepo: achieveRepo,
+		db:          db.DB,
 	}
 }
 
@@ -44,6 +47,18 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 	logger.Log.Infof("Assignment %d found: %s", assignment.ID, assignment.Title)
+
+	// Проверка: записан ли пользователь на курс
+	logger.Log.Info("Checking enrollment")
+	var enrollment model.Enrollment
+	if err := s.db.Where("user_id = ? AND course_id = ?", submission.UserID, assignment.CourseID).First(&enrollment).Error; err != nil {
+		logger.Log.Errorf("User %d not enrolled in course %d: %v", submission.UserID, assignment.CourseID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("пользователь не записан на курс")
+		}
+		return err
+	}
+	logger.Log.Infof("User %d enrolled in course %d", submission.UserID, assignment.CourseID)
 
 	// Проверка: только одно решение на задание
 	logger.Log.Info("Checking for existing submission")
@@ -76,14 +91,21 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		logger.Log.Infof("User %d found: %s", user.ID, user.Username)
 
 		if submission.Grade >= 4.0 {
-			points := uint(submission.Grade * 2)
+			points := uint(submission.Grade * assignment.PointsMultiplier)
 			user.Points += points
-			logger.Log.Infof("Adding %d points to user %d", points, user.ID)
+			logger.Log.Infof("Adding %d points to user %d (multiplier %.2f)", points, user.ID, assignment.PointsMultiplier)
 			if err := tx.Save(&user).Error; err != nil {
 				logger.Log.Errorf("Failed to update user %d points: %v", user.ID, err)
 				return err
 			}
 			logger.Log.Infof("Added %d points to user %d, new total: %d", points, user.ID, user.Points)
+
+			// Проверка достижений
+			achieveService := NewAchievementService(s.achieveRepo)
+			if err := achieveService.AwardAchievements(user.ID, user.Points); err != nil {
+				logger.Log.Errorf("Failed to award achievements for user %d: %v", user.ID, err)
+				return err
+			}
 		} else {
 			logger.Log.Infof("No points added for user %d, grade %.2f is too low", user.ID, submission.Grade)
 		}
@@ -91,4 +113,16 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		logger.Log.Infof("Submission created successfully for user %d, assignment %d", submission.UserID, submission.AssignmentID)
 		return nil
 	})
+}
+
+func (s *submissionService) FindByUserID(userID uint) ([]model.Submission, error) {
+	logger.Log.Infof("Fetching submissions for user %d", userID)
+	var submissions []model.Submission
+	err := s.db.Where("user_id = ?", userID).Find(&submissions).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
+		return nil, err
+	}
+	logger.Log.Infof("Found %d submissions for user %d", len(submissions), userID)
+	return submissions, nil
 }

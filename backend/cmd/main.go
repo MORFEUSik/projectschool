@@ -28,11 +28,12 @@ func main() {
 	courseRepo := repository.NewCourseRepository()
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
+	achievementRepo := repository.NewAchievementRepository()
 
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo)
 	assignmentService := service.NewAssignmentService(assignmentRepo)
-	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo)
+	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, achievementRepo)
 	userService := service.NewUserService(userRepo)
 
 	r.POST("/login", handler.Login(authService))
@@ -44,6 +45,7 @@ func main() {
 	api := r.Group("/api", handler.AuthMiddleware())
 	{
 		api.GET("/users/me", handler.GetProfile(userService))
+		api.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 
 		courses := api.Group("/courses")
 		{
