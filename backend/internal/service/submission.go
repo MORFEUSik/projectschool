@@ -142,7 +142,37 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	logger.Log.Infof("Grade %f set for submission %d", grade, submissionID)
+	// Начисление баллов пользователю
+	var submissionUser model.User
+	if err := s.db.First(&submissionUser, submission.UserID).Error; err != nil {
+		logger.Log.Errorf("User %d not found for points update: %v", submission.UserID, err)
+		return err
+	}
+	points := uint(grade * assignment.PointsMultiplier)
+	submissionUser.Points += points
+	if err := s.db.Save(&submissionUser).Error; err != nil {
+		logger.Log.Errorf("Failed to update points for user %d: %v", submission.UserID, err)
+		return err
+	}
+
+	// Проверка достижений
+	achievementService := NewAchievementService(s.achievementRepo)
+	var submissions []model.Submission
+	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", submission.UserID, err)
+		return err
+	}
+	var courseCount int64
+	if err := s.db.Model(&model.Enrollment{}).Where("user_id = ?", submission.UserID).Count(&courseCount).Error; err != nil {
+		logger.Log.Errorf("Failed to count courses for user %d: %v", submission.UserID, err)
+		return err
+	}
+	if err := achievementService.AwardAchievements(submission.UserID, submissionUser.Points, submissions, int(courseCount)); err != nil {
+		logger.Log.Errorf("Failed to award achievements for user %d: %v", submission.UserID, err)
+		return err
+	}
+
+	logger.Log.Infof("Grade %f set for submission %d, added %d points to user %d", grade, submissionID, points, submission.UserID)
 	return nil
 }
 

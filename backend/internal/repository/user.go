@@ -11,6 +11,7 @@ type UserRepository interface {
 	FindByID(id uint) (*model.User, error)
 	FindByEmail(email string) (*model.User, error)
 	FindTopByPoints(limit int) ([]model.User, error)
+	FindTopByPointsInCourse(courseID uint, limit int) ([]model.User, error)
 }
 
 type userRepository struct {
@@ -40,5 +41,15 @@ func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 func (r *userRepository) FindTopByPoints(limit int) ([]model.User, error) {
 	var users []model.User
 	err := r.db.Order("points DESC").Limit(limit).Find(&users).Error
+	return users, err
+}
+
+func (r *userRepository) FindTopByPointsInCourse(courseID uint, limit int) ([]model.User, error) {
+	var users []model.User
+	err := r.db.Joins("JOIN enrollments ON enrollments.user_id = users.id").
+		Where("enrollments.course_id = ?", courseID).
+		Order("users.points DESC").
+		Limit(limit).
+		Find(&users).Error
 	return users, err
 }

@@ -15,7 +15,7 @@ type UserService interface {
 	Register(user *model.User) error
 	Login(email, password string) (*model.User, error)
 	GetProfile(userID uint) (*model.User, error)
-	GetLeaderboard() ([]model.User, error)
+	GetLeaderboard(courseID uint) ([]model.User, error)
 }
 
 type userService struct {
@@ -106,10 +106,16 @@ func (s *userService) GetProfile(userID uint) (*model.User, error) {
 	return user, nil
 }
 
-func (s *userService) GetLeaderboard() ([]model.User, error) {
+func (s *userService) GetLeaderboard(courseID uint) ([]model.User, error) {
 	logger.Log.Info("Fetching leaderboard")
 
-	users, err := s.repo.FindTopByPoints(10)
+	var users []model.User
+	var err error
+	if courseID == 0 {
+		users, err = s.repo.FindTopByPoints(10)
+	} else {
+		users, err = s.repo.FindTopByPointsInCourse(courseID, 10)
+	}
 	if err != nil {
 		logger.Log.Errorf("Failed to fetch leaderboard: %v", err)
 		return nil, err

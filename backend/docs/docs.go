@@ -286,7 +286,7 @@ const docTemplate = `{
         },
         "/leaderboard": {
             "get": {
-                "description": "Возвращает топ-10 пользователей по баллам",
+                "description": "Возвращает топ-10 пользователей по баллам, опционально для конкретного курса",
                 "consumes": [
                     "application/json"
                 ],
@@ -297,6 +297,14 @@ const docTemplate = `{
                     "leaderboard"
                 ],
                 "summary": "Получить таблицу лидеров",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID курса для фильтрации",
+                        "name": "course_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -304,6 +312,15 @@ const docTemplate = `{
                             "type": "array",
                             "items": {
                                 "$ref": "#/definitions/model.User"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
                             }
                         }
                     },
