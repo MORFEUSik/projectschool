@@ -1,4 +1,3 @@
-// backend/internal/service/course.go
 package service
 
 import (
@@ -8,7 +7,7 @@ import (
 
 type CourseService interface {
 	Create(course *model.Course) error
-	List() ([]model.Course, error)
+	List(limit, offset int) ([]model.Course, error)
 	Get(id uint) (*model.Course, error)
 }
 
@@ -24,8 +23,8 @@ func (s *courseService) Create(course *model.Course) error {
 	return s.repo.Create(course)
 }
 
-func (s *courseService) List() ([]model.Course, error) {
-	return s.repo.FindAll()
+func (s *courseService) List(limit, offset int) ([]model.Course, error) {
+	return s.repo.FindAllWithPagination(limit, offset)
 }
 
 func (s *courseService) Get(id uint) (*model.Course, error) {

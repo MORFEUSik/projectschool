@@ -1,4 +1,3 @@
-// backend/internal/db/postgres.go
 package db
 
 import (
@@ -22,6 +21,8 @@ func Init(cfg *config.Config) {
 		log.Fatalf("Не удалось подключиться к БД: %v", err)
 	}
 
+	// Автомиграция моделей с учетом внешних ключей и индексов
+	// Для продакшена рекомендуется использовать инструмент миграций, например, golang-migrate/migrate
 	err = db.AutoMigrate(
 		&model.User{},
 		&model.Course{},
@@ -29,7 +30,7 @@ func Init(cfg *config.Config) {
 		&model.Assignment{},
 		&model.Submission{},
 		&model.Test{},
-		&model.Achievement{}, // Если добавил
+		&model.Achievement{},
 	)
 	if err != nil {
 		log.Fatalf("Ошибка миграции: %v", err)

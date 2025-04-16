@@ -12,33 +12,48 @@ import (
 
 type SubmissionService interface {
 	Create(submission *model.Submission) error
-	FindByUserID(userID uint) ([]model.Submission, error)
+	SetGrade(submissionID, userID uint, grade float64) error
+	GetByUserID(userID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
-	repo        repository.SubmissionRepository
-	userRepo    repository.UserRepository
-	assignRepo  repository.AssignmentRepository
-	achieveRepo repository.AchievementRepository
-	db          *gorm.DB
+	repo            repository.SubmissionRepository
+	userRepo        repository.UserRepository
+	assignmentRepo  repository.AssignmentRepository
+	achievementRepo repository.AchievementRepository
+	db              *gorm.DB
 }
 
-func NewSubmissionService(repo repository.SubmissionRepository, userRepo repository.UserRepository, assignRepo repository.AssignmentRepository, achieveRepo repository.AchievementRepository) SubmissionService {
+func NewSubmissionService(
+	repo repository.SubmissionRepository,
+	userRepo repository.UserRepository,
+	assignmentRepo repository.AssignmentRepository,
+	achievementRepo repository.AchievementRepository,
+) SubmissionService {
 	return &submissionService{
-		repo:        repo,
-		userRepo:    userRepo,
-		assignRepo:  assignRepo,
-		achieveRepo: achieveRepo,
-		db:          db.DB,
+		repo:            repo,
+		userRepo:        userRepo,
+		assignmentRepo:  assignmentRepo,
+		achievementRepo: achievementRepo,
+		db:              db.DB,
 	}
 }
 
 func (s *submissionService) Create(submission *model.Submission) error {
-	logger.Log.Infof("Attempting to create submission for user %d, assignment %d, grade %.2f", submission.UserID, submission.AssignmentID, submission.Grade)
+	logger.Log.Infof("Creating submission for user %d, assignment %d", submission.UserID, submission.AssignmentID)
+
+	// Проверка: существует ли пользователь
+	_, err := s.userRepo.FindByID(submission.UserID)
+	if err != nil {
+		logger.Log.Errorf("User %d not found: %v", submission.UserID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("пользователь не найден")
+		}
+		return err
+	}
 
 	// Проверка: существует ли задание
-	logger.Log.Info("Checking assignment existence")
-	assignment, err := s.assignRepo.FindByID(submission.AssignmentID)
+	assignment, err := s.assignmentRepo.FindByID(submission.AssignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -46,83 +61,101 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		}
 		return err
 	}
-	logger.Log.Infof("Assignment %d found: %s", assignment.ID, assignment.Title)
 
-	// Проверка: записан ли пользователь на курс
-	logger.Log.Info("Checking enrollment")
+	// Проверка: принадлежит ли пользователь курсу
 	var enrollment model.Enrollment
-	if err := s.db.Where("user_id = ? AND course_id = ?", submission.UserID, assignment.CourseID).First(&enrollment).Error; err != nil {
+	err = s.db.Where("user_id = ? AND course_id = ?", submission.UserID, assignment.CourseID).First(&enrollment).Error
+	if err != nil {
 		logger.Log.Errorf("User %d not enrolled in course %d: %v", submission.UserID, assignment.CourseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("пользователь не записан на курс")
 		}
 		return err
 	}
-	logger.Log.Infof("User %d enrolled in course %d", submission.UserID, assignment.CourseID)
 
-	// Проверка: только одно решение на задание
-	logger.Log.Info("Checking for existing submission")
-	_, err = s.repo.FindByAssignmentAndUser(submission.AssignmentID, submission.UserID)
+	// Проверка: не отправлено ли решение ранее
+	var existingSubmission model.Submission
+	err = s.db.Where("user_id = ? AND assignment_id = ?", submission.UserID, submission.AssignmentID).First(&existingSubmission).Error
 	if err == nil {
-		logger.Log.Warnf("User %d already submitted for assignment %d", submission.UserID, submission.AssignmentID)
+		logger.Log.Warnf("Submission already exists for user %d, assignment %d", submission.UserID, submission.AssignmentID)
 		return errors.New("решение уже отправлено")
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.Log.Errorf("Error checking submission: %v", err)
+		logger.Log.Errorf("Error checking existing submission: %v", err)
 		return err
 	}
-	logger.Log.Info("No existing submission found")
 
-	// Транзакция
-	logger.Log.Info("Starting transaction")
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		logger.Log.Info("Creating submission in transaction")
-		if err := tx.Create(submission).Error; err != nil {
-			logger.Log.Errorf("Failed to create submission: %v", err)
-			return err
-		}
+	// Создание решения
+	if err := s.repo.Create(submission); err != nil {
+		logger.Log.Errorf("Failed to create submission: %v", err)
+		return err
+	}
 
-		logger.Log.Info("Fetching user for points update")
-		var user model.User
-		if err := tx.First(&user, submission.UserID).Error; err != nil {
-			logger.Log.Errorf("Failed to find user %d: %v", submission.UserID, err)
-			return err
-		}
-		logger.Log.Infof("User %d found: %s", user.ID, user.Username)
-
-		if submission.Grade >= 4.0 {
-			points := uint(submission.Grade * assignment.PointsMultiplier)
-			user.Points += points
-			logger.Log.Infof("Adding %d points to user %d (multiplier %.2f)", points, user.ID, assignment.PointsMultiplier)
-			if err := tx.Save(&user).Error; err != nil {
-				logger.Log.Errorf("Failed to update user %d points: %v", user.ID, err)
-				return err
-			}
-			logger.Log.Infof("Added %d points to user %d, new total: %d", points, user.ID, user.Points)
-
-			// Проверка достижений
-			achieveService := NewAchievementService(s.achieveRepo)
-			if err := achieveService.AwardAchievements(user.ID, user.Points); err != nil {
-				logger.Log.Errorf("Failed to award achievements for user %d: %v", user.ID, err)
-				return err
-			}
-		} else {
-			logger.Log.Infof("No points added for user %d, grade %.2f is too low", user.ID, submission.Grade)
-		}
-
-		logger.Log.Infof("Submission created successfully for user %d, assignment %d", submission.UserID, submission.AssignmentID)
-		return nil
-	})
+	logger.Log.Infof("Submission created for user %d, assignment %d", submission.UserID, submission.AssignmentID)
+	return nil
 }
 
-func (s *submissionService) FindByUserID(userID uint) ([]model.Submission, error) {
+func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) error {
+	logger.Log.Infof("Setting grade %f for submission %d by user %d", grade, submissionID, userID)
+
+	// Проверка: существует ли решение
+	var submission model.Submission
+	if err := s.db.First(&submission, submissionID).Error; err != nil {
+		logger.Log.Errorf("Submission %d not found: %v", submissionID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("решение не найдено")
+		}
+		return err
+	}
+
+	// Проверка: имеет ли пользователь права (учитель или админ)
+	var user model.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		logger.Log.Errorf("User %d not found: %v", userID, err)
+		return err
+	}
+	if user.Role != model.Teacher && user.Role != model.Admin {
+		logger.Log.Warnf("User %d does not have permission to grade", userID)
+		return errors.New("нет прав для оценки")
+	}
+
+	// Проверка: принадлежит ли задание курсу, где пользователь — учитель
+	var assignment model.Assignment
+	if err := s.db.First(&assignment, submission.AssignmentID).Error; err != nil {
+		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
+		return err
+	}
+	var course model.Course
+	if err := s.db.First(&course, assignment.CourseID).Error; err != nil {
+		logger.Log.Errorf("Course %d not found: %v", assignment.CourseID, err)
+		return err
+	}
+	if user.Role == model.Teacher && course.TeacherID != userID {
+		logger.Log.Warnf("Teacher %d does not own course %d", userID, assignment.CourseID)
+		return errors.New("нет прав для оценки")
+	}
+
+	// Установка оценки
+	submission.Grade = grade
+	if err := s.db.Save(&submission).Error; err != nil {
+		logger.Log.Errorf("Failed to save grade for submission %d: %v", submissionID, err)
+		return err
+	}
+
+	logger.Log.Infof("Grade %f set for submission %d", grade, submissionID)
+	return nil
+}
+
+func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error) {
 	logger.Log.Infof("Fetching submissions for user %d", userID)
+
 	var submissions []model.Submission
 	err := s.db.Where("user_id = ?", userID).Find(&submissions).Error
 	if err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
 		return nil, err
 	}
-	logger.Log.Infof("Found %d submissions for user %d", len(submissions), userID)
+
+	logger.Log.Infof("Fetched %d submissions for user %d", len(submissions), userID)
 	return submissions, nil
 }

@@ -1,7 +1,10 @@
-// backend/internal/model/course.go
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/go-playground/validator/v10"
+)
 
 type Course struct {
 	ID          uint      `gorm:"primaryKey"`
@@ -11,4 +14,9 @@ type Course struct {
 	Teacher     User      `gorm:"foreignKey:TeacherID"`
 	CreatedAt   time.Time `gorm:"default:current_timestamp"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
+}
+
+func (c *Course) Validate() error {
+	validate := validator.New()
+	return validate.Struct(c)
 }

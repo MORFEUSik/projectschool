@@ -1,4 +1,3 @@
-// backend/internal/handler/assignment.go
 package handler
 
 import (
@@ -31,6 +30,10 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		var assignment model.Assignment
 		if err := c.ShouldBindJSON(&assignment); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			return
+		}
+		if err := assignment.Validate(); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		if err := assignmentService.Create(&assignment); err != nil {

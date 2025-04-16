@@ -1,4 +1,3 @@
-// backend/internal/repository/course.go
 package repository
 
 import (
@@ -9,7 +8,7 @@ import (
 
 type CourseRepository interface {
 	Create(course *model.Course) error
-	FindAll() ([]model.Course, error)
+	FindAllWithPagination(limit, offset int) ([]model.Course, error)
 	FindByID(id uint) (*model.Course, error)
 }
 
@@ -25,9 +24,9 @@ func (r *courseRepository) Create(course *model.Course) error {
 	return r.db.Create(course).Error
 }
 
-func (r *courseRepository) FindAll() ([]model.Course, error) {
+func (r *courseRepository) FindAllWithPagination(limit, offset int) ([]model.Course, error) {
 	var courses []model.Course
-	err := r.db.Find(&courses).Error // Исправлено: .SEXPError -> .Error
+	err := r.db.Limit(limit).Offset(offset).Find(&courses).Error
 	return courses, err
 }
 

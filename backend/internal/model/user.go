@@ -1,4 +1,3 @@
-// backend/internal/model/user.go
 package model
 
 import (
@@ -10,19 +9,20 @@ import (
 type Role string
 
 const (
-	Admin   Role = "admin"
-	Teacher Role = "teacher"
 	Student Role = "student"
+	Teacher Role = "teacher"
+	Admin   Role = "admin"
 )
 
 type User struct {
-	ID        uint      `gorm:"primaryKey"`
-	Username  string    `gorm:"type:varchar(100);unique" validate:"required,min=3,max=100"`
-	Password  string    `gorm:"type:varchar(255)" validate:"required,min=6"`
-	Email     string    `gorm:"type:varchar(255);unique" validate:"required,email"`
-	Role      Role      `gorm:"type:varchar(50)" validate:"required,oneof=admin teacher student"`
-	Points    uint      `gorm:"default:0"` // Новое поле для баллов
-	CreatedAt time.Time `gorm:"default:current_timestamp"`
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Username  string    `gorm:"unique;not null" validate:"required,min=3,max=50" json:"username"`
+	Email     string    `gorm:"unique;not null" validate:"required,email" json:"email"`
+	Password  string    `gorm:"not null" validate:"required,min=8" json:"-"`
+	Role      Role      `gorm:"not null;default:student" validate:"required,oneof=student teacher admin" json:"role"`
+	Points    uint      `gorm:"default:0" json:"points"`
+	CreatedAt time.Time `gorm:"default:current_timestamp" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:current_timestamp" json:"updated_at"`
 }
 
 func (u *User) Validate() error {

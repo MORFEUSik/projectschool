@@ -1,0 +1,521 @@
+definitions:
+  model.Assignment:
+    properties:
+      courseID:
+        type: integer
+      createdAt:
+        type: string
+      description:
+        type: string
+      dueDate:
+        type: string
+      id:
+        type: integer
+      pointsMultiplier:
+        minimum: 0
+        type: number
+      title:
+        minLength: 3
+        type: string
+      updatedAt:
+        type: string
+    required:
+    - dueDate
+    - title
+    type: object
+  model.Course:
+    properties:
+      createdAt:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      teacher:
+        $ref: '#/definitions/model.User'
+      teacherID:
+        type: integer
+      title:
+        maxLength: 100
+        minLength: 3
+        type: string
+      updatedAt:
+        type: string
+    required:
+    - title
+    type: object
+  model.Role:
+    enum:
+    - student
+    - teacher
+    - admin
+    type: string
+    x-enum-varnames:
+    - Student
+    - Teacher
+    - Admin
+  model.Submission:
+    properties:
+      assignment:
+        $ref: '#/definitions/model.Assignment'
+      assignmentID:
+        type: integer
+      content:
+        type: string
+      createdAt:
+        type: string
+      grade:
+        type: number
+      id:
+        type: integer
+      updatedAt:
+        type: string
+      user:
+        $ref: '#/definitions/model.User'
+      userID:
+        type: integer
+    required:
+    - assignmentID
+    - userID
+    type: object
+  model.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      points:
+        type: integer
+      role:
+        allOf:
+        - $ref: '#/definitions/model.Role'
+        enum:
+        - student
+        - teacher
+        - admin
+      updated_at:
+        type: string
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - email
+    - role
+    - username
+    type: object
+info:
+  contact: {}
+paths:
+  /assignments/{id}/submit:
+    post:
+      consumes:
+      - application/json
+      description: Отправляет решение для задания (только для студентов)
+      parameters:
+      - description: ID задания
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Содержимое решения
+        in: body
+        name: submission
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, submission
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Отправить решение
+      tags:
+      - submissions
+  /courses:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список всех курсов с пагинацией
+      parameters:
+      - default: 10
+        description: Лимит записей
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Смещение
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.Course'
+            type: array
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить список курсов
+      tags:
+      - courses
+    post:
+      consumes:
+      - application/json
+      description: Создает новый курс (только для учителей и админов)
+      parameters:
+      - description: Данные курса
+        in: body
+        name: course
+        required: true
+        schema:
+          $ref: '#/definitions/model.Course'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, course
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Создать курс
+      tags:
+      - courses
+  /courses/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает данные курса по его ID
+      parameters:
+      - description: ID курса
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Course'
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить курс
+      tags:
+      - courses
+  /leaderboard:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает топ-10 пользователей по баллам
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.User'
+            type: array
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить таблицу лидеров
+      tags:
+      - leaderboard
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Аутентифицирует пользователя и возвращает JWT-токен
+      parameters:
+      - description: Email и пароль
+        in: body
+        name: credentials
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Вход пользователя
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Создает нового пользователя и возвращает JWT-токен
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/model.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Регистрация пользователя
+      tags:
+      - auth
+  /submissions/{id}/grade:
+    put:
+      consumes:
+      - application/json
+      description: Устанавливает оценку для решения (только для преподавателей и админов)
+      parameters:
+      - description: ID решения
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Оценка (0-5)
+        in: body
+        name: grade
+        required: true
+        schema:
+          additionalProperties:
+            type: number
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Установить оценку
+      tags:
+      - submissions
+  /users/me:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает данные текущего аутентифицированного пользователя
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.User'
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить профиль пользователя
+      tags:
+      - users
+  /users/me/submissions:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает все решения текущего аутентифицированного пользователя
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.Submission'
+            type: array
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить решения пользователя
+      tags:
+      - submissions
+swagger: "2.0"

@@ -2,13 +2,22 @@ package jwt
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 )
 
-var secretKey = []byte(os.Getenv("JWT_SECRET"))
+var secretKey []byte
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+	secretKey = []byte(secret)
+}
 
 const (
 	accessTokenDuration  = 24 * time.Hour

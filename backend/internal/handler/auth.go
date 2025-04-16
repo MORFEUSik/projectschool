@@ -1,8 +1,15 @@
+// @title ProjectSchool API
+// @version 1.0
+// @description API для обучающего приложения ProjectSchool
+// @host localhost:8080
+// @BasePath /api
+
 package handler
 
 import (
 	"net/http"
 
+	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/jwt"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
@@ -10,12 +17,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Register регистрирует нового пользователя
+// @Summary Регистрация пользователя
+// @Description Создает нового пользователя и возвращает JWT-токен
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param user body model.User true "Данные пользователя"
+// @Success 200 {object} map[string]interface{} "message, token"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /register [post]
 func Register(authService service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var user model.User
 		if err := c.ShouldBindJSON(&user); err != nil {
 			logger.Log.Errorf("Invalid JSON input: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
 			return
 		}
 
@@ -24,17 +42,17 @@ func Register(authService service.AuthService) gin.HandlerFunc {
 		if err := authService.Register(&user); err != nil {
 			logger.Log.Errorf("Failed to register user: %v", err)
 			if err.Error() == "пользователь с таким email уже существует" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при регистрации"})
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка при регистрации"})
 			return
 		}
 
 		token, err := jwt.GenerateToken(user.ID)
 		if err != nil {
 			logger.Log.Errorf("Failed to generate token: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при создании токена"})
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка при создании токена"})
 			return
 		}
 
@@ -46,6 +64,18 @@ func Register(authService service.AuthService) gin.HandlerFunc {
 	}
 }
 
+// Login аутентифицирует пользователя
+// @Summary Вход пользователя
+// @Description Аутентифицирует пользователя и возвращает JWT-токен
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param credentials body map[string]string true "Email и пароль"
+// @Success 200 {object} map[string]interface{} "message, token"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /login [post]
 func Login(authService service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var credentials struct {
@@ -54,7 +84,7 @@ func Login(authService service.AuthService) gin.HandlerFunc {
 		}
 		if err := c.ShouldBindJSON(&credentials); err != nil {
 			logger.Log.Errorf("Invalid JSON input: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
 			return
 		}
 
@@ -63,14 +93,14 @@ func Login(authService service.AuthService) gin.HandlerFunc {
 		user, err := authService.Login(credentials.Email, credentials.Password)
 		if err != nil {
 			logger.Log.Errorf("Login failed: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный email или пароль"})
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Неверный email или пароль"})
 			return
 		}
 
 		token, err := jwt.GenerateToken(user.ID)
 		if err != nil {
 			logger.Log.Errorf("Failed to generate token: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при создании токена"})
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка при создании токена"})
 			return
 		}
 
@@ -82,12 +112,13 @@ func Login(authService service.AuthService) gin.HandlerFunc {
 	}
 }
 
+// AuthMiddleware проверяет JWT-токен
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")
 		if tokenString == "" {
 			logger.Log.Warn("Authorization header missing")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Токен отсутствует"})
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Токен отсутствует"})
 			c.Abort()
 			return
 		}
@@ -96,7 +127,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			tokenString = tokenString[7:]
 		} else {
 			logger.Log.Warn("Invalid token format")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный формат токена"})
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Неверный формат токена"})
 			c.Abort()
 			return
 		}
@@ -104,7 +135,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		userID, err := jwt.ValidateToken(tokenString)
 		if err != nil {
 			logger.Log.Errorf("Invalid token: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен"})
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Недействительный токен"})
 			c.Abort()
 			return
 		}

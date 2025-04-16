@@ -8,8 +8,9 @@ import (
 
 type UserRepository interface {
 	Create(user *model.User) error
-	FindByEmail(email string) (*model.User, error)
 	FindByID(id uint) (*model.User, error)
+	FindByEmail(email string) (*model.User, error)
+	FindTopByPoints(limit int) ([]model.User, error)
 }
 
 type userRepository struct {
@@ -24,18 +25,20 @@ func (r *userRepository) Create(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *userRepository) FindByEmail(email string) (*model.User, error) {
-	var user model.User
-	if err := r.db.Where("email = ?", email).First(&user).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
 func (r *userRepository) FindByID(id uint) (*model.User, error) {
 	var user model.User
-	if err := r.db.First(&user, id).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
+	err := r.db.First(&user, id).Error
+	return &user, err
+}
+
+func (r *userRepository) FindByEmail(email string) (*model.User, error) {
+	var user model.User
+	err := r.db.Where("email = ?", email).First(&user).Error
+	return &user, err
+}
+
+func (r *userRepository) FindTopByPoints(limit int) ([]model.User, error) {
+	var users []model.User
+	err := r.db.Order("points DESC").Limit(limit).Find(&users).Error
+	return users, err
 }
