@@ -13,10 +13,11 @@ import (
 
 // SubmitAssignment позволяет студенту отправить решение
 // @Summary Отправить решение
-// @Description Отправляет решение для задания (только для студентов)
+// @Description Отправляет решение для задания. Требуется JWT-токен. Доступно только для роли: student.
 // @Tags submissions
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param id path int true "ID задания"
 // @Param submission body map[string]string true "Содержимое решения"
 // @Success 200 {object} map[string]interface{} "message, submission"
@@ -80,10 +81,11 @@ func SubmitAssignment(submissionService service.SubmissionService) gin.HandlerFu
 
 // SetGrade позволяет преподавателю установить оценку
 // @Summary Установить оценку
-// @Description Устанавливает оценку для решения (только для преподавателей и админов)
+// @Description Устанавливает оценку для решения. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
 // @Tags submissions
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param id path int true "ID решения"
 // @Param grade body map[string]float64 true "Оценка (0-5)"
 // @Success 200 {object} map[string]string "message"

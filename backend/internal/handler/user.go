@@ -11,10 +11,11 @@ import (
 
 // GetProfile возвращает профиль пользователя
 // @Summary Получить профиль пользователя
-// @Description Возвращает данные текущего аутентифицированного пользователя
+// @Description Возвращает данные текущего аутентифицированного пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags users
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Success 200 {object} model.User
 // @Failure 401 {object} map[string]string "error"
 // @Failure 404 {object} map[string]string "error"
@@ -47,10 +48,11 @@ func GetProfile(userService service.UserService) gin.HandlerFunc {
 
 // GetUserSubmissions возвращает список решений пользователя
 // @Summary Получить решения пользователя
-// @Description Возвращает все решения текущего аутентифицированного пользователя
+// @Description Возвращает все решения текущего аутентифицированного пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags submissions
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Success 200 {array} model.Submission
 // @Failure 401 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"

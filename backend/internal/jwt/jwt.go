@@ -2,8 +2,6 @@ package jwt
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -11,12 +9,13 @@ import (
 
 var secretKey []byte
 
-func init() {
-	secret := os.Getenv("JWT_SECRET")
+// Init инициализирует JWT с секретным ключом
+func Init(secret string) error {
 	if secret == "" {
-		log.Fatal("JWT_SECRET environment variable is not set")
+		return fmt.Errorf("JWT_SECRET is not set")
 	}
 	secretKey = []byte(secret)
+	return nil
 }
 
 const (

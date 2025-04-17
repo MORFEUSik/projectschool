@@ -20,14 +20,16 @@ import (
 
 // ListCourses возвращает список курсов
 // @Summary Получить список курсов
-// @Description Возвращает список всех курсов с пагинацией
+// @Description Возвращает список всех курсов с пагинацией. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags courses
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param limit query int false "Лимит записей" default(10)
 // @Param offset query int false "Смещение" default(0)
 // @Success 200 {array} model.Course
 // @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
 // @Router /courses [get]
 func ListCourses(courseService service.CourseService) gin.HandlerFunc {
@@ -49,10 +51,11 @@ func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 
 // CreateCourse создает новый курс
 // @Summary Создать курс
-// @Description Создает новый курс (только для учителей и админов)
+// @Description Создает новый курс. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
 // @Tags courses
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param course body model.Course true "Данные курса"
 // @Success 200 {object} map[string]interface{} "message, course"
 // @Failure 400 {object} map[string]string "error"
@@ -84,13 +87,15 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 
 // GetCourse возвращает курс по ID
 // @Summary Получить курс
-// @Description Возвращает данные курса по его ID
+// @Description Возвращает данные курса по его ID. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags courses
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param id path int true "ID курса"
 // @Success 200 {object} model.Course
 // @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
 // @Failure 404 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
 // @Router /courses/{id} [get]

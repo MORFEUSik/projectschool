@@ -12,10 +12,11 @@ import (
 
 // GetLeaderboard возвращает таблицу лидеров
 // @Summary Получить таблицу лидеров
-// @Description Возвращает топ-10 пользователей по баллам, опционально для конкретного курса
+// @Description Возвращает топ-10 пользователей по баллам, опционально для конкретного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags leaderboard
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param course_id query int false "ID курса для фильтрации"
 // @Success 200 {array} model.User
 // @Failure 400 {object} map[string]string "error"

@@ -15,9 +15,90 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/assignments": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создает новое задание для курса. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Создать задание",
+                "parameters": [
+                    {
+                        "description": "Данные задания",
+                        "name": "assignment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.Assignment"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "message, assignment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/assignments/{id}/submit": {
             "post": {
-                "description": "Отправляет решение для задания (только для студентов)",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Отправляет решение для задания. Требуется JWT-токен. Доступно только для роли: student.",
                 "consumes": [
                     "application/json"
                 ],
@@ -98,7 +179,12 @@ const docTemplate = `{
         },
         "/courses": {
             "get": {
-                "description": "Возвращает список всех курсов с пагинацией",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает список всех курсов с пагинацией. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -144,6 +230,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "error",
                         "schema": {
@@ -156,7 +251,12 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Создает новый курс (только для учителей и админов)",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создает новый курс. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -227,7 +327,12 @@ const docTemplate = `{
         },
         "/courses/{id}": {
             "get": {
-                "description": "Возвращает данные курса по его ID",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает данные курса по его ID. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -263,7 +368,83 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "404": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/courses/{id}/assignments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает список заданий для указанного курса. Требуется.JWT-токен. Доступно для ролей: student, teacher, admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Получить список заданий",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID курса",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.Assignment"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
                         "description": "error",
                         "schema": {
                             "type": "object",
@@ -286,7 +467,12 @@ const docTemplate = `{
         },
         "/leaderboard": {
             "get": {
-                "description": "Возвращает топ-10 пользователей по баллам, опционально для конкретного курса",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает топ-10 пользователей по баллам, опционально для конкретного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -465,7 +651,12 @@ const docTemplate = `{
         },
         "/submissions/{id}/grade": {
             "put": {
-                "description": "Устанавливает оценку для решения (только для преподавателей и админов)",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Устанавливает оценку для решения. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -557,7 +748,12 @@ const docTemplate = `{
         },
         "/users/me": {
             "get": {
-                "description": "Возвращает данные текущего аутентифицированного пользователя",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает данные текущего аутентифицированного пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -607,7 +803,12 @@ const docTemplate = `{
         },
         "/users/me/submissions": {
             "get": {
-                "description": "Возвращает все решения текущего аутентифицированного пользователя",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает все решения текущего аутентифицированного пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -808,17 +1009,24 @@ const docTemplate = `{
                 }
             }
         }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
-	Host:             "",
-	BasePath:         "",
+	Version:          "1.0",
+	Host:             "localhost:8080",
+	BasePath:         "/api",
 	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	Title:            "ProjectSchool API",
+	Description:      "API для обучающего приложения ProjectSchool",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",
