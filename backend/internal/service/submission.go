@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"math"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -149,7 +150,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
-		points = uint(grade * float64(assignment.MaxScore) / 5.0) // Нормализация оценки (0-5) к MaxScore
+		points = uint(math.Round(grade * float64(assignment.MaxScore) / 5.0))
 		submissionUser.Points += points
 		if err := tx.Save(&submissionUser).Error; err != nil {
 			return err

@@ -8,13 +8,13 @@ import (
 )
 
 type Course struct {
-	ID          uint      `gorm:"primaryKey"`
-	Title       string    `gorm:"not null" validate:"required,min=3,max=100"`
-	Description string    `gorm:"type:text"`
-	TeacherID   uint      `gorm:"not null" validate:"required" json:"-"` // Игнорируем в JSON
-	Teacher     User      `gorm:"foreignKey:TeacherID" validate:"-"`     // Игнорируем в валидации
-	CreatedAt   time.Time `gorm:"default:current_timestamp"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
+	ID          uint      `gorm:"primaryKey" json:"id" swaggertype:"integer" example:"1" description:"Уникальный идентификатор курса"`
+	Title       string    `gorm:"not null;unique" validate:"required,min=3,max=100" json:"title" swaggertype:"string" example:"Math 101" description:"Название курса (обязательное, 3-100 символов)"`
+	Description string    `gorm:"type:text" json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание курса (опциональное)"`
+	TeacherID   uint      `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя (устанавливается автоматически из токена)"`
+	Teacher     User      `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Информация о преподавателе"`
+	CreatedAt   time.Time `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата создания курса"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата последнего обновления курса"`
 }
 
 func (c *Course) Validate() error {

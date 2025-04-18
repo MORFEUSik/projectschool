@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
@@ -16,6 +15,12 @@ import (
 	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
+
+// CreateCourseInput defines the input structure for creating a course
+type CreateCourseInput struct {
+	Title       string `json:"title" binding:"required,min=3,max=100" swaggertype:"string" example:"Math 101" description:"Название курса (обязательное, 3-100 символов)"`
+	Description string `json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание курса (опциональное)"`
+}
 
 // ListCourses возвращает список курсов
 // @Summary Получить список курсов
@@ -52,17 +57,17 @@ func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 
 // CreateCourse создает новый курс
 // @Summary Создать курс
-// @Description Создает новый курс. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
+// @Description Создает новый курс. TeacherID устанавливается автоматически из токена авторизации. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
 // @Tags courses
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param course body model.Course true "Данные курса"
-// @Success 200 {object} map[string]interface{} "message, course"
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
+// @Param course body CreateCourseInput true "Данные курса"
+// @Success 200 {object} map[string]interface{} "message, course" example={"message":"Курс создан","course":{"id":1,"title":"Math 101","description":"Introduction to Mathematics","teacher":{"id":1,"username":"teacher1","email":"teacher1@example.com","role":"teacher","points":0,"created_at":"2025-04-18T12:00:00Z","updated_at":"2025-04-18T12:00:00Z"},"created_at":"2025-04-18T12:00:00Z","updated_at":"2025-04-18T12:00:00Z"}}
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
 // @Router /courses [post]
 func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -72,29 +77,35 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
-		var course model.Course
-		if err := c.ShouldBindJSON(&course); err != nil {
+		var input CreateCourseInput
+		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
 			return
 		}
 
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		course := model.Course{
+			Title:       input.Title,
+			Description: input.Description,
+			TeacherID:   userID.(uint),
+		}
+
 		logger.Log.Infof("Creating course: %+v", course)
 
-		// Валидация структуры курса
+		// Валидация
 		if err := course.Validate(); err != nil {
 			logger.Log.Errorf("Course validation failed: %v", err)
 			validationErrors := make([]string, 0)
 			if errs, ok := err.(validator.ValidationErrors); ok {
 				for _, e := range errs {
-					switch e.Field() {
-					case "Title":
-						validationErrors = append(validationErrors, fmt.Sprintf("Поле Title: min=3, max=100"))
-					case "TeacherID":
-						validationErrors = append(validationErrors, fmt.Sprintf("Поле TeacherID: required, gt=0"))
-					default:
-						validationErrors = append(validationErrors, e.Error())
-					}
+					validationErrors = append(validationErrors, fmt.Sprintf("Поле %s: %s", e.Field(), e.Tag()))
 				}
 			} else {
 				validationErrors = append(validationErrors, err.Error())
@@ -103,31 +114,16 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
-		// Проверка существования учителя
-		var teacher model.User
-		if err := db.DB.First(&teacher, course.TeacherID).Error; err != nil {
-			logger.Log.Errorf("Teacher %d not found: %v", course.TeacherID, err)
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Учитель не найден"})
-			return
-		}
-
-		// Проверка роли текущего пользователя
-		userID := c.GetUint("userID")
-		var user model.User
-		if err := db.DB.First(&user, userID).Error; err != nil {
-			logger.Log.Errorf("User %d not found: %v", userID, err)
-			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
-			return
-		}
-		if user.Role != model.Teacher && user.Role != model.Admin {
-			logger.Log.Warnf("User %d with role %s is not allowed to create courses", userID, user.Role)
-			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Только преподаватели или администраторы могут создавать курсы"})
-			return
-		}
-
 		if err := courseService.Create(&course); err != nil {
 			logger.Log.Errorf("Failed to create course: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка создания курса"})
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: err.Error()})
+			return
+		}
+
+		// Подгружаем данные учителя
+		if err := courseService.PreloadTeacher(&course); err != nil {
+			logger.Log.Errorf("Failed to preload teacher for course %d: %v", course.ID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка загрузки данных преподавателя"})
 			return
 		}
 

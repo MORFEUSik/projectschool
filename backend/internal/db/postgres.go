@@ -50,6 +50,20 @@ func Init(cfg *config.Config) {
 		}
 	}
 
+	// Проверка и добавление столбца teacher_id в таблицу assignments
+	log.Println("Checking teacher_id column in assignments")
+	var assignmentColumnExists int
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'assignments' AND column_name = 'teacher_id'").Scan(&assignmentColumnExists).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось проверить столбец teacher_id в assignments: %v", err)
+	} else if assignmentColumnExists == 0 {
+		log.Println("Adding teacher_id column to assignments")
+		err = db.Exec("ALTER TABLE assignments ADD COLUMN teacher_id BIGINT NOT NULL DEFAULT 0").Error
+		if err != nil {
+			log.Printf("Предупреждение: не удалось добавить teacher_id в assignments: %v", err)
+		}
+	}
+
 	// Проверка и обновление колонки password
 	log.Println("Checking password column type")
 	var columnType string
@@ -113,6 +127,18 @@ func Init(cfg *config.Config) {
 	} else {
 		log.Println("Table courses schema:")
 		for _, schema := range courseSchemas {
+			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
+		}
+	}
+
+	// Логирование схемы таблицы assignments
+	var assignmentSchemas []ColumnSchema
+	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'assignments'").Scan(&assignmentSchemas).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось получить схему таблицы assignments: %v", err)
+	} else {
+		log.Println("Table assignments schema:")
+		for _, schema := range assignmentSchemas {
 			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 		}
 	}

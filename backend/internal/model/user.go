@@ -20,7 +20,7 @@ type User struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Username  string    `gorm:"unique;not null" validate:"required,min=3,max=50" json:"username"`
 	Email     string    `gorm:"unique;not null" validate:"required,email" json:"email"`
-	Password  string    `gorm:"type:varchar(255);not null" validate:"required,min=8" json:"password"`
+	Password  string    `gorm:"type:varchar(255);not null" validate:"required,min=8,max=255,alphanum" json:"password"`
 	Role      Role      `gorm:"type:varchar(50);not null;default:student" validate:"required,oneof=student teacher admin" json:"role"`
 	Points    uint      `gorm:"default:0" json:"points"`
 	CreatedAt time.Time `gorm:"default:current_timestamp" json:"created_at"`

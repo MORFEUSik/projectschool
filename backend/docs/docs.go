@@ -256,7 +256,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Создает новый курс. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
+                "description": "Создает новый курс. TeacherID устанавливается автоматически из токена авторизации. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -274,52 +274,40 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/model.Course"
+                            "$ref": "#/definitions/handler.CreateCourseInput"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "message, course",
+                        "description": "message, course\" example={\"message\":\"Курс создан\",\"course\":{\"id\":1,\"title\":\"Math 101\",\"description\":\"Introduction to Mathematics\",\"teacher\":{\"id\":1,\"username\":\"teacher1\",\"email\":\"teacher1@example.com\",\"role\":\"teacher\",\"points\":0,\"created_at\":\"2025-04-18T12:00:00Z\",\"updated_at\":\"2025-04-18T12:00:00Z\"},\"created_at\":\"2025-04-18T12:00:00Z\",\"updated_at\":\"2025-04-18T12:00:00Z\"}}",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "400": {
-                        "description": "error",
+                        "description": "Bad Request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/error.APIError"
                         }
                     },
                     "401": {
-                        "description": "error",
+                        "description": "Unauthorized",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/error.APIError"
                         }
                     },
                     "403": {
-                        "description": "error",
+                        "description": "Forbidden",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/error.APIError"
                         }
                     },
                     "500": {
-                        "description": "error",
+                        "description": "Internal Server Error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/error.APIError"
                         }
                     }
                 }
@@ -405,7 +393,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает список заданий для указанного курса. Требуется.JWT-токен. Доступно для ролей: student, teacher, admin.",
+                "description": "Возвращает список заданий для указанного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -511,124 +499,6 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/login": {
-            "post": {
-                "description": "Аутентифицирует пользователя и возвращает JWT-токен",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Вход пользователя",
-                "parameters": [
-                    {
-                        "description": "Email и пароль",
-                        "name": "credentials",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "message, token",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/register": {
-            "post": {
-                "description": "Создает нового пользователя и возвращает JWT-токен",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Регистрация пользователя",
-                "parameters": [
-                    {
-                        "description": "Данные пользователя",
-                        "name": "user",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/model.User"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "message, token",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
                         "description": "error",
                         "schema": {
                             "type": "object",
@@ -852,38 +722,81 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "model.Assignment": {
+        "error.APIError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handler.CreateCourseInput": {
             "type": "object",
             "required": [
-                "dueDate",
                 "title"
             ],
             "properties": {
-                "courseID": {
-                    "type": "integer"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
                 "description": {
-                    "type": "string"
-                },
-                "dueDate": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "pointsMultiplier": {
-                    "type": "number",
-                    "minimum": 0
+                    "type": "string",
+                    "example": "Introduction to Mathematics"
                 },
                 "title": {
                     "type": "string",
-                    "minLength": 3
+                    "maxLength": 100,
+                    "minLength": 3,
+                    "example": "Math 101"
+                }
+            }
+        },
+        "model.Assignment": {
+            "type": "object",
+            "required": [
+                "course_id",
+                "due_date",
+                "max_score",
+                "title"
+            ],
+            "properties": {
+                "course_id": {
+                    "type": "integer",
+                    "example": 1
                 },
-                "updatedAt": {
-                    "type": "string"
+                "created_at": {
+                    "type": "string",
+                    "example": "2025-04-18T12:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Test Description"
+                },
+                "due_date": {
+                    "type": "string",
+                    "example": "2025-04-19T12:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "max_score": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 100
+                },
+                "teacher": {
+                    "$ref": "#/definitions/model.User"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 3,
+                    "example": "Test Assignment"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2025-04-18T12:00:00Z"
                 }
             }
         },
@@ -893,28 +806,30 @@ const docTemplate = `{
                 "title"
             ],
             "properties": {
-                "createdAt": {
-                    "type": "string"
+                "created_at": {
+                    "type": "string",
+                    "example": "2025-04-18T12:00:00Z"
                 },
                 "description": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Introduction to Mathematics"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "teacher": {
                     "$ref": "#/definitions/model.User"
                 },
-                "teacherID": {
-                    "type": "integer"
-                },
                 "title": {
                     "type": "string",
                     "maxLength": 100,
-                    "minLength": 3
+                    "minLength": 3,
+                    "example": "Math 101"
                 },
-                "updatedAt": {
-                    "type": "string"
+                "updated_at": {
+                    "type": "string",
+                    "example": "2025-04-18T12:00:00Z"
                 }
             }
         },
@@ -971,6 +886,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "email",
+                "password",
                 "role",
                 "username"
             ],
@@ -983,6 +899,11 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 8
                 },
                 "points": {
                     "type": "integer"
@@ -1009,13 +930,6 @@ const docTemplate = `{
                 }
             }
         }
-    },
-    "securityDefinitions": {
-        "BearerAuth": {
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
-        }
     }
 }`
 
@@ -1026,7 +940,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api",
 	Schemes:          []string{},
 	Title:            "ProjectSchool API",
-	Description:      "API для обучающего приложения ProjectSchool",
+	Description:      "Enter the JWT token without the \"Bearer \" prefix.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

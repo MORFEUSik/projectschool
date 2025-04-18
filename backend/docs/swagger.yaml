@@ -1,46 +1,82 @@
 basePath: /api
 definitions:
-  model.Assignment:
+  error.APIError:
     properties:
-      courseID:
-        type: integer
-      createdAt:
+      message:
         type: string
+      status:
+        type: integer
+    type: object
+  handler.CreateCourseInput:
+    properties:
       description:
+        example: Introduction to Mathematics
         type: string
-      dueDate:
-        type: string
-      id:
-        type: integer
-      pointsMultiplier:
-        minimum: 0
-        type: number
       title:
+        example: Math 101
+        maxLength: 100
         minLength: 3
         type: string
-      updatedAt:
+    required:
+    - title
+    type: object
+  model.Assignment:
+    properties:
+      course_id:
+        example: 1
+        type: integer
+      created_at:
+        example: "2025-04-18T12:00:00Z"
+        type: string
+      description:
+        example: Test Description
+        type: string
+      due_date:
+        example: "2025-04-19T12:00:00Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      max_score:
+        example: 100
+        minimum: 0
+        type: integer
+      teacher:
+        $ref: '#/definitions/model.User'
+      title:
+        example: Test Assignment
+        maxLength: 100
+        minLength: 3
+        type: string
+      updated_at:
+        example: "2025-04-18T12:00:00Z"
         type: string
     required:
-    - dueDate
+    - course_id
+    - due_date
+    - max_score
     - title
     type: object
   model.Course:
     properties:
-      createdAt:
+      created_at:
+        example: "2025-04-18T12:00:00Z"
         type: string
       description:
+        example: Introduction to Mathematics
         type: string
       id:
+        example: 1
         type: integer
       teacher:
         $ref: '#/definitions/model.User'
-      teacherID:
-        type: integer
       title:
+        example: Math 101
         maxLength: 100
         minLength: 3
         type: string
-      updatedAt:
+      updated_at:
+        example: "2025-04-18T12:00:00Z"
         type: string
     required:
     - title
@@ -87,6 +123,10 @@ definitions:
         type: string
       id:
         type: integer
+      password:
+        maxLength: 255
+        minLength: 8
+        type: string
       points:
         type: integer
       role:
@@ -104,13 +144,14 @@ definitions:
         type: string
     required:
     - email
+    - password
     - role
     - username
     type: object
 host: localhost:8080
 info:
   contact: {}
-  description: API для обучающего приложения ProjectSchool
+  description: Enter the JWT token without the "Bearer " prefix.
   title: ProjectSchool API
   version: "1.0"
 paths:
@@ -273,47 +314,41 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Создает новый курс. Требуется JWT-токен. Доступно только для ролей:
-        teacher, admin.'
+      description: 'Создает новый курс. TeacherID устанавливается автоматически из
+        токена авторизации. Требуется JWT-токен. Доступно только для ролей: teacher,
+        admin.'
       parameters:
       - description: Данные курса
         in: body
         name: course
         required: true
         schema:
-          $ref: '#/definitions/model.Course'
+          $ref: '#/definitions/handler.CreateCourseInput'
       produces:
       - application/json
       responses:
         "200":
-          description: message, course
+          description: message, course" example={"message":"Курс создан","course":{"id":1,"title":"Math
+            101","description":"Introduction to Mathematics","teacher":{"id":1,"username":"teacher1","email":"teacher1@example.com","role":"teacher","points":0,"created_at":"2025-04-18T12:00:00Z","updated_at":"2025-04-18T12:00:00Z"},"created_at":"2025-04-18T12:00:00Z","updated_at":"2025-04-18T12:00:00Z"}}
           schema:
             additionalProperties: true
             type: object
         "400":
-          description: error
+          description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/error.APIError'
         "401":
-          description: error
+          description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/error.APIError'
         "403":
-          description: error
+          description: Forbidden
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/error.APIError'
         "500":
-          description: error
+          description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/error.APIError'
       security:
       - BearerAuth: []
       summary: Создать курс
@@ -371,7 +406,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 'Возвращает список заданий для указанного курса. Требуется.JWT-токен.
+      description: 'Возвращает список заданий для указанного курса. Требуется JWT-токен.
         Доступно для ролей: student, teacher, admin.'
       parameters:
       - description: ID курса
@@ -454,84 +489,6 @@ paths:
       summary: Получить таблицу лидеров
       tags:
       - leaderboard
-  /login:
-    post:
-      consumes:
-      - application/json
-      description: Аутентифицирует пользователя и возвращает JWT-токен
-      parameters:
-      - description: Email и пароль
-        in: body
-        name: credentials
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: message, token
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Вход пользователя
-      tags:
-      - auth
-  /register:
-    post:
-      consumes:
-      - application/json
-      description: Создает нового пользователя и возвращает JWT-токен
-      parameters:
-      - description: Данные пользователя
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/model.User'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: message, token
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Регистрация пользователя
-      tags:
-      - auth
   /submissions/{id}/grade:
     put:
       consumes:
@@ -664,9 +621,4 @@ paths:
       summary: Получить решения пользователя
       tags:
       - submissions
-securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
-    type: apiKey
 swagger: "2.0"

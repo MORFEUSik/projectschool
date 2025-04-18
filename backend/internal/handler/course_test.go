@@ -35,6 +35,11 @@ func (m *MockCourseService) Get(id uint) (*model.Course, error) {
 	return args.Get(0).(*model.Course), args.Error(1)
 }
 
+func (m *MockCourseService) PreloadTeacher(course *model.Course) error {
+	args := m.Called(course)
+	return args.Error(0)
+}
+
 func TestCreateCourse(t *testing.T) {
 	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
@@ -62,15 +67,29 @@ func TestCreateCourse(t *testing.T) {
 	router.POST("/api/courses", AuthMiddleware(), RoleMiddleware(model.Teacher, model.Admin), CreateCourse(mockService))
 
 	t.Run("Successful course creation", func(t *testing.T) {
-		course := &model.Course{
+		input := struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}{
 			Title:       "Math 101",
 			Description: "Introduction to Mathematics",
-			TeacherID:   1,
 		}
-		mockService.On("Create", mock.Anything).Return(nil).Once()
+		mockService.On("Create", mock.MatchedBy(func(c *model.Course) bool {
+			return c.Title == input.Title && c.Description == input.Description && c.TeacherID == 1
+		})).Return(nil).Once()
+		mockService.On("PreloadTeacher", mock.Anything).Run(func(args mock.Arguments) {
+			course := args.Get(0).(*model.Course)
+			course.ID = 1
+			course.Teacher = model.User{
+				ID:       1,
+				Username: "testteacher",
+				Email:    "teacher@example.com",
+				Role:     model.Teacher,
+			}
+		}).Return(nil).Once()
 
 		token, _ := jwt.GenerateToken(1)
-		body, _ := json.Marshal(course)
+		body, _ := json.Marshal(input)
 		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
@@ -83,6 +102,13 @@ func TestCreateCourse(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, "Курс создан", response["message"])
+
+		course, ok := response["course"].(map[string]interface{})
+		assert.True(t, ok)
+		teacher, ok := course["teacher"].(map[string]interface{})
+		assert.True(t, ok)
+		assert.Equal(t, float64(1), teacher["id"]) // Проверяем, что teacher.id = 1
+		assert.Equal(t, "testteacher", teacher["username"])
 	})
 
 	t.Run("Invalid JSON", func(t *testing.T) {
@@ -102,12 +128,14 @@ func TestCreateCourse(t *testing.T) {
 	})
 
 	t.Run("Validation failed - short title", func(t *testing.T) {
-		course := &model.Course{
-			Title:     "M",
-			TeacherID: 1,
+		input := struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}{
+			Title: "M",
 		}
 		token, _ := jwt.GenerateToken(1)
-		body, _ := json.Marshal(course)
+		body, _ := json.Marshal(input)
 		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
@@ -119,17 +147,18 @@ func TestCreateCourse(t *testing.T) {
 		var response map[string]string
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		assert.Contains(t, response["error"], "Поле Title: min=3, max=100")
+		assert.Contains(t, response["error"], "Поле Title: min=3")
 	})
 
-	t.Run("Validation failed - missing teacherID", func(t *testing.T) {
-		course := &model.Course{
-			Title:       "Math 101",
+	t.Run("Validation failed - missing title", func(t *testing.T) {
+		input := struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}{
 			Description: "Introduction to Mathematics",
-			TeacherID:   0,
 		}
 		token, _ := jwt.GenerateToken(1)
-		body, _ := json.Marshal(course)
+		body, _ := json.Marshal(input)
 		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
@@ -141,29 +170,7 @@ func TestCreateCourse(t *testing.T) {
 		var response map[string]string
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		assert.Contains(t, response["error"], "Поле TeacherID: required, gt=0")
-	})
-
-	t.Run("Teacher not found", func(t *testing.T) {
-		course := &model.Course{
-			Title:       "Math 101",
-			Description: "Introduction to Mathematics",
-			TeacherID:   999, // Несуществующий учитель
-		}
-		token, _ := jwt.GenerateToken(1)
-		body, _ := json.Marshal(course)
-		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		var response map[string]string
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		assert.NoError(t, err)
-		assert.Equal(t, "Учитель не найден", response["error"])
+		assert.Contains(t, response["error"], "Поле Title: required")
 	})
 }
 
