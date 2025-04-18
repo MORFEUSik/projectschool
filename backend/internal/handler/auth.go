@@ -18,6 +18,16 @@ type AuthService interface {
 }
 
 // Register обрабатывает регистрацию пользователя
+// @Summary Регистрация пользователя
+// @Description Регистрирует нового пользователя и возвращает JWT-токен. Доступно без авторизации.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param user body model.User true "Данные пользователя"
+// @Success 200 {object} map[string]interface{} "message, token"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /register [post]
 func Register(service AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var user model.User
@@ -65,6 +75,17 @@ func Register(service AuthService) gin.HandlerFunc {
 }
 
 // Login обрабатывает вход пользователя
+// @Summary Вход пользователя
+// @Description Аутентифицирует пользователя и возвращает JWT-токен. Доступно без авторизации.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param credentials body object true "Учетные данные" example={"email":"user@example.com","password":"password123"}
+// @Success 200 {object} map[string]interface{} "message, token"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /login [post]
 func Login(service AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var credentials struct {

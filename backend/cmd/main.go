@@ -27,10 +27,10 @@ import (
 // @description API для обучающего приложения ProjectSchool
 // @host localhost:8080
 // @BasePath /api
-// @securityDefinitions.bearer BearerAuth
+// @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description Enter the JWT token without the "Bearer " prefix.
+// @description Enter the JWT token with the "Bearer " prefix, e.g., "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 func main() {
 	// Загружаем .env в самом начале для JWT_SECRET

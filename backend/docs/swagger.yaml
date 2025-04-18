@@ -151,7 +151,7 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: Enter the JWT token without the "Bearer " prefix.
+  description: API для обучающего приложения ProjectSchool
   title: ProjectSchool API
   version: "1.0"
 paths:
@@ -489,6 +489,84 @@ paths:
       summary: Получить таблицу лидеров
       tags:
       - leaderboard
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Аутентифицирует пользователя и возвращает JWT-токен. Доступно без
+        авторизации.
+      parameters:
+      - description: Учетные данные
+        in: body
+        name: credentials
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Вход пользователя
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Регистрирует нового пользователя и возвращает JWT-токен. Доступно
+        без авторизации.
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/model.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message, token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Регистрация пользователя
+      tags:
+      - auth
   /submissions/{id}/grade:
     put:
       consumes:
@@ -621,4 +699,10 @@ paths:
       summary: Получить решения пользователя
       tags:
       - submissions
+securityDefinitions:
+  BearerAuth:
+    description: Enter the JWT token with the "Bearer " prefix, e.g., "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
