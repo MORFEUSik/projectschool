@@ -1,0 +1,9 @@
+basePath: /api
+host: localhost:8080
+info:
+  contact: {}
+  description: Enter the JWT token without the "Bearer " prefix.
+  title: ProjectSchool API
+  version: "1.0"
+paths: {}
+swagger: "2.0"

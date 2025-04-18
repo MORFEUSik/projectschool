@@ -1,9 +1,3 @@
-// @title ProjectSchool API
-// @version 1.0
-// @description API для обучающего приложения ProjectSchool
-// @host localhost:8080
-// @BasePath /api
-
 package handler
 
 import (
@@ -11,7 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
@@ -67,20 +63,40 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var course model.Course
 		if err := c.ShouldBindJSON(&course); err != nil {
+			logger.Log.Errorf("Failed to bind JSON: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
 			return
 		}
-		if err := course.Validate(); err != nil {
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
-			return
-		}
+
 		userID := c.GetUint("userID")
 		course.TeacherID = userID
 
+		// Проверка существования пользователя и его роли
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+		if user.Role != model.Teacher && user.Role != model.Admin {
+			logger.Log.Warnf("User %d with role %s is not allowed to create courses", userID, user.Role)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Только преподаватели или администраторы могут создавать курсы"})
+			return
+		}
+
+		if err := course.Validate(); err != nil {
+			logger.Log.Errorf("Course validation failed: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+			return
+		}
+
 		if err := courseService.Create(&course); err != nil {
+			logger.Log.Errorf("Failed to create course: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка создания курса"})
 			return
 		}
+
+		logger.Log.Infof("Course %s (ID: %d) created by user %d", course.Title, course.ID, userID)
 		c.JSON(http.StatusOK, gin.H{"message": "Курс создан", "course": course})
 	}
 }

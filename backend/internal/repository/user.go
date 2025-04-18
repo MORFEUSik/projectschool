@@ -2,6 +2,7 @@ package repository
 
 import (
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"gorm.io/gorm"
 )
@@ -23,7 +24,13 @@ func NewUserRepository() UserRepository {
 }
 
 func (r *userRepository) Create(user *model.User) error {
-	return r.db.Create(user).Error
+	logger.Log.Infof("Saving user: email=%s, username=%s, role=%s, password_hash_length=%d",
+		user.Email, user.Username, user.Role, len(user.Password))
+	err := r.db.Create(user).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to save user: email=%s, error=%v", user.Email, err)
+	}
+	return err
 }
 
 func (r *userRepository) FindByID(id uint) (*model.User, error) {

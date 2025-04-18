@@ -21,8 +21,8 @@ func Init(cfg *config.Config) {
 		log.Fatalf("Не удалось подключиться к БД: %v", err)
 	}
 
-	// Автомиграция моделей с учетом внешних ключей и индексов
-	// Для продакшена рекомендуется использовать инструмент миграций, например, golang-migrate/migrate
+	// Автомиграция моделей
+	log.Println("Running AutoMigrate")
 	err = db.AutoMigrate(
 		&model.User{},
 		&model.Course{},
@@ -34,6 +34,61 @@ func Init(cfg *config.Config) {
 	)
 	if err != nil {
 		log.Fatalf("Ошибка миграции: %v", err)
+	}
+
+	// Проверка и обновление колонки password
+	log.Println("Checking password column type")
+	var columnType string
+	err = db.Raw("SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password'").Scan(&columnType).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось проверить тип колонки password: %v", err)
+	} else if columnType != "character varying" {
+		log.Println("Updating password column to varchar(255)")
+		err = db.Exec(`ALTER TABLE users ALTER COLUMN password TYPE varchar(255)`).Error
+		if err != nil {
+			log.Printf("Предупреждение: не удалось обновить колонку password: %v", err)
+		}
+	}
+
+	// Проверка уникальных индексов
+	log.Println("Ensuring unique constraints")
+	err = db.Exec(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'users_email_key'
+            ) THEN
+                ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
+            END IF;
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'users_username_key'
+            ) THEN
+                ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
+            END IF;
+        END $$;
+    `).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось добавить уникальные индексы: %v", err)
+	}
+
+	// Логирование схемы таблицы
+	type ColumnSchema struct {
+		ColumnName string `gorm:"column:column_name"`
+		DataType   string `gorm:"column:data_type"`
+	}
+	var schemas []ColumnSchema
+	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'").Scan(&schemas).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось получить схему таблицы users: %v", err)
+	} else {
+		log.Println("Table users schema:")
+		for _, schema := range schemas {
+			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
+		}
 	}
 
 	DB = db

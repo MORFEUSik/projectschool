@@ -27,9 +27,10 @@ import (
 // @description API для обучающего приложения ProjectSchool
 // @host localhost:8080
 // @BasePath /api
-// @securityDefinitions.apikey BearerAuth
+// @securityDefinitions.bearer BearerAuth
 // @in header
 // @name Authorization
+// @description Enter the JWT token without the "Bearer " prefix.
 
 func main() {
 	// Загружаем .env в самом начале для JWT_SECRET
@@ -51,7 +52,7 @@ func main() {
 
 	// Настройка CORS для локальной разработки
 	corsConfig := cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080"},
+		AllowOrigins:     []string{"http://localhost:8080", "http://localhost:3000"}, // Добавлен порт фронтенда
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,

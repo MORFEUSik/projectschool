@@ -7,14 +7,14 @@ import (
 )
 
 type Assignment struct {
-	ID               uint      `gorm:"primaryKey"`
-	CourseID         uint      `gorm:"not null"`
-	Title            string    `gorm:"type:text;not null" validate:"required,min=3"`
-	Description      string    `gorm:"type:text"`
-	DueDate          time.Time `gorm:"type:timestamp with time zone" validate:"required"`
-	PointsMultiplier float64   `gorm:"type:numeric(5,2);default:2.0" validate:"gte=0"`
-	CreatedAt        time.Time `gorm:"autoCreateTime"`
-	UpdatedAt        time.Time
+	ID          uint      `gorm:"primaryKey"`
+	CourseID    uint      `gorm:"not null" validate:"required"`
+	Title       string    `gorm:"not null" validate:"required,min=3,max=100"`
+	Description string    `gorm:"type:text"`
+	MaxScore    uint      `gorm:"not null" validate:"required,gte=0"`
+	DueDate     time.Time // Убрали validate:"required"
+	CreatedAt   time.Time `gorm:"default:current_timestamp"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 }
 
 func (a *Assignment) Validate() error {

@@ -37,11 +37,18 @@ func Register(authService service.AuthService) gin.HandlerFunc {
 			return
 		}
 
+		// Логируем входящий JSON для отладки
+		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, password_length=%d",
+			user.Username, user.Email, user.Role, len(user.Password))
 		logger.Log.Infof("Registering user: %s", user.Email)
 
 		if err := authService.Register(&user); err != nil {
 			logger.Log.Errorf("Failed to register user: %v", err)
 			if err.Error() == "пользователь с таким email уже существует" {
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+				return
+			}
+			if err.Error() == "все поля обязательны" || err.Error() == "ошибка валидации" {
 				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
 				return
 			}
@@ -123,13 +130,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Принимаем токен с или без "Bearer "
 		if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
 			tokenString = tokenString[7:]
-		} else {
-			logger.Log.Warn("Invalid token format")
-			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Неверный формат токена"})
-			c.Abort()
-			return
 		}
 
 		userID, err := jwt.ValidateToken(tokenString)
