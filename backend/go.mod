@@ -3,10 +3,10 @@ module github.com/MORFEUSik/projectschool/backend
 go 1.24.0
 
 require (
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-contrib/cors v1.7.5
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.26.0
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/joho/godotenv v1.5.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
@@ -18,6 +18,8 @@ require (
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
 )
+
+require github.com/mattn/go-sqlite3 v1.14.22 // indirect
 
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
@@ -63,4 +65,5 @@ require (
 	golang.org/x/tools v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/driver/sqlite v1.5.7
 )

@@ -36,6 +36,20 @@ func Init(cfg *config.Config) {
 		log.Fatalf("Ошибка миграции: %v", err)
 	}
 
+	// Проверка и добавление столбца teacher_id в таблицу courses
+	log.Println("Checking teacher_id column in courses")
+	var columnExists int
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'courses' AND column_name = 'teacher_id'").Scan(&columnExists).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось проверить столбец teacher_id: %v", err)
+	} else if columnExists == 0 {
+		log.Println("Adding teacher_id column to courses")
+		err = db.Exec("ALTER TABLE courses ADD COLUMN teacher_id BIGINT NOT NULL DEFAULT 0").Error
+		if err != nil {
+			log.Printf("Предупреждение: не удалось добавить teacher_id: %v", err)
+		}
+	}
+
 	// Проверка и обновление колонки password
 	log.Println("Checking password column type")
 	var columnType string
@@ -75,7 +89,7 @@ func Init(cfg *config.Config) {
 		log.Printf("Предупреждение: не удалось добавить уникальные индексы: %v", err)
 	}
 
-	// Логирование схемы таблицы
+	// Логирование схемы таблицы users
 	type ColumnSchema struct {
 		ColumnName string `gorm:"column:column_name"`
 		DataType   string `gorm:"column:data_type"`
@@ -87,6 +101,18 @@ func Init(cfg *config.Config) {
 	} else {
 		log.Println("Table users schema:")
 		for _, schema := range schemas {
+			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
+		}
+	}
+
+	// Логирование схемы таблицы courses
+	var courseSchemas []ColumnSchema
+	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'courses'").Scan(&courseSchemas).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось получить схему таблицы courses: %v", err)
+	} else {
+		log.Println("Table courses schema:")
+		for _, schema := range courseSchemas {
 			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 		}
 	}

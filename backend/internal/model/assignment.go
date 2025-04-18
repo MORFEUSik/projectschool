@@ -12,7 +12,7 @@ type Assignment struct {
 	Title       string    `gorm:"not null" validate:"required,min=3,max=100"`
 	Description string    `gorm:"type:text"`
 	MaxScore    uint      `gorm:"not null" validate:"required,gte=0"`
-	DueDate     time.Time // Убрали validate:"required"
+	DueDate     time.Time `validate:"required"`
 	CreatedAt   time.Time `gorm:"default:current_timestamp"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 }

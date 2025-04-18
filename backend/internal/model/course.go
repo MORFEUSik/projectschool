@@ -3,6 +3,7 @@ package model
 import (
 	"time"
 
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -17,6 +18,7 @@ type Course struct {
 }
 
 func (c *Course) Validate() error {
+	logger.Log.Infof("Validating course: %+v", c)
 	validate := validator.New()
 	return validate.Struct(c)
 }

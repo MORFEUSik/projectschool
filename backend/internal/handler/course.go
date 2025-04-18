@@ -2,8 +2,10 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
@@ -11,6 +13,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
@@ -33,11 +36,13 @@ func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 		if limit < 1 || offset < 0 {
+			logger.Log.Errorf("Invalid pagination params: limit=%d, offset=%d", limit, offset)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверные параметры пагинации"})
 			return
 		}
 		courses, err := courseService.List(limit, offset)
 		if err != nil {
+			logger.Log.Errorf("Failed to list courses: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения курсов"})
 			return
 		}
@@ -61,6 +66,12 @@ func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 // @Router /courses [post]
 func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.ContentType() != "application/json" {
+			logger.Log.Errorf("Invalid Content-Type: %s", c.ContentType())
+			c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "Требуется Content-Type: application/json"})
+			return
+		}
+
 		var course model.Course
 		if err := c.ShouldBindJSON(&course); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -70,6 +81,8 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 
 		userID := c.GetUint("userID")
 		course.TeacherID = userID
+
+		logger.Log.Infof("Creating course: %+v", course)
 
 		// Проверка существования пользователя и его роли
 		var user model.User
@@ -84,9 +97,18 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
+		// Валидация
 		if err := course.Validate(); err != nil {
 			logger.Log.Errorf("Course validation failed: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+			validationErrors := make([]string, 0)
+			if errs, ok := err.(validator.ValidationErrors); ok {
+				for _, e := range errs {
+					validationErrors = append(validationErrors, fmt.Sprintf("Поле %s: %s", e.Field(), e.Tag()))
+				}
+			} else {
+				validationErrors = append(validationErrors, err.Error())
+			}
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: strings.Join(validationErrors, "; ")})
 			return
 		}
 
@@ -119,6 +141,7 @@ func GetCourse(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID"})
 			return
 		}
@@ -127,6 +150,7 @@ func GetCourse(courseService service.CourseService) gin.HandlerFunc {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Курс не найден"})
 			} else {
+				logger.Log.Errorf("Failed to get course %d: %v", id, err)
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
 			}
 			return

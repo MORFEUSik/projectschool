@@ -135,23 +135,30 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Установка оценки
-	submission.Grade = grade
-	if err := s.db.Save(&submission).Error; err != nil {
-		logger.Log.Errorf("Failed to save grade for submission %d: %v", submissionID, err)
-		return err
-	}
-
-	// Начисление баллов пользователю
+	// Установка оценки и начисление баллов в транзакции
 	var submissionUser model.User
-	if err := s.db.First(&submissionUser, submission.UserID).Error; err != nil {
-		logger.Log.Errorf("User %d not found for points update: %v", submission.UserID, err)
-		return err
-	}
-	points := uint(grade * assignment.PointsMultiplier)
-	submissionUser.Points += points
-	if err := s.db.Save(&submissionUser).Error; err != nil {
-		logger.Log.Errorf("Failed to update points for user %d: %v", submission.UserID, err)
+	var points uint
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Установка оценки
+		submission.Grade = grade
+		if err := tx.Save(&submission).Error; err != nil {
+			return err
+		}
+
+		// Начисление баллов пользователю
+		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
+			return err
+		}
+		points = uint(grade * float64(assignment.MaxScore) / 5.0) // Нормализация оценки (0-5) к MaxScore
+		submissionUser.Points += points
+		if err := tx.Save(&submissionUser).Error; err != nil {
+			return err
+		}
+		logger.Log.Infof("Grade %f set for submission %d, added %d points to user %d", grade, submissionID, points, submission.UserID)
+		return nil
+	})
+	if err != nil {
+		logger.Log.Errorf("Failed to set grade and update points: %v", err)
 		return err
 	}
 
@@ -172,7 +179,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	logger.Log.Infof("Grade %f set for submission %d, added %d points to user %d", grade, submissionID, points, submission.UserID)
 	return nil
 }
 

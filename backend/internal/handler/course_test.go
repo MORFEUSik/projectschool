@@ -3,7 +3,6 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	//"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +10,6 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/jwt"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	//"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -44,7 +42,7 @@ func TestCreateCourse(t *testing.T) {
 	router := gin.New()
 
 	mockService := new(MockCourseService)
-	router.POST("/api/courses", AuthMiddleware(), CreateCourse(mockService))
+	router.POST("/api/courses", AuthMiddleware(), RoleMiddleware(model.Teacher, model.Admin), CreateCourse(mockService))
 
 	t.Run("Successful course creation", func(t *testing.T) {
 		course := &model.Course{
@@ -84,8 +82,11 @@ func TestCreateCourse(t *testing.T) {
 		assert.Equal(t, "Неверный формат данных", response["error"])
 	})
 
-	t.Run("Validation failed", func(t *testing.T) {
-		course := &model.Course{Title: "M"} // Слишком короткое название
+	t.Run("Validation failed - short title", func(t *testing.T) {
+		course := &model.Course{
+			Title:     "M",
+			TeacherID: 1,
+		}
 		token, _ := jwt.GenerateToken(1)
 		body, _ := json.Marshal(course)
 		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
@@ -98,7 +99,28 @@ func TestCreateCourse(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		var response map[string]string
 		json.Unmarshal(w.Body.Bytes(), &response)
-		assert.Contains(t, response["error"], "Field validation for 'Title'")
+		assert.Contains(t, response["error"], "Поле Title: min")
+	})
+
+	t.Run("Validation failed - missing teacherID", func(t *testing.T) {
+		course := &model.Course{
+			Title:       "Math 101",
+			Description: "Introduction to Mathematics",
+			TeacherID:   0, // Отсутствует TeacherID
+		}
+		token, _ := jwt.GenerateToken(1)
+		body, _ := json.Marshal(course)
+		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		var response map[string]string
+		json.Unmarshal(w.Body.Bytes(), &response)
+		assert.Contains(t, response["error"], "Поле TeacherID: required")
 	})
 }
 
@@ -151,7 +173,7 @@ func TestGetCourse(t *testing.T) {
 	router.GET("/api/courses/:id", GetCourse(mockService))
 
 	t.Run("Successful course fetch", func(t *testing.T) {
-		course := &model.Course{ID: 1, Title: "Math 101"}
+		course := &model.Course{ID: 1, Title: "Math 101", TeacherID: 1}
 		mockService.On("Get", uint(1)).Return(course, nil).Once()
 
 		req, _ := http.NewRequest("GET", "/api/courses/1", nil)
@@ -163,6 +185,7 @@ func TestGetCourse(t *testing.T) {
 		var response model.Course
 		json.Unmarshal(w.Body.Bytes(), &response)
 		assert.Equal(t, "Math 101", response.Title)
+		assert.Equal(t, uint(1), response.TeacherID)
 	})
 
 	t.Run("Course not found", func(t *testing.T) {
