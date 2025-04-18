@@ -10,16 +10,13 @@ import (
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/jwt"
-	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	//"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
-// MockAssignmentService для мокинга сервиса
 type MockAssignmentService struct {
 	mock.Mock
 }
@@ -34,38 +31,12 @@ func (m *MockAssignmentService) ListByCourse(courseID uint) ([]model.Assignment,
 	return args.Get(0).([]model.Assignment), args.Error(1)
 }
 
-// setupTestDB создаёт тестовую базу данных в памяти
-func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("Failed to create test DB: %v", err)
-	}
-	// Автомиграция моделей Course и User для тестов
-	err = db.AutoMigrate(&model.Course{}, &model.User{})
-	if err != nil {
-		t.Fatalf("Failed to migrate test DB: %v", err)
-	}
-	return db
-}
-
-// setupTestEnv инициализирует окружение для тестов
-func setupTestEnv(t *testing.T) {
-	// Инициализация логгера
-	logger.Init()
-
-	// Инициализация JWT
-	err := jwt.Init("test-secret-key")
-	if err != nil {
-		t.Fatalf("Failed to init JWT: %v", err)
-	}
-}
-
 func TestCreateAssignment(t *testing.T) {
-	setupTestEnv(t)
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
 
 	// Настройка тестовой базы данных
-	testDB := setupTestDB(t)
+	testDB := SetupTestDB(t)
 	originalDB := db.DB
 	db.DB = testDB
 	defer func() { db.DB = originalDB }()
@@ -215,7 +186,7 @@ func TestCreateAssignment(t *testing.T) {
 }
 
 func TestListAssignments(t *testing.T) {
-	setupTestEnv(t)
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()

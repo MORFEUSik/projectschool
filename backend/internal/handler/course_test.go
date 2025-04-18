@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/jwt"
-	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +16,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// MockCourseService для тестирования
 type MockCourseService struct {
 	mock.Mock
 }
@@ -37,10 +36,28 @@ func (m *MockCourseService) Get(id uint) (*model.Course, error) {
 }
 
 func TestCreateCourse(t *testing.T) {
-	logger.Init()
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
-	router := gin.New()
 
+	// Настройка тестовой базы данных
+	testDB := SetupTestDB(t)
+	originalDB := db.DB
+	db.DB = testDB
+	defer func() { db.DB = originalDB }()
+
+	// Создаём тестового пользователя
+	testUser := model.User{
+		ID:       1,
+		Username: "testteacher",
+		Email:    "teacher@example.com",
+		Password: "hashedpassword",
+		Role:     model.Teacher,
+	}
+	if err := testDB.Create(&testUser).Error; err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	router := gin.New()
 	mockService := new(MockCourseService)
 	router.POST("/api/courses", AuthMiddleware(), RoleMiddleware(model.Teacher, model.Admin), CreateCourse(mockService))
 
@@ -63,7 +80,8 @@ func TestCreateCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Equal(t, "Курс создан", response["message"])
 	})
 
@@ -78,7 +96,8 @@ func TestCreateCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Equal(t, "Неверный формат данных", response["error"])
 	})
 
@@ -98,15 +117,16 @@ func TestCreateCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
-		assert.Contains(t, response["error"], "Поле Title: min")
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Contains(t, response["error"], "Поле Title: min=3, max=100")
 	})
 
 	t.Run("Validation failed - missing teacherID", func(t *testing.T) {
 		course := &model.Course{
 			Title:       "Math 101",
 			Description: "Introduction to Mathematics",
-			TeacherID:   0, // Отсутствует TeacherID
+			TeacherID:   0,
 		}
 		token, _ := jwt.GenerateToken(1)
 		body, _ := json.Marshal(course)
@@ -119,13 +139,36 @@ func TestCreateCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
-		assert.Contains(t, response["error"], "Поле TeacherID: required")
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Contains(t, response["error"], "Поле TeacherID: required, gt=0")
+	})
+
+	t.Run("Teacher not found", func(t *testing.T) {
+		course := &model.Course{
+			Title:       "Math 101",
+			Description: "Introduction to Mathematics",
+			TeacherID:   999, // Несуществующий учитель
+		}
+		token, _ := jwt.GenerateToken(1)
+		body, _ := json.Marshal(course)
+		req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		var response map[string]string
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, "Учитель не найден", response["error"])
 	})
 }
 
 func TestListCourses(t *testing.T) {
-	logger.Init()
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -146,7 +189,8 @@ func TestListCourses(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		var response []model.Course
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Len(t, response, 2)
 		assert.Equal(t, "Math 101", response[0].Title)
 	})
@@ -159,13 +203,14 @@ func TestListCourses(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Equal(t, "Неверные параметры пагинации", response["error"])
 	})
 }
 
 func TestGetCourse(t *testing.T) {
-	logger.Init()
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -183,7 +228,8 @@ func TestGetCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		var response model.Course
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Equal(t, "Math 101", response.Title)
 		assert.Equal(t, uint(1), response.TeacherID)
 	})
@@ -198,7 +244,8 @@ func TestGetCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Equal(t, "Курс не найден", response["error"])
 	})
 
@@ -210,7 +257,8 @@ func TestGetCourse(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
 		assert.Equal(t, "Неверный ID", response["error"])
 	})
 }

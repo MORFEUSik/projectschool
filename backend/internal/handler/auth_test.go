@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/jwt"
-	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	//"github.com/MORFEUSik/projectschool/backend/internal/jwt"
+	//"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -32,20 +32,8 @@ func (m *MockAuthService) Login(email, password string) (*model.User, error) {
 	return args.Get(0).(*model.User), args.Error(1)
 }
 
-// setupTestEnv инициализирует окружение для тестов
-func setupTestEnv(t *testing.T) {
-	// Инициализация логгера
-	logger.Init()
-
-	// Инициализация JWT
-	err := jwt.Init("test-secret-key")
-	if err != nil {
-		t.Fatalf("Failed to init JWT: %v", err)
-	}
-}
-
 func TestRegister(t *testing.T) {
-	setupTestEnv(t)
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -136,7 +124,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
-	setupTestEnv(t)
+	SetupTestEnv(t)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -180,17 +168,17 @@ func TestLogin(t *testing.T) {
 		mockService.On("Login", credentials.Email, credentials.Password).Return((*model.User)(nil), errors.New("Неверный email или пароль")).Once()
 
 		body, _ := json.Marshal(credentials)
-		req, _ := http.NewRequest("POST", "/register", bytes.NewBuffer(body))
+		req, _ := http.NewRequest("POST", "/login", bytes.NewBuffer(body)) // Исправлен URL
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		var response map[string]string
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		assert.Equal(t, "Неверный формат данных", response["error"])
+		assert.Equal(t, "Неверный email или пароль", response["error"])
 	})
 
 	t.Run("Invalid JSON", func(t *testing.T) {

@@ -79,12 +79,40 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
-		userID := c.GetUint("userID")
-		course.TeacherID = userID
-
 		logger.Log.Infof("Creating course: %+v", course)
 
-		// Проверка существования пользователя и его роли
+		// Валидация структуры курса
+		if err := course.Validate(); err != nil {
+			logger.Log.Errorf("Course validation failed: %v", err)
+			validationErrors := make([]string, 0)
+			if errs, ok := err.(validator.ValidationErrors); ok {
+				for _, e := range errs {
+					switch e.Field() {
+					case "Title":
+						validationErrors = append(validationErrors, fmt.Sprintf("Поле Title: min=3, max=100"))
+					case "TeacherID":
+						validationErrors = append(validationErrors, fmt.Sprintf("Поле TeacherID: required, gt=0"))
+					default:
+						validationErrors = append(validationErrors, e.Error())
+					}
+				}
+			} else {
+				validationErrors = append(validationErrors, err.Error())
+			}
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: strings.Join(validationErrors, "; ")})
+			return
+		}
+
+		// Проверка существования учителя
+		var teacher model.User
+		if err := db.DB.First(&teacher, course.TeacherID).Error; err != nil {
+			logger.Log.Errorf("Teacher %d not found: %v", course.TeacherID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Учитель не найден"})
+			return
+		}
+
+		// Проверка роли текущего пользователя
+		userID := c.GetUint("userID")
 		var user model.User
 		if err := db.DB.First(&user, userID).Error; err != nil {
 			logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -94,21 +122,6 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 		if user.Role != model.Teacher && user.Role != model.Admin {
 			logger.Log.Warnf("User %d with role %s is not allowed to create courses", userID, user.Role)
 			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Только преподаватели или администраторы могут создавать курсы"})
-			return
-		}
-
-		// Валидация
-		if err := course.Validate(); err != nil {
-			logger.Log.Errorf("Course validation failed: %v", err)
-			validationErrors := make([]string, 0)
-			if errs, ok := err.(validator.ValidationErrors); ok {
-				for _, e := range errs {
-					validationErrors = append(validationErrors, fmt.Sprintf("Поле %s: %s", e.Field(), e.Tag()))
-				}
-			} else {
-				validationErrors = append(validationErrors, err.Error())
-			}
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: strings.Join(validationErrors, "; ")})
 			return
 		}
 
