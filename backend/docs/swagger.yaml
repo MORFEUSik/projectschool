@@ -355,6 +355,51 @@ paths:
       tags:
       - courses
   /courses/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаляет курс. Требуется JWT-токен. Доступно только для преподавателя
+        курса или админа.
+      parameters:
+      - description: ID курса
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error.APIError'
+      security:
+      - BearerAuth: []
+      summary: Удалить курс
+      tags:
+      - courses
     get:
       consumes:
       - application/json
@@ -446,6 +491,138 @@ paths:
       summary: Получить список заданий
       tags:
       - assignments
+  /courses/{id}/enroll:
+    delete:
+      consumes:
+      - application/json
+      description: 'Отменяет запись аутентифицированного студента на курс. Требуется
+        JWT-токен. Доступно только для роли: student.'
+      parameters:
+      - description: ID курса
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error.APIError'
+      security:
+      - BearerAuth: []
+      summary: Отменить запись на курс
+      tags:
+      - courses
+    post:
+      consumes:
+      - application/json
+      description: 'Записывает аутентифицированного студента на курс. Требуется JWT-токен.
+        Доступно только для роли: student.'
+      parameters:
+      - description: ID курса
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error.APIError'
+      security:
+      - BearerAuth: []
+      summary: Записаться на курс
+      tags:
+      - courses
+  /courses/{id}/stats:
+    get:
+      consumes:
+      - application/json
+      description: 'Возвращает статистику курса (количество студентов, средняя оценка,
+        процент завершения). Требуется JWT-токен. Доступно для ролей: teacher, admin.'
+      parameters:
+      - description: ID курса
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: students_count, average_grade, completion_rate
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error.APIError'
+      security:
+      - BearerAuth: []
+      summary: Получить статистику курса
+      tags:
+      - courses
   /leaderboard:
     get:
       consumes:
@@ -631,6 +808,60 @@ paths:
       summary: Установить оценку
       tags:
       - submissions
+  /users/{id}/role:
+    put:
+      consumes:
+      - application/json
+      description: 'Обновляет роль указанного пользователя. Требуется JWT-токен. Доступно
+        только для роли: admin.'
+      parameters:
+      - description: ID пользователя
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Новая роль
+        in: body
+        name: role
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/error.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/error.APIError'
+      security:
+      - BearerAuth: []
+      summary: Обновить роль пользователя
+      tags:
+      - users
   /users/me:
     get:
       consumes:

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
@@ -165,5 +166,223 @@ func GetCourse(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, course)
+	}
+}
+
+// Enroll записывает пользователя на курс
+// @Summary Записаться на курс
+// @Description Записывает аутентифицированного студента на курс. Требуется JWT-токен. Доступно только для роли: student.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/enroll [post]
+func Enroll(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("User %d attempting to enroll in course %d", userID, id)
+		if err := courseService.Enroll(userID.(uint), uint(id)); err != nil {
+			logger.Log.Errorf("Failed to enroll user %d in course %d: %v", userID, id, err)
+			if err.Error() == "курс не найден" || err.Error() == "пользователь не найден" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: err.Error()})
+			} else if err.Error() == "пользователь уже записан на курс" || err.Error() == "только студенты могут записываться на курсы" {
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка записи на курс"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %d enrolled in course %d", userID, id)
+		c.JSON(http.StatusOK, gin.H{"message": "Вы записались на курс"})
+	}
+}
+
+// Unenroll отменяет запись пользователя на курс
+// @Summary Отменить запись на курс
+// @Description Отменяет запись аутентифицированного студента на курс. Требуется JWT-токен. Доступно только для роли: student.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 404 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/enroll [delete]
+func Unenroll(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("User %d attempting to unenroll from course %d", userID, id)
+		if err := courseService.Unenroll(userID.(uint), uint(id)); err != nil {
+			logger.Log.Errorf("Failed to unenroll user %d from course %d: %v", userID, id, err)
+			if err.Error() == "курс не найден" || err.Error() == "пользователь не найден" || err.Error() == "пользователь не записан на курс" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: err.Error()})
+			} else if err.Error() == "только студенты могут отменять запись на курсы" {
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка отмены записи"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %d unenrolled from course %d", userID, id)
+		c.JSON(http.StatusOK, gin.H{"message": "Запись на курс отменена"})
+	}
+}
+
+// DeleteCourse удаляет курс
+// @Summary Удалить курс
+// @Description Удаляет курс. Требуется JWT-токен. Доступно только для преподавателя курса или админа.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 404 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id} [delete]
+func DeleteCourse(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("User %d attempting to delete course %d", userID, id)
+		if err := courseService.Delete(userID.(uint), uint(id)); err != nil {
+			logger.Log.Errorf("Failed to delete course %d by user %d: %v", id, userID, err)
+			if err.Error() == "курс не найден" || err.Error() == "пользователь не найден" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: err.Error()})
+			} else if err.Error() == "нет прав для удаления курса" || err.Error() == "недостаточно прав" {
+				error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка удаления курса"})
+			}
+			return
+		}
+
+		logger.Log.Infof("Course %d deleted by user %d", id, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Курс удален"})
+	}
+}
+
+// GetCourseStats возвращает статистику курса
+// @Summary Получить статистику курса
+// @Description Возвращает статистику курса (количество студентов, средняя оценка, процент завершения). Требуется JWT-токен. Доступно для ролей: teacher, admin.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]interface{} "students_count, average_grade, completion_rate"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 404 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/stats [get]
+func GetCourseStats(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("User %d fetching stats for course %d", userID, id)
+		stats, err := courseService.GetStats(uint(id))
+		if err != nil {
+			logger.Log.Errorf("Failed to fetch stats for course %d: %v", id, err)
+			if err.Error() == "курс не найден" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Курс не найден"})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения статистики"})
+			}
+			return
+		}
+
+		// Проверка прав: учитель курса или админ
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+		var course model.Course
+		if err := db.DB.First(&course, id).Error; err != nil {
+			logger.Log.Errorf("Course %d not found: %v", id, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Курс не найден"})
+			return
+		}
+		if user.Role == model.Teacher && course.TeacherID != userID.(uint) {
+			logger.Log.Warnf("Teacher %d does not own course %d", userID, id)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Нет прав для просмотра статистики"})
+			return
+		}
+		if user.Role != model.Teacher && user.Role != model.Admin {
+			logger.Log.Warnf("User %d does not have permission", userID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Недостаточно прав"})
+			return
+		}
+
+		logger.Log.Infof("Stats fetched for course %d by user %d", id, userID)
+		c.JSON(http.StatusOK, stats)
 	}
 }

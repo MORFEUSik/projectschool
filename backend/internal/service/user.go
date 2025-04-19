@@ -16,6 +16,7 @@ type UserService interface {
 	Login(email, password string) (*model.User, error)
 	GetProfile(userID uint) (*model.User, error)
 	GetLeaderboard(courseID uint) ([]model.User, error)
+	UpdateRole(userID, adminID uint, role model.Role) error
 }
 
 type userService struct {
@@ -123,4 +124,44 @@ func (s *userService) GetLeaderboard(courseID uint) ([]model.User, error) {
 
 	logger.Log.Infof("Leaderboard fetched with %d users", len(users))
 	return users, nil
+}
+
+func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
+	logger.Log.Infof("Admin %d updating role for user %d to %s", adminID, userID, role)
+
+	// Проверка: существует ли пользователь
+	_, err := s.repo.FindByID(userID) // Заменяем user на _
+	if err != nil {
+		logger.Log.Errorf("User %d not found: %v", userID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("пользователь не найден")
+		}
+		return err
+	}
+
+	// Проверка: является ли вызывающий пользователь админом
+	admin, err := s.repo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return err
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	// Проверка валидности роли
+	if role != model.Student && role != model.Teacher && role != model.Admin {
+		logger.Log.Errorf("Invalid role: %s", role)
+		return errors.New("недопустимая роль")
+	}
+
+	// Обновление роли
+	if err := s.repo.UpdateRole(userID, role); err != nil {
+		logger.Log.Errorf("Failed to update role for user %d: %v", userID, err)
+		return err
+	}
+
+	logger.Log.Infof("Role for user %d updated to %s", userID, role)
+	return nil
 }

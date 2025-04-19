@@ -31,6 +31,7 @@ func Init(cfg *config.Config) {
 		&model.Submission{},
 		&model.Test{},
 		&model.Achievement{},
+		&model.Notification{},
 	)
 	if err != nil {
 		log.Fatalf("Ошибка миграции: %v", err)
@@ -103,6 +104,38 @@ func Init(cfg *config.Config) {
 		log.Printf("Предупреждение: не удалось добавить уникальные индексы: %v", err)
 	}
 
+	// Добавление индексов для оптимизации
+	log.Println("Ensuring indexes")
+	err = db.Exec(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE indexname = 'idx_submissions_user_id'
+            ) THEN
+                CREATE INDEX idx_submissions_user_id ON submissions(user_id);
+            END IF;
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE indexname = 'idx_assignments_course_id'
+            ) THEN
+                CREATE INDEX idx_assignments_course_id ON assignments(course_id);
+            END IF;
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE indexname = 'idx_notifications_user_id'
+            ) THEN
+                CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+            END IF;
+        END $$;
+    `).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось добавить индексы: %v", err)
+	}
+
 	// Логирование схемы таблицы users
 	type ColumnSchema struct {
 		ColumnName string `gorm:"column:column_name"`
@@ -139,6 +172,18 @@ func Init(cfg *config.Config) {
 	} else {
 		log.Println("Table assignments schema:")
 		for _, schema := range assignmentSchemas {
+			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
+		}
+	}
+
+	// Логирование схемы таблицы notifications
+	var notificationSchemas []ColumnSchema
+	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'notifications'").Scan(&notificationSchemas).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось получить схему таблицы notifications: %v", err)
+	} else {
+		log.Println("Table notifications schema:")
+		for _, schema := range notificationSchemas {
 			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 		}
 	}

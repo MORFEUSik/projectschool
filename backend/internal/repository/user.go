@@ -13,6 +13,7 @@ type UserRepository interface {
 	FindByEmail(email string) (*model.User, error)
 	FindTopByPoints(limit int) ([]model.User, error)
 	FindTopByPointsInCourse(courseID uint, limit int) ([]model.User, error)
+	UpdateRole(id uint, role model.Role) error
 }
 
 type userRepository struct {
@@ -59,4 +60,9 @@ func (r *userRepository) FindTopByPointsInCourse(courseID uint, limit int) ([]mo
 		Limit(limit).
 		Find(&users).Error
 	return users, err
+}
+
+func (r *userRepository) UpdateRole(id uint, role model.Role) error {
+	logger.Log.Infof("Updating role for user %d to %s", id, role)
+	return r.db.Model(&model.User{}).Where("id = ?", id).Update("role", role).Error
 }

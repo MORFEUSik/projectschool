@@ -10,6 +10,7 @@ type AssignmentRepository interface {
 	Create(assignment *model.Assignment) error
 	FindByCourseID(courseID uint) ([]model.Assignment, error)
 	FindByID(id uint) (*model.Assignment, error)
+	FindByUserID(userID uint) ([]model.Assignment, error)
 }
 
 type assignmentRepository struct {
@@ -34,4 +35,12 @@ func (r *assignmentRepository) FindByID(id uint) (*model.Assignment, error) {
 	var assignment model.Assignment
 	err := r.db.First(&assignment, id).Error
 	return &assignment, err
+}
+
+func (r *assignmentRepository) FindByUserID(userID uint) ([]model.Assignment, error) {
+	var assignments []model.Assignment
+	err := r.db.Joins("JOIN enrollments ON enrollments.course_id = assignments.course_id").
+		Where("enrollments.user_id = ?", userID).
+		Find(&assignments).Error
+	return assignments, err
 }

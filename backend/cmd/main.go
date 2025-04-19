@@ -84,6 +84,7 @@ func main() {
 			protected.GET("/users/me", handler.GetProfile(userService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.GET("/leaderboard", handler.GetLeaderboard(userService))
+			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 
 			courses := protected.Group("/courses")
 			{
@@ -91,6 +92,10 @@ func main() {
 				courses.POST("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.CreateCourse(courseService))
 				courses.GET("/:id", handler.GetCourse(courseService))
 				courses.GET("/:id/assignments", handler.ListAssignments(assignmentService))
+				courses.POST("/:id/enroll", handler.RoleMiddleware(model.Student), handler.Enroll(courseService))
+				courses.DELETE("/:id/enroll", handler.RoleMiddleware(model.Student), handler.Unenroll(courseService))
+				courses.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteCourse(courseService))
+				courses.GET("/:id/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
 			}
 
 			assignments := protected.Group("/assignments")

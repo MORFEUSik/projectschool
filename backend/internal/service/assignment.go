@@ -1,4 +1,3 @@
-// backend/internal/service/assignment.go
 package service
 
 import (
@@ -9,6 +8,7 @@ import (
 type AssignmentService interface {
 	Create(assignment *model.Assignment) error
 	ListByCourse(courseID uint) ([]model.Assignment, error)
+	ListByUser(userID uint) ([]model.Assignment, error)
 }
 
 type assignmentService struct {
@@ -25,4 +25,8 @@ func (s *assignmentService) Create(assignment *model.Assignment) error {
 
 func (s *assignmentService) ListByCourse(courseID uint) ([]model.Assignment, error) {
 	return s.repo.FindByCourseID(courseID)
+}
+
+func (s *assignmentService) ListByUser(userID uint) ([]model.Assignment, error) {
+	return s.repo.FindByUserID(userID)
 }
