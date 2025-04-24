@@ -1,6 +1,9 @@
+// src/app/layout.tsx
 import './globals.css';
 import { ReactNode } from 'react';
 import Link from 'next/link';
+import { Toaster } from 'react-hot-toast';
+import Nav from '@/components/Nav';
 
 export const metadata = {
   title: 'Школьная платформа',
@@ -14,13 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <header className="bg-primary text-white p-4 sticky top-0 z-10">
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-2xl md:text-3xl font-bold">Школьная платформа</h1>
-            <nav className="hidden md:flex space-x-4">
-              <Link href="/" className="hover:underline">Главная</Link>
-              <Link href="/courses" className="hover:underline">Курсы</Link>
-              <Link href="/tasks" className="hover:underline">Задания</Link>
-              <Link href="/login" className="hover:underline">Вход</Link>
-              <Link href="/register" className="hover:underline">Регистрация</Link>
-            </nav>
+            <Nav />
             <button className="md:hidden text-white text-2xl">☰</button>
           </div>
         </header>
@@ -28,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <footer className="bg-primary text-white p-4 text-center">
           <p>© 2025 Школьная платформа. Все права защищены.</p>
         </footer>
+        <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       </body>
     </html>
   );

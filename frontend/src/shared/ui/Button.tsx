@@ -1,3 +1,4 @@
+// frontend/src/shared/ui/Button.tsx
 import { cn } from '@/shared/lib/utils';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -8,7 +9,7 @@ export function Button({ children, className, ...props }: ButtonProps) {
   return (
     <button
       className={cn(
-        'bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400',
+        'bg-primary text-white px-4 py-2 rounded-xl hover:bg-secondary transition-colors duration-200 disabled:bg-gray-400',
         className
       )}
       {...props}

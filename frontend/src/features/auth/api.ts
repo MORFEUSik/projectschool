@@ -23,6 +23,27 @@ interface LoginResponse {
   token: string;
 }
 
+interface ProfileResponse {
+  id: number;
+  username: string;
+  email: string;
+  role: Role;
+  points: number;
+}
+
+interface SubmissionResponse {
+  id: number;
+  assignment_id: number;
+  content: string;
+  grade: number;
+  created_at: string;
+  assignment: {
+    id: number;
+    title: string;
+    course_id: number;
+  };
+}
+
 export async function register(data: RegisterData): Promise<RegisterResponse> {
   const response = await fetchWithAuth('/api/register', {
     method: 'POST',
@@ -48,6 +69,34 @@ export async function login(data: LoginData): Promise<LoginResponse> {
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Ошибка входа');
+  }
+
+  return response.json();
+}
+
+export async function getProfile(): Promise<ProfileResponse> {
+  const response = await fetchWithAuth('/api/users/me', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Ошибка загрузки профиля');
+  }
+
+  return response.json();
+}
+
+export async function getSubmissions(): Promise<SubmissionResponse[]> {
+  const response = await fetchWithAuth('/api/users/me/submissions', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Ошибка загрузки решений');
   }
 
   return response.json();

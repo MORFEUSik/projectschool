@@ -1,3 +1,4 @@
+/* frontend/src/app/globals.css */
 @import url("https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap");
 
 @tailwind base;
@@ -8,25 +9,24 @@
   body {
     @apply bg-gray-100 font-sans text-gray-800;
   }
+  input {
+    @apply border-gray-300 bg-white text-gray-800 rounded-xl; /* Сброс для инпутов */
+  }
 }
 
 @layer components {
   .btn {
     @apply px-6 py-3 rounded-uchi font-bold shadow-uchi transition-colors;
   }
-
   .btn-primary {
     @apply bg-accent text-white hover:bg-secondary;
   }
-
   .btn-secondary {
     @apply bg-primary text-white hover:bg-secondary;
   }
-
   .rounded-uchi {
     @apply rounded-xl;
   }
-
   .shadow-uchi {
     @apply shadow-md hover:shadow-lg;
   }

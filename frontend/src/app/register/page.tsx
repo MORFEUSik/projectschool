@@ -1,3 +1,4 @@
+// frontend/src/app/register/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -8,6 +9,8 @@ import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Role } from '@/entities/user/model';
+import toast from 'react-hot-toast';
+import Cookies from 'js-cookie';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -32,10 +35,13 @@ export default function RegisterPage() {
     try {
       const response = await register(formData);
       localStorage.setItem('token', response.token);
+      Cookies.set('token', response.token, { expires: 7 }); // Сохраняем в cookies на 7 дней
+      toast.success('Регистрация прошла успешно!');
       router.push('/profile');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Ошибка регистрации';
       setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -82,7 +88,7 @@ export default function RegisterPage() {
               name="role"
               value={formData.role}
               onChange={handleChange}
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 bg-white border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
             >
               <option value={Role.Student}>Студент</option>
               <option value={Role.Teacher}>Учитель</option>

@@ -1,22 +1,18 @@
+// frontend/tailwind.config.ts
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-	content: [
-	  './src/**/*.{js,ts,jsx,tsx}',
-	],
+	content: ['./src/**/*.{js,ts,jsx,tsx}'],
 	theme: {
 	  extend: {
 		 colors: {
-			primary: '#4F46E5', // Индиго для основного цвета
-			secondary: '#EC4899', // Розовый для ховер-эффектов
-			accent: '#10B981', // Зелёный для акцентов
+			primary: '#4F46E5', // Индиго
+			secondary: '#EC4899', // Розовый
+			accent: '#10B981', // Зелёный
 		 },
 		 fontFamily: {
-			sans: ['Comic Neue', 'sans-serif'], // Мультяшный шрифт
+			sans: ['Comic Neue', 'sans-serif'],
 		 },
 	  },
 	},
-	plugins: [require("daisyui")],
-  daisyui: {
-    themes: ["light", "cupcake", "bumblebee"], // Яркие темы
-  },
+	plugins: [], // Убрали DaisyUI
  };

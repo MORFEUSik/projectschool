@@ -1,3 +1,4 @@
+// frontend/src/app/login/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -7,6 +8,8 @@ import { AuthForm } from '@/features/auth/ui';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
+import toast from 'react-hot-toast';
+import Cookies from 'js-cookie';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,10 +32,13 @@ export default function LoginPage() {
     try {
       const response = await login(formData);
       localStorage.setItem('token', response.token);
+      Cookies.set('token', response.token, { expires: 7 }); // Сохраняем в cookies на 7 дней
+      toast.success('Вход выполнен успешно!');
       router.push('/profile');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Ошибка входа';
       setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
