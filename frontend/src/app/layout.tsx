@@ -1,5 +1,6 @@
 import './globals.css';
 import { ReactNode } from 'react';
+import Link from 'next/link';
 
 export const metadata = {
   title: 'Школьная платформа',
@@ -14,11 +15,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <div className="container mx-auto flex justify-between items-center">
             <h1 className="text-2xl md:text-3xl font-bold">Школьная платформа</h1>
             <nav className="hidden md:flex space-x-4">
-              <a href="/" className="hover:underline">Главная</a>
-              <a href="/courses" className="hover:underline">Курсы</a>
-              <a href="/tasks" className="hover:underline">Задания</a>
-              <a href="/login" className="hover:underline">Вход</a>
-              <a href="/register" className="hover:underline">Регистрация</a>
+              <Link href="/" className="hover:underline">Главная</Link>
+              <Link href="/courses" className="hover:underline">Курсы</Link>
+              <Link href="/tasks" className="hover:underline">Задания</Link>
+              <Link href="/login" className="hover:underline">Вход</Link>
+              <Link href="/register" className="hover:underline">Регистрация</Link>
             </nav>
             <button className="md:hidden text-white text-2xl">☰</button>
           </div>

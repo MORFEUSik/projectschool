@@ -13,6 +13,16 @@ interface RegisterResponse {
   token: string;
 }
 
+interface LoginData {
+  email: string;
+  password: string;
+}
+
+interface LoginResponse {
+  message: string;
+  token: string;
+}
+
 export async function register(data: RegisterData): Promise<RegisterResponse> {
   const response = await fetchWithAuth('/api/register', {
     method: 'POST',
@@ -23,6 +33,21 @@ export async function register(data: RegisterData): Promise<RegisterResponse> {
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Ошибка регистрации');
+  }
+
+  return response.json();
+}
+
+export async function login(data: LoginData): Promise<LoginResponse> {
+  const response = await fetchWithAuth('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Ошибка входа');
   }
 
   return response.json();
