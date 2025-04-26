@@ -1,24 +1,22 @@
-// frontend/src/app/login/page.tsx
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { login } from '@/features/auth/api';
 import { AuthForm } from '@/features/auth/ui';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import toast from 'react-hot-toast';
-import Cookies from 'js-cookie';
+import { useAuth } from '@/shared/lib/AuthContext';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login: authLogin } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -31,10 +29,7 @@ export default function LoginPage() {
 
     try {
       const response = await login(formData);
-      localStorage.setItem('token', response.token);
-      Cookies.set('token', response.token, { expires: 7 }); // Сохраняем в cookies на 7 дней
-      toast.success('Вход выполнен успешно!');
-      router.push('/profile');
+      authLogin(response.token); // Используем login из AuthContext
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Ошибка входа';
       setError(errorMessage);

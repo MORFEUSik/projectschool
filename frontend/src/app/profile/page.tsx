@@ -1,3 +1,4 @@
+// frontend/src/app/profile/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,6 +13,8 @@ import { User, Role } from '@/entities/user/model';
 import { Course, Enrollment } from '@/entities/course/model';
 import { Submission } from '@/entities/submission/model';
 import { fetchWithAuth } from '@/shared/api/fetch';
+import Cookies from 'js-cookie';
+import toast from 'react-hot-toast';
 
 interface ProfileResponse {
   id: number;
@@ -32,8 +35,11 @@ export default function ProfilePage() {
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('token') || Cookies.get('token');
+        console.log('ProfilePage: Token:', token);
         if (!token) {
+          console.log('ProfilePage: No token, redirecting to /login');
+          toast.error('Пожалуйста, войдите в аккаунт');
           router.push('/login');
           return;
         }
@@ -43,6 +49,7 @@ export default function ProfilePage() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
+        console.log('ProfilePage: Profile response status:', profileResponse.status);
         if (!profileResponse.ok) {
           throw new Error('Ошибка загрузки профиля');
         }
@@ -62,9 +69,16 @@ export default function ProfilePage() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
+        console.log('ProfilePage: Courses response status:', coursesResponse.status);
         if (coursesResponse.ok) {
           const coursesData: Course[] = await coursesResponse.json();
-          setCourses(coursesData.filter((course) =>
+          console.log('ProfilePage: Courses data:', JSON.stringify(coursesData, null, 2));
+          // Устанавливаем enrollments как пустой массив, если undefined
+          const coursesWithEnrollments = coursesData.map(course => ({
+            ...course,
+            enrollments: course.enrollments || [],
+          }));
+          setCourses(coursesWithEnrollments.filter((course) =>
             course.teacher.id === profileData.id || // Курсы, где юзер учитель
             course.enrollments.some((e: Enrollment) => e.user_id === profileData.id) // Курсы, где юзер записан
           ));
@@ -75,12 +89,14 @@ export default function ProfilePage() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
+        console.log('ProfilePage: Submissions response status:', submissionsResponse.status);
         if (submissionsResponse.ok) {
           const submissionsData: Submission[] = await submissionsResponse.json();
           setSubmissions(submissionsData.slice(0, 3)); // Показываем только 3 последних
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
+        toast.error(err instanceof Error ? err.message : 'Не удалось загрузить данные');
       } finally {
         setLoading(false);
       }

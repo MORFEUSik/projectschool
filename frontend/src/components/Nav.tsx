@@ -1,28 +1,10 @@
-// frontend/src/components/Nav.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
-import Cookies from 'js-cookie';
+import { useAuth } from '@/shared/lib/AuthContext';
 
 export default function Nav() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const router = useRouter();
-
-  useEffect(() => {
-    const token = localStorage.getItem('token') || Cookies.get('token');
-    setIsAuthenticated(!!token);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    Cookies.remove('token');
-    setIsAuthenticated(false);
-    toast.success('Вы вышли из аккаунта');
-    router.push('/login');
-  };
+  const { isAuthenticated, logout } = useAuth();
 
   return (
     <nav className="hidden md:flex space-x-4">
@@ -32,7 +14,7 @@ export default function Nav() {
       {isAuthenticated ? (
         <>
           <Link href="/profile" className="hover:underline">Профиль</Link>
-          <button onClick={handleLogout} className="hover:underline">
+          <button onClick={logout} className="hover:underline">
             Выйти
           </button>
         </>

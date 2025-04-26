@@ -1,4 +1,4 @@
-// src/app/courses/page.tsx
+// frontend/src/app/courses/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,6 +13,7 @@ import { Course, Enrollment } from '@/entities/course/model';
 import { User, Role } from '@/entities/user/model';
 import { fetchWithAuth } from '@/shared/api/fetch';
 import toast from 'react-hot-toast';
+import Cookies from 'js-cookie';
 
 export default function CoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -26,10 +27,11 @@ export default function CoursesPage() {
   useEffect(() => {
     const fetchCoursesData = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('token') || Cookies.get('token');
         console.log('CoursesPage: Token:', token);
         if (!token) {
           console.log('CoursesPage: No token, redirecting to /login');
+          toast.error('Пожалуйста, войдите в аккаунт');
           router.push('/login');
           return;
         }
@@ -39,6 +41,7 @@ export default function CoursesPage() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
+        console.log('CoursesPage: Profile response status:', profileResponse.status);
         if (!profileResponse.ok) {
           throw new Error('Ошибка загрузки профиля');
         }
@@ -58,11 +61,17 @@ export default function CoursesPage() {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
+        console.log('CoursesPage: Courses response status:', coursesResponse.status);
         if (!coursesResponse.ok) {
           throw new Error('Ошибка загрузки курсов');
         }
         const coursesData: Course[] = await coursesResponse.json();
-        setCourses(coursesData);
+        console.log('CoursesPage: Courses data:', JSON.stringify(coursesData, null, 2));
+        // Устанавливаем enrollments как пустой массив, если undefined
+        setCourses(coursesData.map(course => ({
+          ...course,
+          enrollments: course.enrollments || [],
+        })));
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Не удалось загрузить данные';
         setError(errorMessage);

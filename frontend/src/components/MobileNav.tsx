@@ -1,30 +1,12 @@
-// frontend/src/components/MobileNav.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
-import Cookies from 'js-cookie';
+import { useAuth } from '@/shared/lib/AuthContext';
 
 export default function MobileNav() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const router = useRouter();
-
-  useEffect(() => {
-    const token = localStorage.getItem('token') || Cookies.get('token');
-    setIsAuthenticated(!!token);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    Cookies.remove('token');
-    setIsAuthenticated(false);
-    toast.success('Вы вышли из аккаунта');
-    router.push('/login');
-    setIsOpen(false);
-  };
+  const { isAuthenticated, logout } = useAuth();
 
   return (
     <div className="md:hidden">
@@ -50,7 +32,7 @@ export default function MobileNav() {
               <Link href="/profile" className="hover:underline" onClick={() => setIsOpen(false)}>
                 Профиль
               </Link>
-              <button className="text-left hover:underline" onClick={handleLogout}>
+              <button className="text-left hover:underline" onClick={() => { logout(); setIsOpen(false); }}>
                 Выйти
               </button>
             </>

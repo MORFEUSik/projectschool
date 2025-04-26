@@ -1,8 +1,6 @@
-// frontend/src/app/register/page.tsx
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { register } from '@/features/auth/api';
 import { AuthForm } from '@/features/auth/ui';
 import { Card } from '@/shared/ui/Card';
@@ -10,10 +8,9 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { Role } from '@/entities/user/model';
 import toast from 'react-hot-toast';
-import Cookies from 'js-cookie';
+import { useAuth } from '@/shared/lib/AuthContext';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -22,6 +19,7 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login: authLogin } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -34,10 +32,7 @@ export default function RegisterPage() {
 
     try {
       const response = await register(formData);
-      localStorage.setItem('token', response.token);
-      Cookies.set('token', response.token, { expires: 7 }); // Сохраняем в cookies на 7 дней
-      toast.success('Регистрация прошла успешно!');
-      router.push('/profile');
+      authLogin(response.token); // Используем login из AuthContext
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Ошибка регистрации';
       setError(errorMessage);
