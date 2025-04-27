@@ -1,9 +1,9 @@
-// frontend/src/shared/api/fetch.ts
+// src/shared/api/fetch.ts
 import Cookies from 'js-cookie';
+import { handleApiError } from './utils';
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token') || Cookies.get('token');
-  console.log('fetchWithAuth: Token:', token);
+  const token = Cookies.get('token');
   const headers = {
     ...options.headers,
     'Content-Type': 'application/json',
@@ -15,6 +15,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers,
   });
 
-  console.log('fetchWithAuth: Response status:', response.status);
+  if (!response.ok) {
+    await handleApiError(response);
+  }
+
   return response;
 }

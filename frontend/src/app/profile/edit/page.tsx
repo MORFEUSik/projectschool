@@ -1,55 +1,47 @@
+// src/app/profile/edit/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { fetchWithAuth } from '@/shared/api/fetch';
-import toast from 'react-hot-toast';
-import Cookies from 'js-cookie';
+import { useAuthCheck } from '@/shared/lib/useAuthCheck';
 import { User } from '@/entities/user/model';
 
 export default function EditProfilePage() {
+  useAuthCheck();
+  const router = useRouter();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
+    password: '',
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const token = localStorage.getItem('token') || Cookies.get('token');
-        if (!token) {
-          toast.error('Пожалуйста, войдите в аккаунт');
-          router.push('/login');
-          return;
-        }
-
-        const response = await fetchWithAuth('/api/users/me', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (!response.ok) {
-          throw new Error('Ошибка загрузки профиля');
-        }
-        const data: User = await response.json();
+        const response = await fetchWithAuth('/api/users/me');
+        const user: User = await response.json();
         setFormData({
-          username: data.username,
-          email: data.email,
+          username: user.username,
+          email: user.email,
+          password: '',
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Не удалось загрузить данные');
-        toast.error(err instanceof Error ? err.message : 'Не удалось загрузить данные');
+        const errorMessage = err instanceof Error ? err.message : 'Ошибка загрузки профиля';
+        setError(errorMessage);
+        toast.error(errorMessage);
       } finally {
         setLoading(false);
       }
     };
     fetchProfile();
-  }, [router]);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -59,20 +51,15 @@ export default function EditProfilePage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      const response = await fetchWithAuth('/api/users/me', {
+      await fetchWithAuth('/api/users/me', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      if (!response.ok) {
-        throw new Error('Ошибка обновления профиля');
-      }
-      toast.success('Профиль успешно обновлён!');
+      toast.success('Профиль обновлён!');
       router.push('/profile');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Ошибка обновления';
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка обновления профиля';
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -81,13 +68,13 @@ export default function EditProfilePage() {
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center h-screen text-xl text-gray-600">Загрузка...</div>;
+    return <div className="min-h-screen flex items-center justify-center">Загрузка...</div>;
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500">
-      <Card className="w-full max-w-md p-6 shadow-lg animate-bounce-in">
-        <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">Редактировать профиль</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <Card className="w-full max-w-md p-6 animate-bounce-in">
+        <h1 className="text-3xl font-bold text-center mb-6">Редактировать профиль</h1>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
@@ -97,7 +84,6 @@ export default function EditProfilePage() {
             onChange={handleChange}
             required
             placeholder="Введите имя"
-            className="mb-4"
           />
           <Input
             label="Email"
@@ -107,10 +93,17 @@ export default function EditProfilePage() {
             onChange={handleChange}
             required
             placeholder="Введите email"
-            className="mb-4"
+          />
+          <Input
+            label="Новый пароль (оставьте пустым, если не меняете)"
+            name="password"
+            type="password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="Введите новый пароль"
           />
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Загрузка...' : 'Сохранить'}
+            {loading ? 'Сохранение...' : 'Сохранить'}
           </Button>
         </form>
       </Card>

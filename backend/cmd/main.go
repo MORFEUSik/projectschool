@@ -20,6 +20,7 @@ import (
 	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // @title ProjectSchool API
@@ -32,8 +33,14 @@ import (
 // @name Authorization
 // @description Enter the JWT token with the "Bearer " prefix, e.g., "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
+type UpdateProfileRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=50"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"omitempty,min=6"`
+}
+
 func main() {
-	// Загружаем .env в самом начале для JWT_SECRET
+	// Загружаем .env
 	if err := godotenv.Load(); err != nil {
 		log.Printf("Ошибка загрузки .env: %v, использую переменные окружения", err)
 	}
@@ -47,12 +54,13 @@ func main() {
 	logger.Log.Info("Starting server...")
 
 	cfg := config.LoadConfig()
-	db.Init(cfg)
+	db.Init(cfg) // Просто вызываем инициализацию без присваивания
+
 	r := gin.Default()
 
-	// Настройка CORS для локальной разработки
+	// Настройка CORS
 	corsConfig := cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080", "http://localhost:3000"}, // Добавлен порт фронтенда
+		AllowOrigins:     []string{"http://localhost:8080", "http://localhost:3000"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -110,6 +118,49 @@ func main() {
 			}
 		}
 	}
+
+	// Эндпоинт для обновления профиля
+	r.PUT("/api/users/me", handler.AuthMiddleware(), func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(401, gin.H{"error": "Не авторизован"})
+			return
+		}
+
+		var req UpdateProfileRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Неверный формат данных"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil { // Используем db.DB
+			c.JSON(404, gin.H{"error": "Пользователь не найден"})
+			return
+		}
+
+		// Обновление данных
+		user.Username = req.Username
+		user.Email = req.Email
+		if req.Password != "" {
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "Ошибка обработки пароля"})
+				return
+			}
+			user.Password = string(hashedPassword)
+		}
+
+		if err := db.DB.Save(&user).Error; err != nil { // Используем db.DB
+			c.JSON(500, gin.H{"error": "Ошибка сохранения профиля"})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "Профиль обновлён",
+			"user":    user,
+		})
+	})
 
 	r.GET("/", func(c *gin.Context) {
 		c.String(200, "🎓 Backend для ProjectSchool работает!")

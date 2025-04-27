@@ -48,9 +48,15 @@ export default function GradeSubmissionPage() {
     fetchSubmissions();
   }, [router, assignmentId]);
 
-  const handleGradeChange = (submissionId: number, value: string) => {
-    setGrades({ ...grades, [submissionId]: parseInt(value) || 0 });
-  };
+  // src/app/courses/[id]/assignments/[assignmentId]/grade/page.tsx
+const handleGradeChange = (submissionId: number, value: string) => {
+	const grade = parseInt(value) || 0;
+	if (grade < 0 || grade > 100) {
+	  toast.error('Оценка должна быть от 0 до 100');
+	  return;
+	}
+	setGrades({ ...grades, [submissionId]: grade });
+ };
 
   const handleSubmitGrade = async (submissionId: number) => {
     setError('');

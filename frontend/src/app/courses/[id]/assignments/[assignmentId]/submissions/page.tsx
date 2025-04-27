@@ -28,11 +28,11 @@ export default function SubmissionPage() {
         return;
       }
 
-      const response = await fetchWithAuth(`/api/assignments/${assignmentId}/submissions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
+      const response = await fetchWithAuth(`/api/assignments/${assignmentId}/submit`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ content }),
+		 });
       if (!response.ok) {
         throw new Error('Ошибка отправки решения');
       }
