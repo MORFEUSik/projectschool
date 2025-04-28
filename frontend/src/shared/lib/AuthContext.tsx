@@ -18,23 +18,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token') || Cookies.get('token');
+    const token = Cookies.get('token') || localStorage.getItem('token');
+    console.log('AuthContext: Initial token check:', token); // Лог для отладки
     setIsAuthenticated(!!token);
   }, []);
 
   const login = (token: string) => {
+    console.log('AuthContext: Saving token:', token); // Лог для отладки
+    Cookies.set('token', token, { expires: 7, secure: true, sameSite: 'strict' });
     localStorage.setItem('token', token);
-    Cookies.set('token', token, { expires: 7 });
     setIsAuthenticated(true);
-    toast.success('Вход выполнен успешно!');
+    toast.success('Вход выполнен успешно!', { id: 'auth-login' });
     router.push('/profile');
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    console.log('AuthContext: Logging out'); // Лог для отладки
     Cookies.remove('token');
+    localStorage.removeItem('token');
     setIsAuthenticated(false);
-    toast.success('Вы вышли из аккаунта');
+    toast.success('Вы вышли из аккаунта', { id: 'auth-logout' });
     router.push('/login');
   };
 

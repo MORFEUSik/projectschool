@@ -1,54 +1,139 @@
-@import url("https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-gray-100 font-sans text-gray-800;
-  }
-  input {
-    @apply border-gray-300 bg-white text-gray-800 rounded-xl;
-  }
-  button {
-    @apply rounded-xl;
+.courses-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.courses-grid--sm-2 {
+  @media (min-width: 640px) {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@layer components {
-  .btn {
-    @apply px-6 py-3 rounded-uchi font-bold shadow-uchi transition-colors;
-  }
-  .btn-primary {
-    @apply bg-accent text-white hover:bg-secondary;
-  }
-  .btn-secondary {
-    @apply bg-primary text-white hover:bg-secondary;
-  }
-  .rounded-uchi {
-    @apply rounded-xl;
-  }
-  .shadow-uchi {
-    @apply shadow-md hover:shadow-lg;
+.courses-grid--lg-3 {
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@keyframes bounce-in {
-  0% {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+.course-card {
+  background-color: #f0f9ff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
 }
 
-.animate-bounce-in {
-  animation: bounce-in 0.5s ease-out;
+.course-card__image {
+  width: 100%;
+  height: auto;
+}
+
+.course-card__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.course-card__description {
+  color: #4b5563;
+}
+
+.course-card__teacher {
+  color: #4b5563;
+  margin-top: 0.25rem;
+}
+
+.course-card__button {
+  margin-top: 1rem;
+}
+
+.profile-card {
+  padding: 2rem;
+}
+
+.profile-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.profile-avatar {
+  width: 8rem;
+  height: 8rem;
+}
+
+.profile-avatar__image {
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.profile-info__name {
+  font-size: 1.875rem;
+  font-weight: 700;
+}
+
+.profile-info__email,
+.profile-info__role,
+.profile-info__points {
+  color: #4b5563;
+}
+
+.profile-info__edit,
+.profile-info__create-course {
+  margin-top: 1rem;
+}
+
+.profile-courses__title,
+.profile-submissions__title {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.submission-card {
+  background-color: #f9fafb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.submission-card__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.submission-card__grade,
+.submission-card__date {
+  color: #4b5563;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-label {
+  margin-bottom: 0.5rem;
+  color: #374151;
+}
+
+.input {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
 }

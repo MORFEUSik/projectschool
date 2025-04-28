@@ -1,19 +1,21 @@
 import { User } from '@/entities/user/model';
 
 export interface Enrollment {
-  user_id: number;
-  course_id: number;
-}
+	id: number;
+	user_id: number;
+	course_id: number;
+	created_at: string;
+ }
 
 export interface Course {
-  id: number;
-  title: string;
-  description: string;
-  teacher: User; // Используем User из user/model.ts
-  enrollments: Enrollment[];
-  created_at: string;
-  updated_at: string;
-}
+	id: number;
+	title: string;
+	description: string;
+	teacher: User | null; // Разрешить null для случаев, когда учитель не указан
+	enrollments: Enrollment[];
+	created_at: string;
+	updated_at: string;
+ }
 
 export interface Assignment {
   id: number;

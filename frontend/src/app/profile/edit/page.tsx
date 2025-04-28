@@ -1,47 +1,20 @@
-// src/app/profile/edit/page.tsx
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { Card } from '@/shared/ui/Card';
-import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
 import { fetchWithAuth } from '@/shared/api/fetch';
-import { useAuthCheck } from '@/shared/lib/useAuthCheck';
-import { User } from '@/entities/user/model';
+import { Card, Button, Input } from '@/shared/ui';
 
 export default function EditProfilePage() {
-  useAuthCheck();
-  const router = useRouter();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await fetchWithAuth('/api/users/me');
-        const user: User = await response.json();
-        setFormData({
-          username: user.username,
-          email: user.email,
-          password: '',
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Ошибка загрузки профиля';
-        setError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, []);
+  const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -52,29 +25,30 @@ export default function EditProfilePage() {
     setError('');
     setLoading(true);
     try {
-      await fetchWithAuth('/api/users/me', {
+      const response = await fetchWithAuth('/api/users/me', {
         method: 'PUT',
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          ...(formData.password && { password: formData.password }),
+        }),
       });
-      toast.success('Профиль обновлён!');
+      await response.json();
+      toast.success('Профиль обновлён!', { id: 'edit-profile' });
       router.push('/profile');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Ошибка обновления профиля';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast.error(errorMessage, { id: 'edit-profile' });
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Загрузка...</div>;
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <Card className="w-full max-w-md p-6 animate-bounce-in">
-        <h1 className="text-3xl font-bold text-center mb-6">Редактировать профиль</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500">
+      <Card className="w-full max-w-md p-6 shadow-lg profile-card">
+        <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">Редактировать профиль</h1>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
@@ -83,7 +57,7 @@ export default function EditProfilePage() {
             value={formData.username}
             onChange={handleChange}
             required
-            placeholder="Введите имя"
+            className="input"
           />
           <Input
             label="Email"
@@ -92,18 +66,18 @@ export default function EditProfilePage() {
             value={formData.email}
             onChange={handleChange}
             required
-            placeholder="Введите email"
+            className="input"
           />
           <Input
-            label="Новый пароль (оставьте пустым, если не меняете)"
+            label="Новый пароль (опционально)"
             name="password"
             type="password"
             value={formData.password}
             onChange={handleChange}
-            placeholder="Введите новый пароль"
+            className="input"
           />
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Сохранение...' : 'Сохранить'}
+          <Button type="submit" disabled={loading} className="btn btn-primary">
+            {loading ? 'Загрузка...' : 'Сохранить'}
           </Button>
         </form>
       </Card>

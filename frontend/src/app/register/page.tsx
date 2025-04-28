@@ -9,6 +9,7 @@ import { Input } from '@/shared/ui/Input';
 import { Role } from '@/entities/user/model';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/shared/lib/AuthContext';
+import Cookies from 'js-cookie';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -29,14 +30,19 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
+    console.log('Sending register request:', formData);
     try {
       const response = await register(formData);
-      authLogin(response.token); // Используем login из AuthContext
-    } catch (err: unknown) {
+      console.log('Register response:', response);
+      authLogin(response.token);
+      console.log('Token saved in Cookies:', Cookies.get('token'));
+      console.log('Token saved in localStorage:', localStorage.getItem('token'));
+      toast.success('Регистрация успешна!', { id: 'register-success' });
+    } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Ошибка регистрации';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast.error(errorMessage, { id: 'register-error' });
+      console.error('Register error:', err);
     } finally {
       setLoading(false);
     }

@@ -1,20 +1,18 @@
-// frontend/src/middleware.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/shared/lib/logger';
 
 export function middleware(request: NextRequest) {
-  const token =
-    request.cookies.get('token')?.value ||
-    request.headers.get('Authorization')?.replace('Bearer ', '');
+  const token = request.cookies.get('token')?.value;
+  log('Middleware: Token found:', !!token);
 
-  const protectedPaths = ['/profile', '/courses', '/admin'];
-  const isProtectedPath = protectedPaths.some(path =>
-    request.nextUrl.pathname.startsWith(path)
-  );
-
-  console.log('Middleware: Token found:', !!token); // Логируем токен
-
-  if (isProtectedPath && !token) {
-    console.log('Middleware: Redirecting to /login');
+  // Разрешаем доступ к /, /login и /register без токена
+  if (
+    !token &&
+    !request.nextUrl.pathname.startsWith('/login') &&
+    !request.nextUrl.pathname.startsWith('/register') &&
+    request.nextUrl.pathname !== '/'
+  ) {
+    log('Middleware: Redirecting to /login');
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -22,5 +20,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/profile/:path*', '/courses/:path*', '/admin/:path*'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
