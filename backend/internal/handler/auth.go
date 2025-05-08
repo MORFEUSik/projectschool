@@ -23,22 +23,34 @@ type AuthService interface {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param user body model.User true "Данные пользователя"
+// @Param user body object true "Данные пользователя" example={"username":"testuser","email":"test@example.com","password":"password123","role":"student","class_number":5}
 // @Success 200 {object} map[string]interface{} "message, token"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
 // @Router /register [post]
 func Register(service AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var user model.User
-		if err := c.ShouldBindJSON(&user); err != nil {
+		var input struct {
+			model.User
+			ClassNumber uint `json:"class_number"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
 
-		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, password_length=%d",
-			user.Username, user.Email, user.Role, len(user.Password))
+		user := model.User{
+			Username:    input.Username,
+			Email:       input.Email,
+			Password:    input.Password,
+			Role:        input.Role,
+			ClassNumber: input.ClassNumber,
+			Points:      0, // Устанавливаем по умолчанию, как в модели
+		}
+
+		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, class_number=%d",
+			user.Username, user.Email, user.Role, user.ClassNumber)
 
 		// Валидация структуры User
 		validate := validator.New()
@@ -49,6 +61,13 @@ func Register(service AuthService) gin.HandlerFunc {
 				errors = append(errors, err.Error())
 			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Валидация не пройдена: " + strings.Join(errors, ", ")})
+			return
+		}
+
+		// Дополнительная валидация через метод Validate
+		if err := user.Validate(); err != nil {
+			logger.Log.Errorf("User validation failed: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 

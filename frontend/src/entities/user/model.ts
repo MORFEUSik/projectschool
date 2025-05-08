@@ -1,15 +1,10 @@
-export enum Role {
-	Student = 'student',
-	Teacher = 'teacher',
-	Admin = 'admin',
- }
- 
- export interface User {
+// src/entities/user/model.ts
+export interface User {
 	id: number;
 	username: string;
 	email: string;
-	password?: string;
-	role: Role;
+	role: 'student' | 'teacher' | 'admin';
+	class_number?: number;
 	points: number;
 	created_at: string;
 	updated_at: string;

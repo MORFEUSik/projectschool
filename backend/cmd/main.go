@@ -54,7 +54,7 @@ func main() {
 	logger.Log.Info("Starting server...")
 
 	cfg := config.LoadConfig()
-	db.Init(cfg) // Просто вызываем инициализацию без присваивания
+	db.Init(cfg)
 
 	r := gin.Default()
 
@@ -82,16 +82,16 @@ func main() {
 	// Группа API
 	api := r.Group("/api")
 	{
-		// Регистрация и вход
+		// Публичные маршруты
 		api.POST("/register", middleware.RateLimit(), handler.Register(authService))
 		api.POST("/login", middleware.RateLimit(), handler.Login(authService))
+		api.GET("/leaderboard", handler.GetLeaderboard(userService))
 
 		// Защищённые маршруты
 		protected := api.Group("", handler.AuthMiddleware())
 		{
 			protected.GET("/users/me", handler.GetProfile(userService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
-			protected.GET("/leaderboard", handler.GetLeaderboard(userService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 
 			courses := protected.Group("/courses")
@@ -134,7 +134,7 @@ func main() {
 		}
 
 		var user model.User
-		if err := db.DB.First(&user, userID).Error; err != nil { // Используем db.DB
+		if err := db.DB.First(&user, userID).Error; err != nil {
 			c.JSON(404, gin.H{"error": "Пользователь не найден"})
 			return
 		}
@@ -146,12 +146,11 @@ func main() {
 			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 			if err != nil {
 				c.JSON(500, gin.H{"error": "Ошибка обработки пароля"})
-				return
 			}
 			user.Password = string(hashedPassword)
 		}
 
-		if err := db.DB.Save(&user).Error; err != nil { // Используем db.DB
+		if err := db.DB.Save(&user).Error; err != nil {
 			c.JSON(500, gin.H{"error": "Ошибка сохранения профиля"})
 			return
 		}

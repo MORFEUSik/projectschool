@@ -1,139 +1,26 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-.courses-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
-.courses-grid--sm-2 {
-  @media (min-width: 640px) {
-    grid-template-columns: repeat(2, 1fr);
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
   }
 }
 
-.courses-grid--lg-3 {
-  @media (min-width: 1024px) {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.course-card {
-  background-color: #f0f9ff;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-}
-
-.course-card__image {
-  width: 100%;
-  height: auto;
-}
-
-.course-card__title {
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.course-card__description {
-  color: #4b5563;
-}
-
-.course-card__teacher {
-  color: #4b5563;
-  margin-top: 0.25rem;
-}
-
-.course-card__button {
-  margin-top: 1rem;
-}
-
-.profile-card {
-  padding: 2rem;
-}
-
-.profile-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.profile-avatar {
-  width: 8rem;
-  height: 8rem;
-}
-
-.profile-avatar__image {
-  border-radius: 9999px;
-  object-fit: cover;
-}
-
-.profile-info__name {
-  font-size: 1.875rem;
-  font-weight: 700;
-}
-
-.profile-info__email,
-.profile-info__role,
-.profile-info__points {
-  color: #4b5563;
-}
-
-.profile-info__edit,
-.profile-info__create-course {
-  margin-top: 1rem;
-}
-
-.profile-courses__title,
-.profile-submissions__title {
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.submission-card {
-  background-color: #f9fafb;
-  border-radius: 0.75rem;
-  padding: 1rem;
-}
-
-.submission-card__title {
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-
-.submission-card__grade,
-.submission-card__date {
-  color: #4b5563;
-}
-
-.btn {
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-}
-
-.btn-primary {
-  background-color: #3b82f6;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: #6b7280;
-  color: white;
-}
-
-.input-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.input-label {
-  margin-bottom: 0.5rem;
-  color: #374151;
-}
-
-.input {
-  padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
 }

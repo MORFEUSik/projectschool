@@ -79,6 +79,20 @@ func Init(cfg *config.Config) {
 		}
 	}
 
+	// Проверка и добавление столбца class_number в таблицу users
+	log.Println("Checking class_number column in users")
+	var classNumberColumnExists int
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'class_number'").Scan(&classNumberColumnExists).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось проверить столбец class_number: %v", err)
+	} else if classNumberColumnExists == 0 {
+		log.Println("Adding class_number column to users")
+		err = db.Exec("ALTER TABLE users ADD COLUMN class_number INTEGER DEFAULT 0").Error
+		if err != nil {
+			log.Printf("Предупреждение: не удалось добавить class_number: %v", err)
+		}
+	}
+
 	// Проверка уникальных индексов
 	log.Println("Ensuring unique constraints")
 	err = db.Exec(`
