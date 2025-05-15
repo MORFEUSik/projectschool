@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/error"
+	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
@@ -28,7 +28,7 @@ func GetProfile(userService service.UserService) gin.HandlerFunc {
 		userID, exists := c.Get("userID")
 		if !exists {
 			logger.Log.Error("UserID not found in context")
-			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
 			return
 		}
 
@@ -36,9 +36,9 @@ func GetProfile(userService service.UserService) gin.HandlerFunc {
 		if err != nil {
 			logger.Log.Errorf("Failed to get profile for user %d: %v", userID, err)
 			if err.Error() == "пользователь не найден" {
-				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
 			} else {
-				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
 			}
 			return
 		}
@@ -64,14 +64,14 @@ func GetUserSubmissions(submissionService service.SubmissionService) gin.Handler
 		userID, exists := c.Get("userID")
 		if !exists {
 			logger.Log.Error("UserID not found in context")
-			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
 			return
 		}
 
 		submissions, err := submissionService.GetByUserID(userID.(uint))
 		if err != nil {
 			logger.Log.Errorf("Failed to get submissions for user %d: %v", userID, err)
-			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений"})
 			return
 		}
 
@@ -90,25 +90,25 @@ func GetUserSubmissions(submissionService service.SubmissionService) gin.Handler
 // @Param id path int true "ID пользователя"
 // @Param role body map[string]string true "Новая роль" example={"role":"teacher"}
 // @Success 200 {object} map[string]string "message"
-// @Failure 400 {object} error.APIError
-// @Failure 401 {object} error.APIError
-// @Failure 403 {object} error.APIError
-// @Failure 404 {object} error.APIError
-// @Failure 500 {object} error.APIError
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 404 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
 // @Router /users/{id}/role [put]
 func UpdateRole(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			logger.Log.Errorf("Invalid user ID: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID пользователя"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID пользователя"})
 			return
 		}
 
 		userID, exists := c.Get("userID")
 		if !exists {
 			logger.Log.Error("UserID not found in context")
-			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
 			return
 		}
 
@@ -117,7 +117,7 @@ func UpdateRole(userService service.UserService) gin.HandlerFunc {
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
 			return
 		}
 
@@ -125,16 +125,59 @@ func UpdateRole(userService service.UserService) gin.HandlerFunc {
 		if err := userService.UpdateRole(uint(id), userID.(uint), input.Role); err != nil {
 			logger.Log.Errorf("Failed to update role for user %d: %v", id, err)
 			if err.Error() == "пользователь не найден" {
-				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
 			} else if err.Error() == "недостаточно прав" || err.Error() == "недопустимая роль" {
-				error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: err.Error()})
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
 			} else {
-				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка обновления роли"})
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка обновления роли"})
 			}
 			return
 		}
 
 		logger.Log.Infof("Role for user %d updated to %s by admin %d", id, input.Role, userID)
 		c.JSON(http.StatusOK, gin.H{"message": "Роль пользователя обновлена"})
+	}
+}
+
+// UpdateProfile обновляет профиль пользователя
+func UpdateProfile(userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var input struct {
+			Username string `json:"username" binding:"required,min=3,max=50"`
+			Email    string `json:"email" binding:"required,email"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			return
+		}
+
+		if err := userService.UpdateProfile(userID.(uint), input.Username, input.Email); err != nil {
+			logger.Log.Errorf("Failed to update profile: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Профиль обновлён"})
+	}
+}
+
+// ListUsers возвращает список всех пользователей
+func ListUsers(userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		users, err := userService.ListAll()
+		if err != nil {
+			logger.Log.Errorf("Failed to list users: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения пользователей"})
+			return
+		}
+		c.JSON(http.StatusOK, users)
 	}
 }

@@ -20,7 +20,6 @@ import (
 	"github.com/joho/godotenv"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // @title ProjectSchool API
@@ -32,12 +31,6 @@ import (
 // @in header
 // @name Authorization
 // @description Enter the JWT token with the "Bearer " prefix, e.g., "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-type UpdateProfileRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"omitempty,min=6"`
-}
 
 func main() {
 	// Загружаем .env
@@ -56,6 +49,17 @@ func main() {
 	cfg := config.LoadConfig()
 	db.Init(cfg)
 
+	// Миграция моделей
+	db.DB.AutoMigrate(
+		&model.User{},
+		&model.Course{},
+		&model.Assignment{},
+		&model.Submission{},
+		&model.Achievement{},
+		&model.Notification{},
+		&model.Enrollment{},
+	)
+
 	r := gin.Default()
 
 	// Настройка CORS
@@ -72,12 +76,14 @@ func main() {
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	achievementRepo := repository.NewAchievementRepository()
+	notificationRepo := repository.NewNotificationRepository(db.DB)
 
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo)
 	assignmentService := service.NewAssignmentService(assignmentRepo)
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, achievementRepo)
 	userService := service.NewUserService(userRepo)
+	notificationService := service.NewNotificationService(notificationRepo)
 
 	// Группа API
 	api := r.Group("/api")
@@ -90,7 +96,11 @@ func main() {
 		// Защищённые маршруты
 		protected := api.Group("", handler.AuthMiddleware())
 		{
+			protected.GET("/users", handler.ListUsers(userService))
 			protected.GET("/users/me", handler.GetProfile(userService))
+			protected.PUT("/users/me", handler.UpdateProfile(userService))
+			protected.GET("/assignments/:id", handler.GetAssignment(assignmentService))
+			protected.GET("/notifications", handler.GetNotifications(notificationService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 
@@ -118,48 +128,6 @@ func main() {
 			}
 		}
 	}
-
-	// Эндпоинт для обновления профиля
-	r.PUT("/api/users/me", handler.AuthMiddleware(), func(c *gin.Context) {
-		userID, exists := c.Get("user_id")
-		if !exists {
-			c.JSON(401, gin.H{"error": "Не авторизован"})
-			return
-		}
-
-		var req UpdateProfileRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": "Неверный формат данных"})
-			return
-		}
-
-		var user model.User
-		if err := db.DB.First(&user, userID).Error; err != nil {
-			c.JSON(404, gin.H{"error": "Пользователь не найден"})
-			return
-		}
-
-		// Обновление данных
-		user.Username = req.Username
-		user.Email = req.Email
-		if req.Password != "" {
-			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "Ошибка обработки пароля"})
-			}
-			user.Password = string(hashedPassword)
-		}
-
-		if err := db.DB.Save(&user).Error; err != nil {
-			c.JSON(500, gin.H{"error": "Ошибка сохранения профиля"})
-			return
-		}
-
-		c.JSON(200, gin.H{
-			"message": "Профиль обновлён",
-			"user":    user,
-		})
-	})
 
 	r.GET("/", func(c *gin.Context) {
 		c.String(200, "🎓 Backend для ProjectSchool работает!")

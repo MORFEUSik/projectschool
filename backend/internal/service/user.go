@@ -17,6 +17,8 @@ type UserService interface {
 	GetProfile(userID uint) (*model.User, error)
 	GetLeaderboard(courseID uint) ([]model.User, error)
 	UpdateRole(userID, adminID uint, role model.Role) error
+	UpdateProfile(userID uint, username, email string) error
+	ListAll() ([]model.User, error)
 }
 
 type userService struct {
@@ -130,7 +132,7 @@ func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 	logger.Log.Infof("Admin %d updating role for user %d to %s", adminID, userID, role)
 
 	// Проверка: существует ли пользователь
-	_, err := s.repo.FindByID(userID) // Заменяем user на _
+	_, err := s.repo.FindByID(userID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -164,4 +166,23 @@ func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 
 	logger.Log.Infof("Role for user %d updated to %s", userID, role)
 	return nil
+}
+
+func (s *userService) UpdateProfile(userID uint, username, email string) error {
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	user.Username = username
+	user.Email = email
+	if err := user.Validate(); err != nil {
+		return err
+	}
+	return s.db.Save(user).Error
+}
+
+func (s *userService) ListAll() ([]model.User, error) {
+	var users []model.User
+	err := s.db.Find(&users).Error
+	return users, err
 }

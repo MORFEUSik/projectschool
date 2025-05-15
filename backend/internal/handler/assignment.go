@@ -1,17 +1,20 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
+	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"gorm.io/gorm"
 )
 
 // ListAssignments возвращает список заданий для курса
@@ -59,7 +62,6 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Failure 403 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
 // @Router /assignments [post]
-// CreateAssignment создает новое задание
 func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.ContentType() != "application/json" {
@@ -156,5 +158,28 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 
 		logger.Log.Infof("Assignment %s (ID: %d) created by user %d", assignment.Title, assignment.ID, userID)
 		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment": assignment})
+	}
+}
+
+// GetAssignment возвращает задание по ID
+func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID"})
+			return
+		}
+		assignment, err := assignmentService.Get(uint(id))
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Задание не найдено"})
+			} else {
+				logger.Log.Errorf("Failed to get assignment %d: %v", id, err)
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
+			}
+			return
+		}
+		c.JSON(http.StatusOK, assignment)
 	}
 }

@@ -2,10 +2,12 @@ package service
 
 import (
 	"errors"
+	"time"
+
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"github.com/MORFEUSik/projectschool/backend/internal/repository" // Проверяем этот импорт
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
@@ -112,8 +114,13 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	// Создание уведомления
-	notificationService := NewNotificationService(repository.NewNotificationRepository())
-	if err := notificationService.Create(userID, "Вы записались на курс: "+course.Title); err != nil {
+	notificationService := NewNotificationService(repository.NewNotificationRepository(s.db))
+	notification := &model.Notification{
+		UserID:    userID,
+		Message:   "Вы записались на курс: " + course.Title,
+		CreatedAt: time.Now(),
+	}
+	if err := notificationService.Create(notification); err != nil {
 		logger.Log.Errorf("Failed to create notification for user %d: %v", userID, err)
 		// Не прерываем выполнение, так как уведомление не критично
 	}

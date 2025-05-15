@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"gorm.io/gorm"
 )
@@ -15,8 +14,8 @@ type notificationRepository struct {
 	db *gorm.DB
 }
 
-func NewNotificationRepository() NotificationRepository {
-	return &notificationRepository{db: db.DB} // Убедитесь, что имя структуры совпадает
+func NewNotificationRepository(db *gorm.DB) NotificationRepository {
+	return &notificationRepository{db: db}
 }
 
 func (r *notificationRepository) Create(notification *model.Notification) error {
@@ -25,6 +24,6 @@ func (r *notificationRepository) Create(notification *model.Notification) error 
 
 func (r *notificationRepository) FindByUserID(userID uint) ([]model.Notification, error) {
 	var notifications []model.Notification
-	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&notifications).Error
+	err := r.db.Where("user_id = ?", userID).Find(&notifications).Error
 	return notifications, err
 }
