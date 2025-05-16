@@ -37,8 +37,23 @@ export default function LeaderboardPage() {
   };
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [fetchLeaderboard]);
+	const load = async () => {
+	  setIsLoading(true);
+	  setError('');
+	  try {
+		 const response = await api.get<LeaderboardUser[]>(`/leaderboard${courseId ? `?course_id=${courseId}` : ''}`);
+		 setUsers(response.data);
+	  } catch (err: unknown) {
+		 const axiosError = err as AxiosError<ErrorResponse>;
+		 setError(axiosError.response?.data?.error || 'Не удалось загрузить таблицу лидеров');
+	  } finally {
+		 setIsLoading(false);
+	  }
+	};
+ 
+	load();
+ }, [courseId]); // ✅ или [] если грузим один раз
+ 
 
   return (
     <div className="max-w-2xl mx-auto mt-8">

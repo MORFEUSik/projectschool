@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
@@ -7,25 +7,31 @@ import { Input } from '@/shared/ui/Input';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 
-
-
 interface ErrorResponse {
   error?: string;
 }
 
 export default function ProfilePage() {
-  const { user, isLoading, error } = useUser();
+  const { user, isLoading, error, refetch } = useUser();
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [editError, setEditError] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      setUsername(user.username);
+      setEmail(user.email);
+    }
+  }, [user]);
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEditError('');
     try {
       await api.put('/users/me', { username, email });
-      window.location.reload();
+      await refetch(); // ✅ без reload
+      setIsEditing(false);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       setEditError(axiosError.response?.data?.error || 'Ошибка обновления профиля');
@@ -51,7 +57,6 @@ export default function ProfilePage() {
                 id="username"
                 value={username}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
-                placeholder={user.username}
                 required
               />
             </div>
@@ -64,7 +69,6 @@ export default function ProfilePage() {
                 type="email"
                 value={email}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                placeholder={user.email}
                 required
               />
             </div>

@@ -1,6 +1,5 @@
-// src/entities/user/hook.ts
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/shared/api';
 import { User } from '@/entities/user/model';
 
@@ -9,19 +8,22 @@ export function useUser() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchUser() {
-      try {
-        const response = await api.get('/users/me');
-        setUser(response.data);
-      } catch {
-        setError('Не удалось загрузить профиль');
-      } finally {
-        setIsLoading(false);
-      }
+  const fetchUser = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/users/me');
+      setUser(response.data);
+      setError(null);
+    } catch {
+      setError('Не удалось загрузить профиль');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchUser();
   }, []);
 
-  return { user, isLoading, error };
+  return { user, isLoading, error, refetch: fetchUser };
 }

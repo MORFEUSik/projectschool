@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useCourses } from '@/entities/course/hook';
+import { useCourses } from '@/shared/hooks/useCourses';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
@@ -22,7 +22,7 @@ interface ErrorResponse {
 }
 
 export default function CoursesPage() {
-  const { courses, isLoading, error } = useCourses();
+  const { courses, loading: isLoading, refetch, error } = useCourses();
   const { user } = useUser();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -34,7 +34,10 @@ export default function CoursesPage() {
     setFormError('');
     try {
       await api.post('/courses', { title, description });
-      window.location.reload();
+      await refetch(); // ✅ без reload
+      setShowCreateForm(false);
+      setTitle('');
+      setDescription('');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       setFormError(axiosError.response?.data?.error || 'Ошибка создания курса');
@@ -44,7 +47,7 @@ export default function CoursesPage() {
   const handleUnenroll = async (courseId: number) => {
     try {
       await api.delete(`/courses/${courseId}/enroll`);
-      window.location.reload();
+      await refetch(); // ✅ без reload
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       alert(axiosError.response?.data?.error || 'Ошибка отмены записи');
