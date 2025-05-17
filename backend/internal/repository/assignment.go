@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"gorm.io/gorm"
@@ -11,6 +12,7 @@ type AssignmentRepository interface {
 	FindByCourseID(courseID uint) ([]model.Assignment, error)
 	FindByID(id uint) (*model.Assignment, error)
 	FindByUserID(userID uint) ([]model.Assignment, error)
+	Delete(id uint) error // Новый метод
 }
 
 type assignmentRepository struct {
@@ -43,4 +45,15 @@ func (r *assignmentRepository) FindByUserID(userID uint) ([]model.Assignment, er
 		Where("enrollments.user_id = ?", userID).
 		Find(&assignments).Error
 	return assignments, err
+}
+
+func (r *assignmentRepository) Delete(id uint) error {
+	result := r.db.Delete(&model.Assignment{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
 }

@@ -3,16 +3,11 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
 import Link from 'next/link';
+import { useUser } from '@/entities/user/hook';
+import { useAssignments } from '@/shared/hooks/useAssignments';
 import { AxiosError } from 'axios';
-
-interface Assignment {
-  id: number;
-  title: string;
-  description: string;
-  max_score: number;
-  due_date: string;
-}
 
 interface Course {
   id: number;
@@ -27,31 +22,41 @@ interface ErrorResponse {
 
 export default function CoursePage() {
   const { id } = useParams();
+  const { user } = useUser();
+
+  // Приводим id к string, так как в маршруте [id] это строка
+  const courseId = typeof id === 'string' ? id : '';
+  
+  const { assignments, loading: assignmentsLoading, error: assignmentsError } = useAssignments(courseId);
   const [course, setCourse] = useState<Course | null>(null);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [courseLoading, setCourseLoading] = useState(true);
+  const [courseError, setCourseError] = useState('');
 
   useEffect(() => {
     async function fetchCourse() {
-      setIsLoading(true);
+      setCourseLoading(true);
       try {
-        const courseResponse = await api.get<Course>(`/courses/${id}`);
-        const assignmentsResponse = await api.get<Assignment[]>(`/courses/${id}/assignments`);
+        const courseResponse = await api.get<Course>(`/courses/${courseId}`);
         setCourse(courseResponse.data);
-        setAssignments(assignmentsResponse.data);
       } catch (err: unknown) {
         const axiosError = err as AxiosError<ErrorResponse>;
-        setError(axiosError.response?.data?.error || 'Ошибка загрузки курса');
+        setCourseError(axiosError.response?.data?.error || 'Ошибка загрузки курса');
       } finally {
-        setIsLoading(false);
+        setCourseLoading(false);
       }
     }
-    fetchCourse();
-  }, [id]);
+    if (courseId) {
+      fetchCourse();
+    } else {
+      setCourseLoading(false);
+      setCourseError('Курс не найден');
+    }
+  }, [courseId]);
 
-  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (error) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
+  if (!courseId) return <div className="text-center mt-8">Курс не найден</div>;
+  if (courseLoading || assignmentsLoading) return <div className="text-center mt-8">Загрузка...</div>;
+  if (courseError) return <div className="text-center mt-8 text-red-500">Ошибка: {courseError}</div>;
+  if (assignmentsError) return <div className="text-center mt-8 text-red-500">Ошибка: {assignmentsError}</div>;
   if (!course) return <div className="text-center mt-8">Курс не найден</div>;
 
   return (
@@ -63,13 +68,23 @@ export default function CoursePage() {
           <strong>Преподаватель:</strong> {course.teacher.username}
         </p>
       </Card>
-      <h2 className="text-2xl font-semibold mb-4">Задания</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-semibold">Задания</h2>
+        {(user?.role === 'teacher' || user?.role === 'admin') && (
+          <Link href={`/courses/${courseId}/assignments/new`}>
+            <Button>Создать задание</Button>
+          </Link>
+        )}
+      </div>
       <div className="space-y-4">
         {assignments.map((assignment) => (
           <Card key={assignment.id} className="p-6">
-            <Link href={`/courses/${id}/assignments/${assignment.id}`}>
-              <h3 className="text-xl font-semibold hover:underline">{assignment.title}</h3>
-            </Link>
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-semibold">{assignment.title}</h3>
+              <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+                <Button variant="outline">Открыть</Button>
+              </Link>
+            </div>
             <p className="mt-2">{assignment.description}</p>
             <p className="mt-2">
               <strong>Максимальный балл:</strong> {assignment.max_score}

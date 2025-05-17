@@ -213,3 +213,81 @@ func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc 
 		c.JSON(http.StatusOK, assignment)
 	}
 }
+
+// DeleteAssignment удаляет задание
+// @Summary Удалить задание
+// @Description Удаляет задание по его ID. Доступно только для учителей (создателей задания) и админов.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID задания"
+// @Success 200 {object} map[string]string "message: Задание удалено"
+// @Failure 400 {object} map[string]string "error: Неверный ID"
+// @Failure 401 {object} map[string]string "error: Не авторизован"
+// @Failure 403 {object} map[string]string "error: Доступ запрещён"
+// @Failure 404 {object} map[string]string "error: Задание не найдено"
+// @Failure 500 {object} map[string]string "error: Внутренняя ошибка сервера"
+// @Router /assignments/{id} [delete]
+func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Получаем ID задания
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID"})
+			return
+		}
+
+		// Получаем пользователя из контекста
+		userRaw, exists := c.Get("user")
+		if !exists {
+			logger.Log.Error("User not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Не авторизован"})
+			return
+		}
+		user, ok := userRaw.(model.User)
+		if !ok {
+			logger.Log.Error("Invalid user type in context")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+			return
+		}
+
+		// Проверяем права
+		if user.Role != model.Teacher && user.Role != model.Admin {
+			logger.Log.Errorf("User %d (%s) attempted to delete assignment %d without permission", user.ID, user.Role, id)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Доступ запрещён"})
+			return
+		}
+
+		// Проверяем существование задания
+		assignment, err := assignmentService.Get(uint(id))
+		if err != nil {
+			logger.Log.Errorf("Failed to get assignment %d: %v", id, err)
+			if err.Error() == "record not found" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Задание не найдено"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+			}
+			return
+		}
+
+		// Если учитель, проверяем, что он создатель задания
+		if user.Role == model.Teacher && assignment.TeacherID != user.ID {
+			logger.Log.Errorf("Teacher %d attempted to delete assignment %d not owned by them", user.ID, id)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Доступ запрещён"})
+			return
+		}
+
+		// Удаляем задание
+		if err := assignmentService.Delete(uint(id)); err != nil {
+			logger.Log.Errorf("Failed to delete assignment %d: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось удалить задание"})
+			return
+		}
+
+		logger.Log.Infof("Assignment %d deleted by user %d (%s)", id, user.ID, user.Role)
+		c.JSON(http.StatusOK, gin.H{"message": "Задание удалено"})
+	}
+}

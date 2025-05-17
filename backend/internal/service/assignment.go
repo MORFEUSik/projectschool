@@ -10,6 +10,7 @@ type AssignmentService interface {
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
+	Delete(id uint) error // Новый метод
 }
 
 type assignmentService struct {
@@ -34,4 +35,8 @@ func (s *assignmentService) ListByUser(userID uint) ([]model.Assignment, error) 
 
 func (s *assignmentService) Get(id uint) (*model.Assignment, error) {
 	return s.repo.FindByID(id)
+}
+
+func (s *assignmentService) Delete(id uint) error {
+	return s.repo.Delete(id)
 }

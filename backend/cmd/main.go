@@ -22,8 +22,6 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// ... (Swagger-аннотации остаются без изменений)
-
 func main() {
 	// Загружаем .env
 	if err := godotenv.Load(); err != nil {
@@ -116,6 +114,7 @@ func main() {
 			{
 				assignments.POST("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.CreateAssignment(assignmentService))
 				assignments.POST("/:id/submit", handler.RoleMiddleware(model.Student), handler.SubmitAssignment(submissionService))
+				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
 			}
 
 			submissions := protected.Group("/submissions")
