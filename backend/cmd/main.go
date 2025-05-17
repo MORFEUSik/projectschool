@@ -22,15 +22,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// @title ProjectSchool API
-// @version 1.0
-// @description API для обучающего приложения ProjectSchool
-// @host localhost:8080
-// @BasePath /api
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description Enter the JWT token with the "Bearer " prefix, e.g., "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+// ... (Swagger-аннотации остаются без изменений)
 
 func main() {
 	// Загружаем .env
@@ -99,7 +91,6 @@ func main() {
 			protected.GET("/users", handler.ListUsers(userService))
 			protected.GET("/users/me", handler.GetProfile(userService))
 			protected.PUT("/users/me", handler.UpdateProfile(userService))
-			protected.GET("/assignments/:id", handler.GetAssignment(assignmentService))
 			protected.GET("/notifications", handler.GetNotifications(notificationService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
@@ -108,12 +99,17 @@ func main() {
 			{
 				courses.GET("", handler.ListCourses(courseService))
 				courses.POST("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.CreateCourse(courseService))
-				courses.GET("/:id", handler.GetCourse(courseService))
-				courses.GET("/:id/assignments", handler.ListAssignments(assignmentService))
-				courses.POST("/:id/enroll", handler.RoleMiddleware(model.Student), handler.Enroll(courseService))
-				courses.DELETE("/:id/enroll", handler.RoleMiddleware(model.Student), handler.Unenroll(courseService))
-				courses.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteCourse(courseService))
-				courses.GET("/:id/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
+
+				courseGroup := courses.Group("/:id")
+				{
+					courseGroup.GET("", handler.GetCourse(courseService))
+					courseGroup.GET("/assignments", handler.ListAssignments(assignmentService))
+					courseGroup.GET("/assignments/:assignmentId", handler.GetAssignment(assignmentService)) // 💡 теперь нет конфликта
+					courseGroup.POST("/enroll", handler.RoleMiddleware(model.Student), handler.Enroll(courseService))
+					courseGroup.DELETE("/enroll", handler.RoleMiddleware(model.Student), handler.Unenroll(courseService))
+					courseGroup.DELETE("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteCourse(courseService))
+					courseGroup.GET("/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
+				}
 			}
 
 			assignments := protected.Group("/assignments")

@@ -67,7 +67,7 @@ export default function CoursePage() {
       <div className="space-y-4">
         {assignments.map((assignment) => (
           <Card key={assignment.id} className="p-6">
-            <Link href={`/assignments/${assignment.id}`}>
+            <Link href={`/courses/${id}/assignments/${assignment.id}`}>
               <h3 className="text-xl font-semibold hover:underline">{assignment.title}</h3>
             </Link>
             <p className="mt-2">{assignment.description}</p>

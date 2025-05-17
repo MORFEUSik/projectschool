@@ -161,25 +161,55 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 	}
 }
 
-// GetAssignment возвращает задание по ID
+// GetAssignment возвращает задание по ID в контексте курса
+// @Summary Получить задание в курсе
+// @Description Возвращает задание по ID, проверяя его принадлежность к курсу. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param courseId path int true "ID курса"
+// @Param assignmentId path int true "ID задания"
+// @Success 200 {object} model.Assignment
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 404 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /courses/{courseId}/assignments/{assignmentId} [get]
 func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, err := strconv.Atoi(c.Param("id"))
+		courseID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
-			logger.Log.Errorf("Invalid assignment ID: %v", err)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID"})
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
 			return
 		}
-		assignment, err := assignmentService.Get(uint(id))
+
+		assignmentID, err := strconv.Atoi(c.Param("assignmentId"))
+		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID задания"})
+			return
+		}
+
+		assignment, err := assignmentService.Get(uint(assignmentID))
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Задание не найдено"})
 			} else {
-				logger.Log.Errorf("Failed to get assignment %d: %v", id, err)
+				logger.Log.Errorf("Failed to get assignment %d: %v", assignmentID, err)
 				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
 			}
 			return
 		}
+
+		// Проверка, что задание принадлежит курсу
+		if assignment.CourseID != uint(courseID) {
+			logger.Log.Errorf("Assignment %d does not belong to course %d", assignmentID, courseID)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Задание не принадлежит этому курсу"})
+			return
+		}
+
 		c.JSON(http.StatusOK, assignment)
 	}
 }
