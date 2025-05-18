@@ -15,6 +15,7 @@ type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
 	GetByUserID(userID uint) ([]model.Submission, error)
+	GetByAssignment(assignmentID uint) ([]model.Submission, error) // Новый метод
 }
 
 type submissionService struct {
@@ -194,5 +195,30 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 	}
 
 	logger.Log.Infof("Fetched %d submissions for user %d", len(submissions), userID)
+	return submissions, nil
+}
+
+func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submission, error) {
+	logger.Log.Infof("Fetching submissions for assignment %d", assignmentID)
+
+	// Проверка: существует ли задание
+	_, err := s.assignmentRepo.FindByID(assignmentID)
+	if err != nil {
+		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("задание не найдено")
+		}
+		return nil, err
+	}
+
+	// Получение решений с предзагрузкой пользователя для получения username
+	var submissions []model.Submission
+	err = s.db.Preload("User").Where("assignment_id = ?", assignmentID).Find(&submissions).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for assignment %d: %v", assignmentID, err)
+		return nil, err
+	}
+
+	logger.Log.Infof("Fetched %d submissions for assignment %d", len(submissions), assignmentID)
 	return submissions, nil
 }

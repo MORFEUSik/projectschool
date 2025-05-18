@@ -17,11 +17,10 @@ func AuthMiddleware() gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			logger.Log.Error("Authorization header is missing")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Требуется токен авторизации"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Не авторизован"})
 			c.Abort()
 			return
 		}
-
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			logger.Log.Error("Invalid Authorization header format")
@@ -29,24 +28,24 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		userID, err := jwt.ValidateToken(parts[1])
+		tokenString := parts[1]
+		userID, err := jwt.ValidateToken(tokenString)
 		if err != nil {
-			logger.Log.Errorf("Invalid token: %v", err)
+			logger.Log.Errorf("Failed to validate token: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен"})
 			c.Abort()
 			return
 		}
-
 		var user model.User
 		if err := db.DB.First(&user, userID).Error; err != nil {
-			logger.Log.Errorf("User %d not found: %v", userID, err)
-			c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
+			logger.Log.Errorf("User %d not found in database: %v", userID, err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не найден"})
 			c.Abort()
 			return
 		}
-
-		c.Set("userID", userID)
+		logger.Log.Infof("Authenticated user %d (%s)", user.ID, user.Role)
+		c.Set("user", user)
+		c.Set("userID", user.ID)
 		c.Next()
 	}
 }

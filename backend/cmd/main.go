@@ -119,6 +119,7 @@ func main() {
 
 			submissions := protected.Group("/submissions")
 			{
+				submissions.GET("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.ListSubmissions(submissionService))
 				submissions.PUT("/:id/grade", handler.RoleMiddleware(model.Teacher, model.Admin), handler.SetGrade(submissionService))
 			}
 		}
