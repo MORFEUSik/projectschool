@@ -29,7 +29,6 @@ func Init(cfg *config.Config) {
 		&model.Enrollment{},
 		&model.Assignment{},
 		&model.Submission{},
-		&model.Achievement{},
 		&model.Notification{},
 		&model.GlobalAchievement{},
 		&model.UserAchievement{},

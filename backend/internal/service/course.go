@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	//"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
@@ -28,7 +29,6 @@ type courseService struct {
 	repo             repository.CourseRepository
 	userRepo         repository.UserRepository
 	notificationRepo repository.NotificationRepository
-	achievementRepo  repository.AchievementRepository
 	db               *gorm.DB
 }
 
@@ -37,14 +37,12 @@ func NewCourseService(
 	repo repository.CourseRepository,
 	notificationRepo repository.NotificationRepository,
 	userRepo repository.UserRepository,
-	achievementRepo repository.AchievementRepository,
 	db *gorm.DB,
 ) CourseService {
 	return &courseService{
 		repo:             repo,
 		userRepo:         userRepo,
 		notificationRepo: notificationRepo,
-		achievementRepo:  achievementRepo,
 		db:               db,
 	}
 }
@@ -166,7 +164,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	// Проверка достижений
-	achievementService := NewAchievementService(s.achievementRepo)
+	achievementService := NewAchievementService(s.db)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", userID).Find(&submissions).Error; err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)

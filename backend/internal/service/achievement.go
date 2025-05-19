@@ -1,12 +1,12 @@
 package service
 
 import (
-	"github.com/MORFEUSik/projectschool/backend/internal/db"
+	"time"
+
+	//"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
-	"time"
 )
 
 type AchievementService interface {
@@ -14,14 +14,12 @@ type AchievementService interface {
 }
 
 type achievementService struct {
-	repo repository.AchievementRepository
-	db   *gorm.DB
+	db *gorm.DB
 }
 
-func NewAchievementService(repo repository.AchievementRepository) AchievementService {
+func NewAchievementService(db *gorm.DB) AchievementService {
 	return &achievementService{
-		repo: repo,
-		db:   db.DB,
+		db: db,
 	}
 }
 

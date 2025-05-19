@@ -24,7 +24,6 @@ type submissionService struct {
 	repo             repository.SubmissionRepository
 	userRepo         repository.UserRepository
 	assignmentRepo   repository.AssignmentRepository
-	achievementRepo  repository.AchievementRepository
 	notificationRepo repository.NotificationRepository
 	db               *gorm.DB
 }
@@ -33,14 +32,12 @@ func NewSubmissionService(
 	repo repository.SubmissionRepository,
 	userRepo repository.UserRepository,
 	assignmentRepo repository.AssignmentRepository,
-	achievementRepo repository.AchievementRepository,
 	notificationRepo repository.NotificationRepository,
 ) SubmissionService {
 	return &submissionService{
 		repo:             repo,
 		userRepo:         userRepo,
 		assignmentRepo:   assignmentRepo,
-		achievementRepo:  achievementRepo,
 		notificationRepo: notificationRepo,
 		db:               db.DB,
 	}
@@ -147,7 +144,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 	}
 	var course model.Course
 	if err := s.db.First(&course, assignment.CourseID).Error; err != nil {
-		logger.Log.Errorf("Course %d not found: %v", submission.AssignmentID, err)
+		logger.Log.Errorf("Course %d not found: %v", assignment.CourseID, err)
 		return err
 	}
 	if user.Role == model.Teacher && course.TeacherID != userID {
@@ -194,7 +191,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 	}
 
 	// Проверка достижений
-	achievementService := NewAchievementService(s.achievementRepo)
+	achievementService := NewAchievementService(s.db)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", submission.UserID, err)

@@ -66,13 +66,12 @@ func main() {
 	courseRepo := repository.NewCourseRepository()
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
-	achievementRepo := repository.NewAchievementRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
 
 	authService := service.NewAuthService(userRepo)
-	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, achievementRepo, db.DB)
+	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
 	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB)
-	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, achievementRepo, notificationRepo)
+	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo)
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 
