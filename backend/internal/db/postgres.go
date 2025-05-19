@@ -29,9 +29,10 @@ func Init(cfg *config.Config) {
 		&model.Enrollment{},
 		&model.Assignment{},
 		&model.Submission{},
-		&model.Test{},
 		&model.Achievement{},
 		&model.Notification{},
+		&model.GlobalAchievement{},
+		&model.UserAchievement{},
 	)
 	if err != nil {
 		log.Fatalf("Ошибка миграции: %v", err)
@@ -144,10 +145,31 @@ func Init(cfg *config.Config) {
             ) THEN
                 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
             END IF;
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE indexname = 'idx_user_achievements_user_id'
+            ) THEN
+                CREATE INDEX idx_user_achievements_user_id ON user_achievements(user_id);
+            END IF;
         END $$;
     `).Error
 	if err != nil {
 		log.Printf("Предупреждение: не удалось добавить индексы: %v", err)
+	}
+
+	// Проверка и добавление столбца is_read в таблицу notifications
+	log.Println("Checking is_read column in notifications")
+	var isReadColumnExists int
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'is_read'").Scan(&isReadColumnExists).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось проверить столбец is_read: %v", err)
+	} else if isReadColumnExists == 0 {
+		log.Println("Adding is_read column to notifications")
+		err = db.Exec("ALTER TABLE notifications ADD COLUMN is_read BOOLEAN DEFAULT FALSE").Error
+		if err != nil {
+			log.Printf("Предупреждение: не удалось добавить is_read: %v", err)
+		}
 	}
 
 	// Логирование схемы таблицы users
@@ -198,6 +220,30 @@ func Init(cfg *config.Config) {
 	} else {
 		log.Println("Table notifications schema:")
 		for _, schema := range notificationSchemas {
+			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
+		}
+	}
+
+	// Логирование схемы таблицы global_achievements
+	var globalAchievementSchemas []ColumnSchema
+	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'global_achievements'").Scan(&globalAchievementSchemas).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось получить схему таблицы global_achievements: %v", err)
+	} else {
+		log.Println("Table global_achievements schema:")
+		for _, schema := range globalAchievementSchemas {
+			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
+		}
+	}
+
+	// Логирование схемы таблицы user_achievements
+	var userAchievementSchemas []ColumnSchema
+	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'user_achievements'").Scan(&userAchievementSchemas).Error
+	if err != nil {
+		log.Printf("Предупреждение: не удалось получить схему таблицы user_achievements: %v", err)
+	} else {
+		log.Println("Table user_achievements schema:")
+		for _, schema := range userAchievementSchemas {
 			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 		}
 	}

@@ -10,6 +10,7 @@ import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
 
 interface Assignment {
   id: number;
@@ -86,41 +87,44 @@ export default function AssignmentPage() {
   }, [courseId, assignmentId, user]);
 
   const handleDelete = async () => {
-	if (!confirm('Вы уверены, что хотите удалить задание?')) return;
-	try {
-	  const token = localStorage.getItem('token');
-	  console.log('Attempting to delete assignment:', assignmentId, 'Token:', token);
-	  if (!token) {
-		 console.error('No token found in localStorage');
-		 setError('Токен отсутствует, пожалуйста, войдите снова');
-		 router.push('/auth/login');
-		 return;
-	  }
-	  const response = await api.delete(`/assignments/${assignmentId}`);
-	  console.log('Delete response:', response.data);
-	  setError('');
-	  router.push(`/courses/${courseId}`);
-	} catch (err: unknown) {
-	  const axiosError = err as AxiosError<ErrorResponse>;
-	  const errorMessage = axiosError.response?.data?.error || 'Ошибка удаления задания';
-	  console.error('Delete error:', axiosError.response?.data, 'Status:', axiosError.response?.status);
-	  setError(errorMessage);
-	}
- };
+    if (!confirm('Вы уверены, что хотите удалить задание?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      console.log('Attempting to delete assignment:', assignmentId, 'Token:', token);
+      if (!token) {
+        console.error('No token found in localStorage');
+        setError('Токен отсутствует, пожалуйста, войдите снова');
+        router.push('/auth/login');
+        return;
+      }
+      const response = await api.delete(`/assignments/${assignmentId}`);
+      console.log('Delete response:', response.data);
+      setError('');
+      router.push(`/courses/${courseId}`);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка удаления задания';
+      console.error('Delete error:', axiosError.response?.data, 'Status:', axiosError.response?.status);
+      setError(errorMessage);
+    }
+  };
 
   const handleSubmitSolution = async (data: SubmissionFormData) => {
     if (new Date(assignment!.due_date) < new Date()) {
       setError('Дедлайн истёк');
+      toast.error('Дедлайн истёк');
       return;
     }
     try {
       await api.post(`/assignments/${assignmentId}/submit`, data);
       setError('');
       submissionForm.reset();
-      alert('Решение отправлено');
+      toast.success('Решение отправлено! Проверьте уведомления для новых достижений.');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка отправки решения');
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка отправки решения';
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -131,9 +135,12 @@ export default function AssignmentPage() {
         prev.map((sub) => (sub.id === submissionId ? { ...sub, score: data.score } : sub))
       );
       gradeForm.reset();
+      toast.success('Оценка выставлена');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка выставления оценки');
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка выставления оценки';
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 

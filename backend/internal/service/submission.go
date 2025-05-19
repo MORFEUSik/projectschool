@@ -2,7 +2,9 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -15,15 +17,16 @@ type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
 	GetByUserID(userID uint) ([]model.Submission, error)
-	GetByAssignment(assignmentID uint) ([]model.Submission, error) // Новый метод
+	GetByAssignment(assignmentID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
-	repo            repository.SubmissionRepository
-	userRepo        repository.UserRepository
-	assignmentRepo  repository.AssignmentRepository
-	achievementRepo repository.AchievementRepository
-	db              *gorm.DB
+	repo             repository.SubmissionRepository
+	userRepo         repository.UserRepository
+	assignmentRepo   repository.AssignmentRepository
+	achievementRepo  repository.AchievementRepository
+	notificationRepo repository.NotificationRepository
+	db               *gorm.DB
 }
 
 func NewSubmissionService(
@@ -31,13 +34,15 @@ func NewSubmissionService(
 	userRepo repository.UserRepository,
 	assignmentRepo repository.AssignmentRepository,
 	achievementRepo repository.AchievementRepository,
+	notificationRepo repository.NotificationRepository,
 ) SubmissionService {
 	return &submissionService{
-		repo:            repo,
-		userRepo:        userRepo,
-		assignmentRepo:  assignmentRepo,
-		achievementRepo: achievementRepo,
-		db:              db.DB,
+		repo:             repo,
+		userRepo:         userRepo,
+		assignmentRepo:   assignmentRepo,
+		achievementRepo:  achievementRepo,
+		notificationRepo: notificationRepo,
+		db:               db.DB,
 	}
 }
 
@@ -93,6 +98,19 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
+	// Создание уведомления о подаче решения
+	notification := &model.Notification{
+		UserID:    submission.UserID,
+		Message:   fmt.Sprintf("Вы отправили решение для задания #%d", submission.AssignmentID),
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+	if err := s.notificationRepo.Create(notification); err != nil {
+		logger.Log.Errorf("Failed to create submission notification: %v", err)
+	} else {
+		logger.Log.Infof("Created submission notification for user %d: %s", submission.UserID, notification.Message)
+	}
+
 	logger.Log.Infof("Submission created for user %d, assignment %d", submission.UserID, submission.AssignmentID)
 	return nil
 }
@@ -129,7 +147,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 	}
 	var course model.Course
 	if err := s.db.First(&course, assignment.CourseID).Error; err != nil {
-		logger.Log.Errorf("Course %d not found: %v", assignment.CourseID, err)
+		logger.Log.Errorf("Course %d not found: %v", submission.AssignmentID, err)
 		return err
 	}
 	if user.Role == model.Teacher && course.TeacherID != userID {
@@ -164,6 +182,17 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
+	// Создание уведомления об оценке
+	notification := &model.Notification{
+		UserID:    submission.UserID,
+		Message:   fmt.Sprintf("Ваше решение для задания #%d оценено: %.2f", submission.AssignmentID, grade),
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+	if err := s.notificationRepo.Create(notification); err != nil {
+		logger.Log.Errorf("Failed to create grade notification: %v", err)
+	}
+
 	// Проверка достижений
 	achievementService := NewAchievementService(s.achievementRepo)
 	var submissions []model.Submission
@@ -176,9 +205,23 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		logger.Log.Errorf("Failed to count courses for user %d: %v", submission.UserID, err)
 		return err
 	}
-	if err := achievementService.AwardAchievements(submission.UserID, submissionUser.Points, submissions, int(courseCount)); err != nil {
+	newAchievements, err := achievementService.AwardAchievements(submission.UserID, submissionUser.Points, submissions, int(courseCount))
+	if err != nil {
 		logger.Log.Errorf("Failed to award achievements for user %d: %v", submission.UserID, err)
 		return err
+	}
+
+	// Создание уведомлений для новых достижений
+	for _, ach := range newAchievements {
+		notification := &model.Notification{
+			UserID:    submission.UserID,
+			Message:   fmt.Sprintf("Вы заработали достижение: %s", ach.Title),
+			IsRead:    false,
+			CreatedAt: time.Now(),
+		}
+		if err := s.notificationRepo.Create(notification); err != nil {
+			logger.Log.Errorf("Failed to create achievement notification: %v", err)
+		}
 	}
 
 	return nil

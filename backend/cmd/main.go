@@ -45,7 +45,8 @@ func main() {
 		&model.Course{},
 		&model.Assignment{},
 		&model.Submission{},
-		&model.Achievement{},
+		&model.GlobalAchievement{},
+		&model.UserAchievement{},
 		&model.Notification{},
 		&model.Enrollment{},
 	)
@@ -55,7 +56,7 @@ func main() {
 	// Настройка CORS
 	corsConfig := cors.Config{
 		AllowOrigins:     []string{"http://localhost:8080", "http://localhost:3000"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}
@@ -69,11 +70,11 @@ func main() {
 	notificationRepo := repository.NewNotificationRepository(db.DB)
 
 	authService := service.NewAuthService(userRepo)
-	courseService := service.NewCourseService(courseRepo)
-	assignmentService := service.NewAssignmentService(assignmentRepo)
-	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, achievementRepo)
+	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, achievementRepo, db.DB)
+	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB)
+	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, achievementRepo, notificationRepo)
 	userService := service.NewUserService(userRepo)
-	notificationService := service.NewNotificationService(notificationRepo)
+	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 
 	// Группа API
 	api := r.Group("/api")
@@ -90,6 +91,7 @@ func main() {
 			protected.GET("/users/me", handler.GetProfile(userService))
 			protected.PUT("/users/me", handler.UpdateProfile(userService))
 			protected.GET("/notifications", handler.GetNotifications(notificationService))
+			protected.PUT("/notifications/:id/read", handler.MarkNotificationAsRead(notificationService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 
@@ -102,7 +104,7 @@ func main() {
 				{
 					courseGroup.GET("", handler.GetCourse(courseService))
 					courseGroup.GET("/assignments", handler.ListAssignments(assignmentService))
-					courseGroup.GET("/assignments/:assignmentId", handler.GetAssignment(assignmentService)) // 💡 теперь нет конфликта
+					courseGroup.GET("/assignments/:assignmentId", handler.GetAssignment(assignmentService))
 					courseGroup.POST("/enroll", handler.RoleMiddleware(model.Student), handler.Enroll(courseService))
 					courseGroup.DELETE("/enroll", handler.RoleMiddleware(model.Student), handler.Unenroll(courseService))
 					courseGroup.DELETE("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteCourse(courseService))

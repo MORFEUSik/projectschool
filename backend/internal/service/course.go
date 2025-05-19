@@ -2,9 +2,9 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
@@ -25,40 +25,80 @@ type CourseService interface {
 
 // courseService реализует CourseService
 type courseService struct {
-	repo repository.CourseRepository
-	db   *gorm.DB
+	repo             repository.CourseRepository
+	userRepo         repository.UserRepository
+	notificationRepo repository.NotificationRepository
+	achievementRepo  repository.AchievementRepository
+	db               *gorm.DB
 }
 
 // NewCourseService создаёт новый экземпляр CourseService
-func NewCourseService(repo repository.CourseRepository) CourseService {
+func NewCourseService(
+	repo repository.CourseRepository,
+	notificationRepo repository.NotificationRepository,
+	userRepo repository.UserRepository,
+	achievementRepo repository.AchievementRepository,
+	db *gorm.DB,
+) CourseService {
 	return &courseService{
-		repo: repo,
-		db:   db.DB,
+		repo:             repo,
+		userRepo:         userRepo,
+		notificationRepo: notificationRepo,
+		achievementRepo:  achievementRepo,
+		db:               db,
 	}
 }
 
 // Create создаёт новый курс
 func (s *courseService) Create(course *model.Course) error {
-	return s.repo.Create(course)
+	logger.Log.Infof("Creating course: %s", course.Title)
+	err := s.repo.Create(course)
+	if err != nil {
+		logger.Log.Errorf("Failed to create course: %v", err)
+		return err
+	}
+	logger.Log.Infof("Course %s created successfully", course.Title)
+	return nil
 }
 
 // List возвращает список курсов с пагинацией
 func (s *courseService) List(limit, offset int) ([]model.Course, error) {
+	logger.Log.Info("Fetching courses with limit %d, offset %d", limit, offset)
 	var courses []model.Course
 	err := s.db.Preload("Teacher").Limit(limit).Offset(offset).Find(&courses).Error
-	return courses, err
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch courses: %v", err)
+		return nil, err
+	}
+	logger.Log.Infof("Fetched %d courses", len(courses))
+	return courses, nil
 }
 
 // Get возвращает курс по ID
 func (s *courseService) Get(id uint) (*model.Course, error) {
+	logger.Log.Infof("Fetching course %d", id)
 	var course model.Course
 	err := s.db.Preload("Teacher").First(&course, id).Error
-	return &course, err
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch course %d: %v", id, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("курс не найден")
+		}
+		return nil, err
+	}
+	logger.Log.Infof("Fetched course %d", id)
+	return &course, nil
 }
 
 // PreloadTeacher подгружает данные учителя для курса
 func (s *courseService) PreloadTeacher(course *model.Course) error {
-	return s.db.Preload("Teacher").First(course, course.ID).Error
+	logger.Log.Infof("Preloading teacher for course %d", course.ID)
+	err := s.db.Preload("Teacher").First(course, course.ID).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to preload teacher for course %d: %v", course.ID, err)
+		return err
+	}
+	return nil
 }
 
 // Enroll записывает пользователя на курс
@@ -76,8 +116,8 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	// Проверка: существует ли пользователь
-	var user model.User
-	if err := s.db.First(&user, userID).Error; err != nil {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("пользователь не найден")
@@ -105,8 +145,9 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 
 	// Создание записи
 	enrollment = model.Enrollment{
-		UserID:   userID,
-		CourseID: courseID,
+		UserID:     userID,
+		CourseID:   courseID,
+		EnrolledAt: time.Now(),
 	}
 	if err := s.db.Create(&enrollment).Error; err != nil {
 		logger.Log.Errorf("Failed to create enrollment: %v", err)
@@ -114,15 +155,42 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	// Создание уведомления
-	notificationService := NewNotificationService(repository.NewNotificationRepository(s.db))
 	notification := &model.Notification{
 		UserID:    userID,
-		Message:   "Вы записались на курс: " + course.Title,
+		Message:   fmt.Sprintf("Вы записались на курс: %s", course.Title),
+		IsRead:    false,
 		CreatedAt: time.Now(),
 	}
-	if err := notificationService.Create(notification); err != nil {
-		logger.Log.Errorf("Failed to create notification for user %d: %v", userID, err)
-		// Не прерываем выполнение, так как уведомление не критично
+	if err := s.notificationRepo.Create(notification); err != nil {
+		logger.Log.Errorf("Failed to create enrollment notification for user %d: %v", userID, err)
+	}
+
+	// Проверка достижений
+	achievementService := NewAchievementService(s.achievementRepo)
+	var submissions []model.Submission
+	if err := s.db.Where("user_id = ?", userID).Find(&submissions).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
+	}
+	var courseCount int64
+	if err := s.db.Model(&model.Enrollment{}).Where("user_id = ?", userID).Count(&courseCount).Error; err != nil {
+		logger.Log.Errorf("Failed to count courses for user %d: %v", userID, err)
+	}
+	newAchievements, err := achievementService.AwardAchievements(userID, user.Points, submissions, int(courseCount))
+	if err != nil {
+		logger.Log.Errorf("Failed to award achievements for user %d: %v", userID, err)
+	} else if len(newAchievements) > 0 {
+		logger.Log.Infof("Awarded %d new achievements to user %d", len(newAchievements), userID)
+		for _, ach := range newAchievements {
+			notification := &model.Notification{
+				UserID:    userID,
+				Message:   fmt.Sprintf("Вы заработали достижение: %s", ach.Title),
+				IsRead:    false,
+				CreatedAt: time.Now(),
+			}
+			if err := s.notificationRepo.Create(notification); err != nil {
+				logger.Log.Errorf("Failed to create achievement notification for user %d: %v", userID, err)
+			}
+		}
 	}
 
 	logger.Log.Infof("User %d enrolled in course %d", userID, courseID)
@@ -144,8 +212,8 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	}
 
 	// Проверка: существует ли пользователь
-	var user model.User
-	if err := s.db.First(&user, userID).Error; err != nil {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("пользователь не найден")
@@ -195,8 +263,8 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	}
 
 	// Проверка: имеет ли пользователь права
-	var user model.User
-	if err := s.db.First(&user, userID).Error; err != nil {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("пользователь не найден")

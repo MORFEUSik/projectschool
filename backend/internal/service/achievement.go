@@ -6,10 +6,11 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
+	"time"
 )
 
 type AchievementService interface {
-	AwardAchievements(userID uint, points uint, submissions []model.Submission, courseCount int) error
+	AwardAchievements(userID uint, points uint, submissions []model.Submission, courseCount int) ([]model.GlobalAchievement, error)
 }
 
 type achievementService struct {
@@ -24,81 +25,74 @@ func NewAchievementService(repo repository.AchievementRepository) AchievementSer
 	}
 }
 
-func (s *achievementService) AwardAchievements(userID uint, points uint, submissions []model.Submission, courseCount int) error {
+func (s *achievementService) AwardAchievements(userID uint, points uint, submissions []model.Submission, courseCount int) ([]model.GlobalAchievement, error) {
 	logger.Log.Infof("Checking achievements for user %d with %d points, %d submissions, %d courses", userID, points, len(submissions), courseCount)
 
 	var user model.User
 	if err := s.db.First(&user, userID).Error; err != nil {
 		logger.Log.Errorf("Failed to find user %d: %v", userID, err)
-		return err
+		return nil, err
 	}
 
-	achievements := []struct {
-		Condition func() bool
-		Title     string
-		Desc      string
-	}{
-		{ // Достижение за баллы
-			Condition: func() bool { return points >= 50 },
-			Title:     "Мастер",
-			Desc:      "Набрано 50 баллов",
-		},
-		{
-			Condition: func() bool { return points >= 100 },
-			Title:     "Гуру",
-			Desc:      "Набрано 100 баллов",
-		},
-		{ // Достижение за первый курс
-			Condition: func() bool { return courseCount >= 1 },
-			Title:     "Новичок обучения",
-			Desc:      "Завершён первый курс",
-		},
-		{ // Достижение за участие в нескольких курсах
-			Condition: func() bool { return courseCount >= 3 },
-			Title:     "Любознательный",
-			Desc:      "Записан на 3 курса",
-		},
-		{ // Достижение за серию успешных решений
-			Condition: func() bool {
-				if len(submissions) < 5 {
-					return false
-				}
+	// Загружаем все глобальные достижения
+	var globalAchievements []model.GlobalAchievement
+	if err := s.db.Find(&globalAchievements).Error; err != nil {
+		logger.Log.Errorf("Failed to load global achievements: %v", err)
+		return nil, err
+	}
+
+	var newAchievements []model.GlobalAchievement
+	for _, ach := range globalAchievements {
+		// Проверяем условия
+		conditionMet := false
+		switch ach.Condition {
+		case "points_50":
+			conditionMet = points >= 50
+		case "points_100":
+			conditionMet = points >= 100
+		case "courses_1":
+			conditionMet = courseCount >= 1
+		case "courses_3":
+			conditionMet = courseCount >= 3
+		case "submissions_5":
+			if len(submissions) >= 5 {
 				count := 0
 				for _, sub := range submissions {
 					if sub.Grade >= 4.0 {
 						count++
 						if count >= 5 {
-							return true
+							conditionMet = true
+							break
 						}
 					} else {
 						count = 0
 					}
 				}
-				return false
-			},
-			Title: "Мастер решений",
-			Desc:  "5 успешных решений подряд (оценка ≥4.0)",
-		},
-	}
+			}
+		}
 
-	for _, ach := range achievements {
-		if ach.Condition() {
+		if conditionMet {
+			// Проверяем, не присвоено ли достижение
 			var count int64
-			s.db.Model(&model.Achievement{}).Where("user_id = ? AND title = ?", userID, ach.Title).Count(&count)
+			s.db.Model(&model.UserAchievement{}).
+				Where("user_id = ? AND achievement_id = ?", userID, ach.ID).
+				Count(&count)
 			if count == 0 {
-				achievement := model.Achievement{
-					UserID:      userID,
-					Title:       ach.Title,
-					Description: ach.Desc,
+				// Присваиваем достижение
+				userAch := model.UserAchievement{
+					UserID:        userID,
+					AchievementID: ach.ID,
+					AwardedAt:     time.Now(),
 				}
-				if err := s.repo.Create(&achievement); err != nil {
-					logger.Log.Errorf("Failed to award %s to user %d: %v", ach.Title, userID, err)
-					return err
+				if err := s.db.Create(&userAch).Error; err != nil {
+					logger.Log.Errorf("Failed to assign achievement %s to user %d: %v", ach.Title, userID, err)
+					return nil, err
 				}
-				logger.Log.Infof("Awarded %s to user %d", ach.Title, userID)
+				logger.Log.Infof("Assigned achievement %s to user %d", ach.Title, userID)
+				newAchievements = append(newAchievements, ach)
 			}
 		}
 	}
 
-	return nil
+	return newAchievements, nil
 }

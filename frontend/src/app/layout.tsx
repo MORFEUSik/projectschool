@@ -3,6 +3,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { AuthProvider } from '@/shared/hooks/useAuth';
 import Link from 'next/link';
 import './globals.css';
+import { Toaster } from 'react-hot-toast';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex flex-col min-h-screen">
         <AuthProvider>
           <LayoutContent>{children}</LayoutContent>
+          <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
         </AuthProvider>
       </body>
     </html>
@@ -17,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
-  const { token, logout } = useAuth(); // ✅ уже внутри AuthProvider
+  const { token, logout } = useAuth();
 
   return (
     <>
