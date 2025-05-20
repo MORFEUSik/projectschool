@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/MORFEUSik/projectschool/backend/config"
 	"github.com/MORFEUSik/projectschool/backend/docs"
@@ -51,7 +52,20 @@ func main() {
 		&model.Enrollment{},
 	)
 
+	// Создание папки Uploads с абсолютным путём
+	wd, err := os.Getwd()
+	if err != nil {
+		logger.Log.Fatalf("Failed to get working directory: %v", err)
+	}
+	uploadDir := filepath.Join(wd, "uploads")
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		logger.Log.Fatalf("Failed to create uploads directory: %v", err)
+	}
+
 	r := gin.Default()
+
+	// Настройка статического маршрута для /uploads
+	r.Static("/uploads", uploadDir)
 
 	// Настройка CORS
 	corsConfig := cors.Config{
@@ -87,6 +101,7 @@ func main() {
 		protected := api.Group("", handler.AuthMiddleware())
 		{
 			protected.GET("/users", handler.ListUsers(userService))
+			protected.POST("/assignments/upload", handler.UploadFile())
 			protected.GET("/users/me", handler.GetProfile(userService))
 			protected.PUT("/users/me", handler.UpdateProfile(userService))
 			protected.GET("/notifications", handler.GetNotifications(notificationService))

@@ -8,6 +8,7 @@ interface Assignment {
   description: string;
   max_score: number;
   due_date: string;
+  file_url?: string; // Добавлено
 }
 
 interface ErrorResponse {

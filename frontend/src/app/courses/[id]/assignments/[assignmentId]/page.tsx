@@ -11,6 +11,10 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import Image from 'next/image';
 
 interface Assignment {
   id: number;
@@ -19,6 +23,7 @@ interface Assignment {
   max_score: number;
   due_date: string;
   course_id: number;
+  file_url?: string;
 }
 
 interface Submission {
@@ -53,8 +58,7 @@ export default function AssignmentPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [isEditing, setIsEditing] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null); // Добавлено для ошибок изображения
 
   const submissionForm = useForm<SubmissionFormData>({
     resolver: zodResolver(submissionSchema),
@@ -71,6 +75,7 @@ export default function AssignmentPage() {
       setIsLoading(true);
       try {
         const assignmentResponse = await api.get<Assignment>(`/courses/${courseId}/assignments/${assignmentId}`);
+        console.log('Assignment response:', assignmentResponse.data); // Логируем ответ API
         setAssignment(assignmentResponse.data);
         if (user?.role === 'teacher' || user?.role === 'admin') {
           const submissionsResponse = await api.get<Submission[]>(`/submissions?assignment_id=${assignmentId}`);
@@ -156,8 +161,37 @@ export default function AssignmentPage() {
     <div className="max-w-4xl mx-auto mt-8">
       <h1 className="text-3xl font-bold mb-6">{assignment.title}</h1>
       <Card className="p-6 mb-6">
-        <p className="mb-2">{assignment.description}</p>
-        <p className="mb-2">
+        <div className="prose">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+            {assignment.description}
+          </ReactMarkdown>
+        </div>
+        {assignment.file_url && (
+          <div className="mt-4">
+            {assignment.file_url.endsWith('.pdf') ? (
+              <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                Просмотреть PDF
+              </a>
+            ) : (
+              <>
+                <Image
+  src={assignment.file_url}
+  alt="Assignment image"
+  width={500}
+  height={500}
+  className="rounded"
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onError={(_) => {
+    console.error('Image load error:', assignment.file_url); // Логируем ошибку
+    setImageError('Не удалось загрузить изображение');
+  }}
+/>
+                {imageError && <p className="text-red-500 text-sm mt-2">{imageError}</p>}
+              </>
+            )}
+          </div>
+        )}
+        <p className="mb-2 mt-4">
           <strong>Максимальный балл:</strong> {assignment.max_score}
         </p>
         <p className="mb-2">
@@ -165,7 +199,6 @@ export default function AssignmentPage() {
         </p>
         {isTeacherOrAdmin && (
           <div className="flex space-x-4 mt-4">
-            <Button onClick={() => setIsEditing(true)}>Редактировать</Button>
             <Button variant="destructive" onClick={handleDelete}>
               Удалить
             </Button>

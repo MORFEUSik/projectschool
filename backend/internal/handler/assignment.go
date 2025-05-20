@@ -4,8 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
@@ -50,29 +55,45 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 
 // CreateAssignment создает новое задание
 // @Summary Создать задание
-// @Description Создает новое задание для курса. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
+// @Description Создает новое задание для курса с возможностью загрузки файла. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
 // @Tags assignments
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
-// @Param assignment body model.Assignment true "Данные задания"
+// @Param title formData string true "Название задания"
+// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
+// @Param max_score formData integer true "Максимальный балл"
+// @Param due_date formData string true "Срок сдачи (ISO 8601)"
+// @Param course_id formData integer true "ID курса"
+// @Param file formData file false "Файл (jpg, png, pdf)"
 // @Success 200 {object} map[string]interface{} "message, assignment"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
 // @Failure 403 {object} map[string]string "error"
+// @Failure 415 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
 // @Router /assignments [post]
 func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.ContentType() != "application/json" {
+		// Проверка Content-Type
+		if !strings.Contains(c.ContentType(), "multipart/form-data") {
 			logger.Log.Errorf("Invalid Content-Type: %s", c.ContentType())
-			c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "Требуется Content-Type: application/json"})
+			c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "Требуется Content-Type: multipart/form-data"})
 			return
 		}
 
-		var assignment model.Assignment
-		if err := c.ShouldBindJSON(&assignment); err != nil {
-			logger.Log.Errorf("Failed to bind JSON: %v", err)
+		// Структура для входных данных
+		type AssignmentInput struct {
+			Title       string    `form:"title" validate:"required,min=3,max=100"`
+			Description string    `form:"description"`
+			MaxScore    uint      `form:"max_score" validate:"required,gte=0"`
+			DueDate     time.Time `form:"due_date" validate:"required"`
+			CourseID    uint      `form:"course_id" validate:"required"`
+		}
+
+		var input AssignmentInput
+		if err := c.ShouldBind(&input); err != nil {
+			logger.Log.Errorf("Failed to bind form data: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
@@ -110,9 +131,70 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
-		// Устанавливаем TeacherID
-		assignment.TeacherID = userID
-		logger.Log.Infof("Received assignment: %+v, TeacherID: %d", assignment, userID)
+		// Обработка файла
+		var fileURL string
+		file, err := c.FormFile("file")
+		if err == nil { // Файл загружен
+			// Валидация типа файла
+			allowedTypes := map[string]bool{
+				"image/jpeg":      true,
+				"image/png":       true,
+				"application/pdf": true,
+			}
+			fileHeader := file.Header.Get("Content-Type")
+			if !allowedTypes[fileHeader] {
+				logger.Log.Errorf("Unsupported file type: %s", fileHeader)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Неподдерживаемый тип файла (разрешены jpg, png, pdf)"})
+				return
+			}
+
+			// Валидация размера (10 MB)
+			if file.Size > 10*1024*1024 {
+				logger.Log.Errorf("File too large: %d bytes", file.Size)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Файл слишком большой (макс. 10 МБ)"})
+				return
+			}
+
+			// Сохранение файла
+			ext := filepath.Ext(file.Filename)
+			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
+			uploadDir := "./uploads" // Физическая папка
+			if err := os.MkdirAll(uploadDir, 0755); err != nil {
+				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
+				return
+			}
+			filePath := filepath.Join(uploadDir, filename)
+			logger.Log.Infof("Saving file to %s", filePath)
+			if err := c.SaveUploadedFile(file, filePath); err != nil {
+				logger.Log.Errorf("Failed to save file to %s: %v", filePath, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+				return
+			}
+			// Проверяем, существует ли файл
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				logger.Log.Errorf("File %s does not exist after saving", filePath)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл не был сохранён"})
+				return
+			}
+			fileURL = "http://localhost:8080/uploads/" + filename // URL с маленькой буквы
+			logger.Log.Infof("File saved successfully: %s", fileURL)
+		} else if !errors.Is(err, http.ErrMissingFile) {
+			logger.Log.Errorf("Failed to get file: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки файла"})
+			return
+		}
+
+		// Создание модели Assignment
+		assignment := model.Assignment{
+			Title:       input.Title,
+			Description: input.Description,
+			MaxScore:    input.MaxScore,
+			DueDate:     input.DueDate,
+			CourseID:    input.CourseID,
+			TeacherID:   userID,
+			FileURL:     fileURL,
+		}
 
 		// Проверка существования курса
 		var course model.Course
@@ -150,13 +232,14 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
+		// Сохранение через сервис
 		if err := assignmentService.Create(&assignment); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания заданий"})
 			return
 		}
 
-		logger.Log.Infof("Assignment %s (ID: %d) created by user %d", assignment.Title, assignment.ID, userID)
+		logger.Log.Infof("Assignment %s (ID: %d) created by user %d with file: %s", assignment.Title, assignment.ID, userID, fileURL)
 		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment": assignment})
 	}
 }
@@ -289,5 +372,130 @@ func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 
 		logger.Log.Infof("Assignment %d deleted by user %d (%s)", id, user.ID, user.Role)
 		c.JSON(http.StatusOK, gin.H{"message": "Задание удалено"})
+	}
+}
+
+// UploadFile загружает файл для задания
+// @Summary Загрузить файл
+// @Description Загружает файл (jpg, png, pdf) и возвращает URL. Требуется JWT-токен. Доступно для ролей: teacher, admin.
+// @Tags assignments
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param file formData file true "Файл (jpg, png, pdf)"
+// @Success 200 {object} map[string]string "file_url"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 403 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /assignments/upload [post]
+func UploadFile() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Проверка Content-Type
+		if !strings.Contains(c.ContentType(), "multipart/form-data") {
+			logger.Log.Errorf("Invalid Content-Type: %s", c.ContentType())
+			c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "Требуется Content-Type: multipart/form-data"})
+			return
+		}
+
+		// Получаем userID из контекста
+		userIDRaw, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var userID uint
+		switch v := userIDRaw.(type) {
+		case uint:
+			userID = v
+		case int:
+			if v < 0 {
+				logger.Log.Errorf("Invalid userID: negative value %d", v)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Некорректный ID пользователя"})
+				return
+			}
+			userID = uint(v)
+		case float64:
+			if v < 0 || v != float64(uint(v)) {
+				logger.Log.Errorf("Invalid userID: non-integer float %f", v)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Некорректный ID пользователя"})
+				return
+			}
+			userID = uint(v)
+		default:
+			logger.Log.Errorf("Invalid userID type: %T, value: %v", userIDRaw, userIDRaw)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки ID пользователя"})
+			return
+		}
+
+		// Проверка роли
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки пользователя"})
+			return
+		}
+		if user.Role != model.Teacher && user.Role != model.Admin {
+			logger.Log.Errorf("User %d (%s) attempted to upload file without permission", userID, user.Role)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Доступ запрещён"})
+			return
+		}
+
+		// Обработка файла
+		file, err := c.FormFile("file")
+		if err != nil {
+			logger.Log.Errorf("Failed to get file: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки файла"})
+			return
+		}
+
+		// Валидация типа файла
+		allowedTypes := map[string]bool{
+			"image/jpeg":      true,
+			"image/png":       true,
+			"application/pdf": true,
+		}
+		fileHeader := file.Header.Get("Content-Type")
+		if !allowedTypes[fileHeader] {
+			logger.Log.Errorf("Unsupported file type: %s", fileHeader)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неподдерживаемый тип файла (разрешены jpg, png, pdf)"})
+			return
+		}
+
+		// Валидация размера (10 MB)
+		if file.Size > 10*1024*1024 {
+			logger.Log.Errorf("File too large: %d bytes", file.Size)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Файл слишком большой (макс. 10 МБ)"})
+			return
+		}
+
+		// Сохранение файла
+		ext := filepath.Ext(file.Filename)
+		filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
+		uploadDir := "./uploads" // Физическая папка
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
+			return
+		}
+		filePath := filepath.Join(uploadDir, filename)
+		logger.Log.Infof("Saving file to %s", filePath)
+		if err := c.SaveUploadedFile(file, filePath); err != nil {
+			logger.Log.Errorf("Failed to save file to %s: %v", filePath, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
+			return
+		}
+		// Проверяем, существует ли файл
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			logger.Log.Errorf("File %s does not exist after saving", filePath)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл не был сохранён"})
+			return
+		}
+		fileURL := "http://localhost:8080/uploads/" + filename // URL с маленькой буквы
+		logger.Log.Infof("File saved successfully: %s", fileURL)
+
+		c.JSON(http.StatusOK, gin.H{"file_url": fileURL})
 	}
 }
