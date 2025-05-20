@@ -228,7 +228,7 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 	logger.Log.Infof("Fetching submissions for user %d", userID)
 
 	var submissions []model.Submission
-	err := s.db.Where("user_id = ?", userID).Find(&submissions).Error
+	err := s.db.Preload("User").Preload("Assignment.Course").Where("user_id = ?", userID).Find(&submissions).Error
 	if err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
 		return nil, err
@@ -251,9 +251,9 @@ func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submissi
 		return nil, err
 	}
 
-	// Получение решений с предзагрузкой пользователя для получения username
+	// Получение решений с предзагрузкой пользователя, задания и курса
 	var submissions []model.Submission
-	err = s.db.Preload("User").Where("assignment_id = ?", assignmentID).Find(&submissions).Error
+	err = s.db.Preload("User").Preload("Assignment.Course").Where("assignment_id = ?", assignmentID).Find(&submissions).Error
 	if err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for assignment %d: %v", assignmentID, err)
 		return nil, err

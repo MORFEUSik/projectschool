@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
-	"github.com/MORFEUSik/projectschool/backend/internal/error" // Пакет для APIError
+	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
@@ -13,20 +13,6 @@ import (
 )
 
 // SubmitAssignment позволяет студенту отправить решение
-// @Summary Отправить решение
-// @Description Отправляет решение для задания. Требуется JWT-токен. Доступно только для роли: student.
-// @Tags submissions
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path int true "ID задания"
-// @Param submission body map[string]string true "Содержимое решения"
-// @Success 200 {object} map[string]interface{} "message, submission"
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /assignments/{id}/submit [post]
 func SubmitAssignment(submissionService service.SubmissionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Log.Info("Processing SubmitAssignment request")
@@ -81,21 +67,6 @@ func SubmitAssignment(submissionService service.SubmissionService) gin.HandlerFu
 }
 
 // SetGrade позволяет преподавателю установить оценку
-// @Summary Установить оценку
-// @Description Устанавливает оценку для решения. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
-// @Tags submissions
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path int true "ID решения"
-// @Param grade body map[string]float64 true "Оценка (0-5)"
-// @Success 200 {object} map[string]string "message"
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 404 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /submissions/{id}/grade [put]
 func SetGrade(submissionService service.SubmissionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Log.Info("Processing SetGrade request")
@@ -139,20 +110,6 @@ func SetGrade(submissionService service.SubmissionService) gin.HandlerFunc {
 }
 
 // ListSubmissions возвращает список решений по assignment_id или user_id
-// @Summary Список решений
-// @Description Возвращает список решений для заданного assignment_id или user_id. Требуется JWT-токен. Доступно для teacher, admin.
-// @Tags submissions
-// @Produce json
-// @Security BearerAuth
-// @Param assignment_id query int false "ID задания"
-// @Param user_id query int false "ID пользователя"
-// @Success 200 {array} map[string]interface{}
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 404 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /submissions [get]
 func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Log.Info("Processing ListSubmissions request")
@@ -199,16 +156,20 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Внутренняя ошибка сервера"})
 				return
 			}
-			// Формируем ответ с username
+			// Формируем ответ с дополнительными полями
 			response = make([]map[string]interface{}, len(submissions))
 			for i, sub := range submissions {
 				response[i] = map[string]interface{}{
-					"id":           sub.ID,
-					"user_id":      sub.UserID,
-					"username":     sub.User.Username,
-					"content":      sub.Content,
-					"score":        sub.Grade,
-					"submitted_at": sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+					"id":               sub.ID,
+					"user_id":          sub.UserID,
+					"username":         sub.User.Username,
+					"content":          sub.Content,
+					"score":            sub.Grade,
+					"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+					"assignment_id":    sub.AssignmentID,
+					"assignment_title": sub.Assignment.Title,
+					"course_id":        sub.Assignment.CourseID,
+					"course_title":     sub.Assignment.Course.Title,
 				}
 			}
 		} else if userIDStr != "" {
@@ -224,16 +185,20 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Внутренняя ошибка сервера"})
 				return
 			}
-			// Формируем ответ с username
+			// Формируем ответ с дополнительными полями
 			response = make([]map[string]interface{}, len(submissions))
 			for i, sub := range submissions {
 				response[i] = map[string]interface{}{
-					"id":           sub.ID,
-					"user_id":      sub.UserID,
-					"username":     sub.User.Username,
-					"content":      sub.Content,
-					"score":        sub.Grade,
-					"submitted_at": sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+					"id":               sub.ID,
+					"user_id":          sub.UserID,
+					"username":         sub.User.Username,
+					"content":          sub.Content,
+					"score":            sub.Grade,
+					"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+					"assignment_id":    sub.AssignmentID,
+					"assignment_title": sub.Assignment.Title,
+					"course_id":        sub.Assignment.CourseID,
+					"course_title":     sub.Assignment.Course.Title,
 				}
 			}
 		} else {
