@@ -5,13 +5,12 @@ import { Card } from '@/shared/ui/Card';
 import Link from 'next/link';
 import { parseISO, format } from 'date-fns';
 
-// Интерфейс, соответствующий плоской структуре данных от API
 interface Submission {
   id: number;
   assignment_id: number;
   user_id: number;
-  score: number; // Используем score, как в исходном коде
-  submitted_at: string; // Используем submitted_at, как в исходном коде
+  score: number;
+  submitted_at: string;
   assignment_title: string;
   course_id: number;
   course_title: string;
@@ -58,13 +57,13 @@ export default function SubmissionsPage() {
                         href={`/courses/${submission.course_id}/assignments/${submission.assignment_id}`}
                         className="text-blue-600 hover:underline"
                       >
-                        {submission.assignment_title || 'Без названия'}
+                        {submission.assignment_title}
                       </Link>
                     ) : (
-                      submission.assignment_title || 'Без названия'
+                      submission.assignment_title
                     )}
                   </td>
-                  <td className="p-2">{submission.course_title || 'Без названия'}</td>
+                  <td className="p-2">{submission.course_title}</td>
                   <td className="p-2">
                     {submission.score > 0 ? submission.score.toFixed(2) : 'Не оценено'}
                   </td>

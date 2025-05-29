@@ -48,38 +48,6 @@ func GetProfile(userService service.UserService) gin.HandlerFunc {
 	}
 }
 
-// GetUserSubmissions возвращает список решений пользователя
-// @Summary Получить решения пользователя
-// @Description Возвращает все решения текущего аутентифицированного пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
-// @Tags submissions
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {array} model.Submission
-// @Failure 401 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /users/me/submissions [get]
-func GetUserSubmissions(submissionService service.SubmissionService) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID, exists := c.Get("userID")
-		if !exists {
-			logger.Log.Error("UserID not found in context")
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
-			return
-		}
-
-		submissions, err := submissionService.GetByUserID(userID.(uint))
-		if err != nil {
-			logger.Log.Errorf("Failed to get submissions for user %d: %v", userID, err)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений"})
-			return
-		}
-
-		logger.Log.Infof("Retrieved %d submissions for user %d", len(submissions), userID)
-		c.JSON(http.StatusOK, submissions)
-	}
-}
-
 // UpdateRole обновляет роль пользователя
 // @Summary Обновить роль пользователя
 // @Description Обновляет роль указанного пользователя. Требуется JWT-токен. Доступно только для роли: admin.

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -18,6 +19,7 @@ type SubmissionService interface {
 	SetGrade(submissionID, userID uint, grade float64) error
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
+	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) // Добавляем метод
 }
 
 type submissionService struct {
@@ -260,5 +262,23 @@ func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submissi
 	}
 
 	logger.Log.Infof("Fetched %d submissions for assignment %d", len(submissions), assignmentID)
+	return submissions, nil
+}
+
+func (s *submissionService) GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) {
+	logger.Log.Infof("Fetching submissions for user %d", userID)
+
+	var submissions []model.Submission
+	err := s.db.WithContext(ctx).
+		Preload("User").
+		Preload("Assignment.Course").
+		Where("user_id = ?", userID).
+		Find(&submissions).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
+		return nil, fmt.Errorf("failed to get user submissions: %w", err)
+	}
+
+	logger.Log.Infof("Fetched %d submissions for user %d", len(submissions), userID)
 	return submissions, nil
 }

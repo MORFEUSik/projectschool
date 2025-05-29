@@ -211,3 +211,58 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 		c.JSON(http.StatusOK, response)
 	}
 }
+
+// GetUserSubmissions возвращает список решений текущего пользователя
+// @Summary Получить решения текущего пользователя
+// @Description Возвращает список всех решений аутентифицированного пользователя с информацией о заданиях и курсах.
+// @Tags submissions
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} map[string]interface{}
+// @Failure 401 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /users/me/submissions [get]
+func GetUserSubmissions(submissionService service.SubmissionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("User not authenticated")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("Fetching submissions for user %v", userID)
+		submissions, err := submissionService.GetUserSubmissions(c, userID.(uint))
+		if err != nil {
+			logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось получить решения"})
+			return
+		}
+
+		// Формируем ответ с вложенной структурой, соответствующей фронтенду
+		response := make([]map[string]interface{}, len(submissions))
+		for i, sub := range submissions {
+			response[i] = map[string]interface{}{
+				"ID":           sub.ID,
+				"UserID":       sub.UserID,
+				"AssignmentID": sub.AssignmentID,
+				"Content":      sub.Content,
+				"Grade":        sub.Grade,
+				"CreatedAt":    sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+				"Assignment": map[string]interface{}{
+					"ID":       sub.Assignment.ID,
+					"Title":    sub.Assignment.Title,
+					"CourseID": sub.Assignment.CourseID,
+					"Course": map[string]interface{}{
+						"ID":    sub.Assignment.Course.ID,
+						"Title": sub.Assignment.Course.Title,
+					},
+				},
+			}
+		}
+
+		logger.Log.Infof("Retrieved %d submissions for user %v", len(submissions), userID)
+		c.JSON(http.StatusOK, response)
+	}
+}

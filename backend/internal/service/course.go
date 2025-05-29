@@ -61,7 +61,7 @@ func (s *courseService) Create(course *model.Course) error {
 
 // List возвращает список курсов с пагинацией
 func (s *courseService) List(limit, offset int) ([]model.Course, error) {
-	logger.Log.Info("Fetching courses with limit %d, offset %d", limit, offset)
+	logger.Log.Infof("Fetching courses with limit %d, offset %d", limit, offset)
 	var courses []model.Course
 	err := s.db.Preload("Teacher").Limit(limit).Offset(offset).Find(&courses).Error
 	if err != nil {
