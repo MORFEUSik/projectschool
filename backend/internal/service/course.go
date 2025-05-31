@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	//"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -15,13 +16,15 @@ import (
 // CourseService определяет интерфейс для работы с курсами
 type CourseService interface {
 	Create(course *model.Course) error
-	List(limit, offset int) ([]model.Course, error)
-	Get(id uint) (*model.Course, error)
+	List(limit, offset int) ([]model.Course, int, error) // Изменяем сигнатуру, добавляем total	Get(id uint) (*model.Course, error)
+	Get(id uint) (*model.Course, error)                  // Добавляем метод Get
 	PreloadTeacher(course *model.Course) error
 	Enroll(userID, courseID uint) error
 	Unenroll(userID, courseID uint) error
 	Delete(userID, courseID uint) error
 	GetStats(courseID uint) (map[string]interface{}, error)
+	GetProgress(userID, courseID uint) (map[string]interface{}, error)
+	CheckDeadlines() error
 }
 
 // courseService реализует CourseService
@@ -59,17 +62,23 @@ func (s *courseService) Create(course *model.Course) error {
 	return nil
 }
 
-// List возвращает список курсов с пагинацией
-func (s *courseService) List(limit, offset int) ([]model.Course, error) {
+// List возвращает список курсов с пагинацией и общим количеством
+func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
 	logger.Log.Infof("Fetching courses with limit %d, offset %d", limit, offset)
 	var courses []model.Course
-	err := s.db.Preload("Teacher").Limit(limit).Offset(offset).Find(&courses).Error
+	var total int64
+	err := s.db.Model(&model.Course{}).Count(&total).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to count courses: %v", err)
+		return nil, 0, err
+	}
+	err = s.db.Preload("Teacher").Limit(limit).Offset(offset).Find(&courses).Error
 	if err != nil {
 		logger.Log.Errorf("Failed to fetch courses: %v", err)
-		return nil, err
+		return nil, 0, err
 	}
-	logger.Log.Infof("Fetched %d courses", len(courses))
-	return courses, nil
+	logger.Log.Infof("Fetched %d courses out of %d total", len(courses), total)
+	return courses, int(total), nil
 }
 
 // Get возвращает курс по ID
@@ -310,4 +319,82 @@ func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) 
 
 	logger.Log.Infof("Stats fetched for course %d", courseID)
 	return stats, nil
+}
+
+func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface{}, error) {
+	logger.Log.Infof("Fetching progress for user %d in course %d", userID, courseID)
+
+	var course model.Course
+	if err := s.db.Preload("Assignments.Submissions").First(&course, courseID).Error; err != nil {
+		logger.Log.Errorf("Course %d not found: %v", courseID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("курс не найден")
+		}
+		return nil, err
+	}
+
+	totalAssignments := len(course.Assignments)
+	var completedAssignments int
+	var totalPoints float64
+
+	for _, assignment := range course.Assignments {
+		for _, submission := range assignment.Submissions {
+			if submission.UserID == userID && submission.Grade != 0 {
+				completedAssignments++
+				totalPoints += submission.Grade * float64(assignment.MaxScore) / 5.0 // Уже корректно
+			}
+		}
+	}
+
+	completionRate := 0.0
+	if totalAssignments > 0 {
+		completionRate = float64(completedAssignments) / float64(totalAssignments) * 100
+	}
+
+	logger.Log.Infof("Progress for user %d in course %d: %d/%d assignments, %.2f points, %.2f%% completion",
+		userID, courseID, completedAssignments, totalAssignments, totalPoints, completionRate)
+
+	return map[string]interface{}{
+		"total_assignments":     totalAssignments,
+		"completed_assignments": completedAssignments,
+		"completion_rate":       math.Round(completionRate*100) / 100,
+		"total_points":          math.Round(totalPoints*100) / 100,
+	}, nil
+}
+
+func (s *courseService) CheckDeadlines() error {
+	logger.Log.Info("Checking deadlines for assignments")
+
+	// Устанавливаем диапазон времени (например, за 24 часа до дедлайна)
+	deadlineThreshold := time.Now().Add(24 * time.Hour)
+
+	var assignments []model.Assignment
+	if err := s.db.Where("due_date BETWEEN ? AND ?", time.Now(), deadlineThreshold).Preload("Course").Find(&assignments).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch assignments with upcoming deadlines: %v", err)
+		return err
+	}
+
+	for _, assignment := range assignments {
+		// Получаем всех студентов, записанных на курс
+		var enrollments []model.Enrollment
+		if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err != nil {
+			logger.Log.Errorf("Failed to fetch enrollments for course %d: %v", assignment.CourseID, err)
+			continue
+		}
+
+		for _, enrollment := range enrollments {
+			notification := &model.Notification{
+				UserID:    enrollment.UserID,
+				Message:   fmt.Sprintf("Дедлайн задания '%s' на курсе '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123)),
+				IsRead:    false,
+				CreatedAt: time.Now(),
+			}
+			if err := s.notificationRepo.Create(notification); err != nil {
+				logger.Log.Errorf("Failed to create deadline notification for user %d: %v", enrollment.UserID, err)
+			}
+		}
+	}
+
+	logger.Log.Info("Deadline check completed")
+	return nil
 }

@@ -22,19 +22,21 @@ interface ErrorResponse {
 }
 
 export default function CoursesPage() {
-  const { courses, loading: isLoading, refetch, error } = useCourses();
+  const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0); // limit=6, offset=0
   const { user } = useUser();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [formError, setFormError] = useState('');
+  const [page, setPage] = useState(1); // Текущая страница
+  const limit = 6; // Количество курсов на странице
 
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     try {
       await api.post('/courses', { title, description });
-      await refetch(); // ✅ без reload
+      await refetch(limit, (page - 1) * limit); // Обновляем текущую страницу
       setShowCreateForm(false);
       setTitle('');
       setDescription('');
@@ -47,15 +49,24 @@ export default function CoursesPage() {
   const handleUnenroll = async (courseId: number) => {
     try {
       await api.delete(`/courses/${courseId}/enroll`);
-      await refetch(); // ✅ без reload
+      await refetch(limit, (page - 1) * limit); // Обновляем текущую страницу
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       alert(axiosError.response?.data?.error || 'Ошибка отмены записи');
     }
   };
 
+  const handlePageChange = (newPage: number) => {
+    const newOffset = (newPage - 1) * limit;
+    if (newOffset < 0 || (total && newOffset >= total)) return;
+    setPage(newPage);
+    refetch(limit, newOffset);
+  };
+
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
+
+  const totalPages = total ? Math.ceil(total / limit) : 1;
 
   return (
     <div className="max-w-4xl mx-auto mt-8">
@@ -120,6 +131,28 @@ export default function CoursesPage() {
           </Card>
         ))}
       </div>
+      {/* Пагинация */}
+      {total && total > limit && (
+        <div className="mt-4 flex justify-center space-x-2">
+          <Button
+            onClick={() => handlePageChange(page - 1)}
+            disabled={page === 1}
+            className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200"
+          >
+            Предыдущая
+          </Button>
+          <span className="text-sm mt-2">
+            Страница {page} из {totalPages}
+          </span>
+          <Button
+            onClick={() => handlePageChange(page + 1)}
+            disabled={page === totalPages}
+            className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200"
+          >
+            Следующая
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

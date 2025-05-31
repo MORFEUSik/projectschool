@@ -19,6 +19,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -89,6 +90,19 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 
+	// Настройка cron для проверки дедлайнов
+	c := cron.New()
+	_, err = c.AddFunc("@every 1h", func() {
+		logger.Log.Info("Running scheduled deadline check...")
+		if err := courseService.CheckDeadlines(); err != nil {
+			logger.Log.Errorf("Failed to check deadlines: %v", err)
+		}
+	})
+	if err != nil {
+		logger.Log.Fatalf("Failed to add cron job: %v", err)
+	}
+	c.Start()
+
 	// Группа API
 	api := r.Group("/api")
 	{
@@ -108,6 +122,7 @@ func main() {
 			protected.PUT("/notifications/:id/read", handler.MarkNotificationAsRead(notificationService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
+			protected.POST("/check-deadlines", handler.CheckDeadlines(courseService))
 
 			courses := protected.Group("/courses")
 			{
@@ -123,6 +138,7 @@ func main() {
 					courseGroup.DELETE("/enroll", handler.RoleMiddleware(model.Student), handler.Unenroll(courseService))
 					courseGroup.DELETE("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteCourse(courseService))
 					courseGroup.GET("/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
+					courseGroup.GET("/progress", handler.RoleMiddleware(model.Student), handler.GetCourseProgress(courseService))
 				}
 			}
 

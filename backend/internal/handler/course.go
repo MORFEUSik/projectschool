@@ -30,29 +30,29 @@ type CreateCourseInput struct {
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param limit query int false "Лимит записей" default(10)
+// @Param limit query int false "Лимит записей" default(6)
 // @Param offset query int false "Смещение" default(0)
-// @Success 200 {array} model.Course
+// @Success 200 {object} map[string]interface{} "courses, total"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
 // @Router /courses [get]
 func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6")) // По умолчанию 6
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 		if limit < 1 || offset < 0 {
 			logger.Log.Errorf("Invalid pagination params: limit=%d, offset=%d", limit, offset)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверные параметры пагинации"})
 			return
 		}
-		courses, err := courseService.List(limit, offset)
+		courses, total, err := courseService.List(limit, offset)
 		if err != nil {
 			logger.Log.Errorf("Failed to list courses: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения курсов"})
 			return
 		}
-		c.JSON(http.StatusOK, courses)
+		c.JSON(http.StatusOK, gin.H{"courses": courses, "total": total})
 	}
 }
 
@@ -384,5 +384,117 @@ func GetCourseStats(courseService service.CourseService) gin.HandlerFunc {
 
 		logger.Log.Infof("Stats fetched for course %d by user %d", id, userID)
 		c.JSON(http.StatusOK, stats)
+	}
+}
+
+// GetCourseProgress возвращает прогресс пользователя по курсу
+// @Summary Получить прогресс по курсу
+// @Description Возвращает прогресс текущего пользователя по курсу (количество заданий, завершённых заданий, процент завершения, набранные баллы). Требуется JWT-токен. Доступно только для студентов, записанных на курс.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]interface{} "total_assignments, completed_assignments, completion_rate, total_points"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 404 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/progress [get]
+func GetCourseProgress(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Warn("Unauthorized access to course progress")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Warnf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		// Проверка: записан ли пользователь на курс
+		var enrollment model.Enrollment
+		if err := db.DB.Where("user_id = ? AND course_id = ?", userID, id).First(&enrollment).Error; err != nil {
+			logger.Log.Warnf("User %d is not enrolled in course %d: %v", userID, id, err)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Вы не записаны на этот курс"})
+			return
+		}
+
+		// Проверка: является ли пользователь студентом
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+		if user.Role != model.Student {
+			logger.Log.Warnf("User %d is not a student", userID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Только студенты могут просматривать прогресс"})
+			return
+		}
+
+		progress, err := courseService.GetProgress(uint(userID.(uint)), uint(id))
+		if err != nil {
+			logger.Log.Errorf("Failed to get progress for user %d in course %d: %v", userID, id, err)
+			if err.Error() == "курс не найден" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: err.Error()})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения прогресса"})
+			}
+			return
+		}
+
+		logger.Log.Infof("Progress fetched for user %d in course %d", userID, id)
+		c.JSON(http.StatusOK, progress)
+	}
+}
+
+// CheckDeadlines запускает проверку дедлайнов вручную
+// @Summary Ручная проверка дедлайнов
+// @Description Запускает проверку дедлайнов и отправляет уведомления. Доступно только для администратора. Требуется JWT-токен.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]string "message"
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /check-deadlines [post]
+func CheckDeadlines(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Warn("Unauthorized access to check deadlines")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+
+		if user.Role != model.Admin {
+			logger.Log.Warnf("User %d does not have permission to check deadlines", userID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Доступно только для администратора"})
+			return
+		}
+
+		if err := courseService.CheckDeadlines(); err != nil {
+			logger.Log.Errorf("Failed to check deadlines: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка проверки дедлайнов"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Дедлайны проверены"})
 	}
 }

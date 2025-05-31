@@ -16,6 +16,13 @@ interface Course {
   teacher: { username: string };
 }
 
+interface Progress {
+  total_assignments: number;
+  completed_assignments: number;
+  completion_rate: number;
+  total_points: number;
+}
+
 interface ErrorResponse {
   error?: string;
 }
@@ -26,11 +33,14 @@ export default function CoursePage() {
 
   // Приводим id к string, так как в маршруте [id] это строка
   const courseId = typeof id === 'string' ? id : '';
-  
+
   const { assignments, loading: assignmentsLoading, error: assignmentsError } = useAssignments(courseId);
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseError, setCourseError] = useState('');
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressError, setProgressError] = useState('');
 
   useEffect(() => {
     async function fetchCourse() {
@@ -53,6 +63,26 @@ export default function CoursePage() {
     }
   }, [courseId]);
 
+  // Запрос прогресса (только для студентов)
+  useEffect(() => {
+    async function fetchProgress() {
+      if (user?.role !== 'student') return; // Прогресс доступен только студентам
+      setProgressLoading(true);
+      try {
+        const response = await api.get<Progress>(`/courses/${courseId}/progress`);
+        setProgress(response.data);
+      } catch (err: unknown) {
+        const axiosError = err as AxiosError<ErrorResponse>;
+        setProgressError(axiosError.response?.data?.error || 'Ошибка загрузки прогресса');
+      } finally {
+        setProgressLoading(false);
+      }
+    }
+    if (courseId) {
+      fetchProgress();
+    }
+  }, [courseId, user]);
+
   if (!courseId) return <div className="text-center mt-8">Курс не найден</div>;
   if (courseLoading || assignmentsLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (courseError) return <div className="text-center mt-8 text-red-500">Ошибка: {courseError}</div>;
@@ -68,6 +98,35 @@ export default function CoursePage() {
           <strong>Преподаватель:</strong> {course.teacher.username}
         </p>
       </Card>
+
+      {/* Отображение прогресса (только для студентов) */}
+      {user?.role === 'student' && (
+        <Card className="p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-2">Прогресс</h2>
+          {progressLoading ? (
+            <div className="text-gray-500">Загрузка прогресса...</div>
+          ) : progressError ? (
+            <div className="text-red-500">{progressError}</div>
+          ) : progress ? (
+            <>
+              <p>Завершено: {progress.completed_assignments}/{progress.total_assignments}</p>
+              <p>Процент завершения: {progress.completion_rate}%</p>
+              <p>Набрано баллов: {progress.total_points}</p>
+              <div className="relative w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                <div
+                  className="bg-blue-600 h-2.5 rounded-full flex items-center justify-center text-xs text-white"
+                  style={{ width: `${progress.completion_rate}%` }}
+                >
+                  {progress.completion_rate > 10 && `${progress.completion_rate}%`} {/* Показываем процент, если достаточно места */}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-gray-500">Нет данных о прогрессе</div>
+          )}
+        </Card>
+      )}
+
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-semibold">Задания</h2>
         {(user?.role === 'teacher' || user?.role === 'admin') && (
