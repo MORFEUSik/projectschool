@@ -75,37 +75,40 @@ export default function CreateAssignmentPage() {
     setError('');
     setIsSubmitting(true);
     try {
-      if (!courseId || typeof courseId !== 'string') {
-        const errorMessage = 'ID курса не указан';
+        if (!courseId || typeof courseId !== 'string') {
+            const errorMessage = 'ID курса не указан';
+            setError(errorMessage);
+            toast.error(errorMessage);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('title', data.title);
+        if (data.description) formData.append('description', data.description);
+        formData.append('max_score', data.max_score.toString());
+        formData.append('due_date', `${data.due_date}:00+00:00`);
+        formData.append('course_id', courseId);
+        if (data.file) {
+            formData.append('file', data.file);
+        }
+
+        // Отладка
+        console.log('Sending FormData:', Object.fromEntries(formData));
+
+        await api.post('/assignments', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Задание успешно создано!');
+        window.location.href = `/courses/${courseId}`;
+    } catch (err: unknown) {
+        const axiosError = err as AxiosError<ErrorResponse>;
+        const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
         setError(errorMessage);
         toast.error(errorMessage);
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('title', data.title);
-      if (data.description) formData.append('description', data.description);
-      formData.append('max_score', data.max_score.toString());
-      formData.append('due_date', `${data.due_date}:00+00:00`);
-      formData.append('course_id', courseId);
-      if (data.file) {
-        formData.append('file', data.file);
-      }
-
-      await api.post('/assignments', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}`;
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
-      setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
-  };
+};
 
   return (
     <div className="max-w-4xl mx-auto mt-8">

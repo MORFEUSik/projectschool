@@ -131,6 +131,35 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
+		// Проверка существования пользователя и его роли
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки пользователя"})
+			return
+		}
+		if user.Role != model.Teacher && user.Role != model.Admin {
+			logger.Log.Errorf("User %d (%s) attempted to create assignment without permission", userID, user.Role)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Доступ запрещён"})
+			return
+		}
+
+		// Проверка существования курса
+		var course model.Course
+		if err := db.DB.First(&course, input.CourseID).Error; err != nil {
+			logger.Log.Errorf("Course %d not found: %v", input.CourseID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Курс не найден"})
+			return
+		}
+
+		// Проверка: принадлежит ли курс учителю (только для роли teacher)
+		if user.Role == model.Teacher && course.TeacherID != userID {
+			logger.Log.Errorf("Teacher %d does not own course %d", userID, course.TeacherID)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого курса"})
+			return
+		}
+		// Админы могут создавать задания для любого курса
+
 		// Обработка файла
 		var fileURL string
 		file, err := c.FormFile("file")
@@ -158,7 +187,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./uploads" // Физическая папка
+			uploadDir := "./Uploads"
 			if err := os.MkdirAll(uploadDir, 0755); err != nil {
 				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -171,13 +200,12 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
 				return
 			}
-			// Проверяем, существует ли файл
 			if _, err := os.Stat(filePath); os.IsNotExist(err) {
 				logger.Log.Errorf("File %s does not exist after saving", filePath)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл не был сохранён"})
 				return
 			}
-			fileURL = "http://localhost:8080/uploads/" + filename // URL с маленькой буквы
+			fileURL = "http://localhost:8080/uploads/" + filename
 			logger.Log.Infof("File saved successfully: %s", fileURL)
 		} else if !errors.Is(err, http.ErrMissingFile) {
 			logger.Log.Errorf("Failed to get file: %v", err)
@@ -194,27 +222,6 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			CourseID:    input.CourseID,
 			TeacherID:   userID,
 			FileURL:     fileURL,
-		}
-
-		// Проверка существования курса
-		var course model.Course
-		if err := db.DB.First(&course, assignment.CourseID).Error; err != nil {
-			logger.Log.Errorf("Course %d not found: %v", assignment.CourseID, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Курс не найден"})
-			return
-		}
-
-		// Проверка: принадлежит ли курс учителю (для роли teacher)
-		var user model.User
-		if err := db.DB.First(&user, userID).Error; err != nil {
-			logger.Log.Errorf("User %d not found: %v", userID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки пользователя"})
-			return
-		}
-		if user.Role == model.Teacher && course.TeacherID != userID {
-			logger.Log.Errorf("Teacher %d does not own course %d", userID, course.TeacherID)
-			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого курса"})
-			return
 		}
 
 		// Валидация
@@ -235,7 +242,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		// Сохранение через сервис
 		if err := assignmentService.Create(&assignment); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания заданий"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
 			return
 		}
 
