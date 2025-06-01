@@ -17,7 +17,7 @@ type Assignment struct {
 	DueDate     time.Time    `validate:"required" json:"due_date" swaggertype:"string" example:"2025-04-19T12:00:00Z" description:"Срок сдачи задания"`
 	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя, создавшего задание"`
 	Teacher     User         `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Информация о преподавателе"`
-	FileURL     string       `gorm:"type:text" json:"file_url" swaggertype:"string" example:"/Uploads/assignment1.jpg" description:"URL загруженного файла (опционально)"`
+	FileURL     string       `gorm:"type:text" json:"file_url" swaggertype:"string" example:"/uploads/assignment1.jpg" description:"URL загруженного файла (опционально)"`
 	Submissions []Submission `gorm:"foreignKey:AssignmentID;constraint:OnDelete:CASCADE" json:"submissions" description:"Список отправленных работ по заданию"`
 	CreatedAt   time.Time    `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата создания задания"`
 	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата последнего обновления задания"`

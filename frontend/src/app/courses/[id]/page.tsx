@@ -8,6 +8,12 @@ import Link from 'next/link';
 import { useUser } from '@/entities/user/hook';
 import { useAssignments } from '@/shared/hooks/useAssignments';
 import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+
+// Регистрация компонентов Chart.js
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 interface Course {
   id: number;
@@ -19,8 +25,9 @@ interface Course {
 interface Progress {
   total_assignments: number;
   completed_assignments: number;
-  completion_rate: number;
-  total_points: number;
+  completion_rate: number | string;
+  total_points: number | string;
+  completion_timeline?: { date: string; completed: number }[]; // Новый поле
 }
 
 interface ErrorResponse {
@@ -31,9 +38,7 @@ export default function CoursePage() {
   const { id } = useParams();
   const { user } = useUser();
 
-  // Приводим id к string, так как в маршруте [id] это строка
   const courseId = typeof id === 'string' ? id : '';
-
   const { assignments, loading: assignmentsLoading, error: assignmentsError } = useAssignments(courseId);
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
@@ -51,6 +56,7 @@ export default function CoursePage() {
       } catch (err: unknown) {
         const axiosError = err as AxiosError<ErrorResponse>;
         setCourseError(axiosError.response?.data?.error || 'Ошибка загрузки курса');
+        toast.error(axiosError.response?.data?.error || 'Ошибка загрузки курса');
       } finally {
         setCourseLoading(false);
       }
@@ -60,20 +66,23 @@ export default function CoursePage() {
     } else {
       setCourseLoading(false);
       setCourseError('Курс не найден');
+      toast.error('Курс не найден');
     }
   }, [courseId]);
 
-  // Запрос прогресса (только для студентов)
   useEffect(() => {
     async function fetchProgress() {
-      if (user?.role !== 'student') return; // Прогресс доступен только студентам
+      if (user?.role !== 'student') return;
       setProgressLoading(true);
       try {
         const response = await api.get<Progress>(`/courses/${courseId}/progress`);
         setProgress(response.data);
+        setProgressError('');
       } catch (err: unknown) {
         const axiosError = err as AxiosError<ErrorResponse>;
-        setProgressError(axiosError.response?.data?.error || 'Ошибка загрузки прогресса');
+        const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки прогресса';
+        setProgressError(errorMessage);
+        toast.error(errorMessage);
       } finally {
         setProgressLoading(false);
       }
@@ -83,11 +92,28 @@ export default function CoursePage() {
     }
   }, [courseId, user]);
 
-  if (!courseId) return <div className="text-center mt-8">Курс не найден</div>;
+  if (!courseId) return <div className="text-center mt-8 text-red-500">Курс не найден</div>;
   if (courseLoading || assignmentsLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (courseError) return <div className="text-center mt-8 text-red-500">Ошибка: {courseError}</div>;
   if (assignmentsError) return <div className="text-center mt-8 text-red-500">Ошибка: {assignmentsError}</div>;
-  if (!course) return <div className="text-center mt-8">Курс не найден</div>;
+  if (!course) return <div className="text-center mt-8 text-red-500">Курс не найден</div>;
+
+  const completionRate = progress ? parseFloat(progress.completion_rate.toString()) : 0;
+  const totalPoints = progress ? parseFloat(progress.total_points.toString()) : 0;
+
+  // Данные для графика
+  const chartData = {
+    labels: progress?.completion_timeline?.map((item) => item.date) || [],
+    datasets: [
+      {
+        label: 'Завершённые задания',
+        data: progress?.completion_timeline?.map((item) => item.completed) || [],
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.2)',
+        fill: true,
+      },
+    ],
+  };
 
   return (
     <div className="max-w-4xl mx-auto mt-8">
@@ -99,7 +125,6 @@ export default function CoursePage() {
         </p>
       </Card>
 
-      {/* Отображение прогресса (только для студентов) */}
       {user?.role === 'student' && (
         <Card className="p-6 mb-6">
           <h2 className="text-xl font-semibold mb-2">Прогресс</h2>
@@ -108,19 +133,41 @@ export default function CoursePage() {
           ) : progressError ? (
             <div className="text-red-500">{progressError}</div>
           ) : progress ? (
-            <>
-              <p>Завершено: {progress.completed_assignments}/{progress.total_assignments}</p>
-              <p>Процент завершения: {progress.completion_rate}%</p>
-              <p>Набрано баллов: {progress.total_points}</p>
-              <div className="relative w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                <div
-                  className="bg-blue-600 h-2.5 rounded-full flex items-center justify-center text-xs text-white"
-                  style={{ width: `${progress.completion_rate}%` }}
-                >
-                  {progress.completion_rate > 10 && `${progress.completion_rate}%`} {/* Показываем процент, если достаточно места */}
+            progress.total_assignments === 0 ? (
+              <div className="text-gray-500">Заданий в курсе пока нет</div>
+            ) : (
+              <>
+                <p>Завершено: {progress.completed_assignments}/{progress.total_assignments}</p>
+                <p>Процент завершения: {completionRate.toFixed(2)}%</p>
+                <p>Набрано баллов: {totalPoints.toFixed(2)}</p>
+                <div className="relative w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full flex items-center justify-center text-xs text-white"
+                    style={{ width: `${completionRate}%` }}
+                  >
+                    {completionRate > 10 && `${completionRate.toFixed(2)}%`}
+                  </div>
                 </div>
-              </div>
-            </>
+                {progress.completion_timeline && progress.completion_timeline.length > 0 && (
+                  <div className="mt-4">
+                    <Line
+                      data={chartData}
+                      options={{
+                        responsive: true,
+                        plugins: {
+                          legend: { position: 'top' },
+                          title: { display: true, text: 'Прогресс по курсу' },
+                        },
+                        scales: {
+                          y: { beginAtZero: true, title: { display: true, text: 'Завершённые задания' } },
+                          x: { title: { display: true, text: 'Дата' } },
+                        },
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            )
           ) : (
             <div className="text-gray-500">Нет данных о прогрессе</div>
           )}

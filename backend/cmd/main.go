@@ -53,7 +53,7 @@ func main() {
 		&model.Enrollment{},
 	)
 
-	// Создание папки Uploads с абсолютным путём
+	// Создание папки uploads с абсолютным путём
 	wd, err := os.Getwd()
 	if err != nil {
 		logger.Log.Fatalf("Failed to get working directory: %v", err)

@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	//"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -324,11 +323,21 @@ func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) 
 func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface{}, error) {
 	logger.Log.Infof("Fetching progress for user %d in course %d", userID, courseID)
 
+	// Проверка записи на курс
+	var enrollment model.Enrollment
+	if err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error; err != nil {
+		logger.Log.Errorf("User %d not enrolled in course %d: %v", userID, courseID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("пользователь не записан на курс")
+		}
+		return nil, err
+	}
+
 	var course model.Course
 	if err := s.db.Preload("Assignments.Submissions").First(&course, courseID).Error; err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("курс не найден")
+			return nil, fmt.Errorf("курс не найден")
 		}
 		return nil, err
 	}
@@ -341,7 +350,7 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 		for _, submission := range assignment.Submissions {
 			if submission.UserID == userID && submission.Grade != 0 {
 				completedAssignments++
-				totalPoints += submission.Grade * float64(assignment.MaxScore) / 5.0 // Уже корректно
+				totalPoints += submission.Grade * float64(assignment.MaxScore) / 5.0
 			}
 		}
 	}
@@ -357,8 +366,8 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 	return map[string]interface{}{
 		"total_assignments":     totalAssignments,
 		"completed_assignments": completedAssignments,
-		"completion_rate":       math.Round(completionRate*100) / 100,
-		"total_points":          math.Round(totalPoints*100) / 100,
+		"completion_rate":       fmt.Sprintf("%.2f", completionRate),
+		"total_points":          fmt.Sprintf("%.2f", totalPoints),
 	}, nil
 }
 
