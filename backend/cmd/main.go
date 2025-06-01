@@ -90,17 +90,12 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 
-	// Настройка cron для проверки дедлайнов
 	c := cron.New()
-	_, err = c.AddFunc("@every 1h", func() {
-		logger.Log.Info("Running scheduled deadline check...")
+	c.AddFunc("@every 24h", func() {
 		if err := courseService.CheckDeadlines(); err != nil {
-			logger.Log.Errorf("Failed to check deadlines: %v", err)
+			logger.Log.Errorf("Ошибка при проверке дедлайнов: %v", err)
 		}
 	})
-	if err != nil {
-		logger.Log.Fatalf("Failed to add cron job: %v", err)
-	}
 	c.Start()
 
 	// Группа API
@@ -123,6 +118,7 @@ func main() {
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 			protected.POST("/check-deadlines", handler.CheckDeadlines(courseService))
+			protected.GET("/users/me/achievements", handler.GetMyAchievements(userService))
 
 			courses := protected.Group("/courses")
 			{

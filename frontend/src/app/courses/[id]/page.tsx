@@ -127,51 +127,64 @@ export default function CoursePage() {
 
       {user?.role === 'student' && (
         <Card className="p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-2">Прогресс</h2>
-          {progressLoading ? (
-            <div className="text-gray-500">Загрузка прогресса...</div>
-          ) : progressError ? (
-            <div className="text-red-500">{progressError}</div>
-          ) : progress ? (
-            progress.total_assignments === 0 ? (
-              <div className="text-gray-500">Заданий в курсе пока нет</div>
-            ) : (
-              <>
-                <p>Завершено: {progress.completed_assignments}/{progress.total_assignments}</p>
-                <p>Процент завершения: {completionRate.toFixed(2)}%</p>
-                <p>Набрано баллов: {totalPoints.toFixed(2)}</p>
-                <div className="relative w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                  <div
-                    className="bg-blue-600 h-2.5 rounded-full flex items-center justify-center text-xs text-white"
-                    style={{ width: `${completionRate}%` }}
-                  >
-                    {completionRate > 10 && `${completionRate.toFixed(2)}%`}
-                  </div>
-                </div>
-                {progress.completion_timeline && progress.completion_timeline.length > 0 && (
-                  <div className="mt-4">
-                    <Line
-                      data={chartData}
-                      options={{
-                        responsive: true,
-                        plugins: {
-                          legend: { position: 'top' },
-                          title: { display: true, text: 'Прогресс по курсу' },
-                        },
-                        scales: {
-                          y: { beginAtZero: true, title: { display: true, text: 'Завершённые задания' } },
-                          x: { title: { display: true, text: 'Дата' } },
-                        },
-                      }}
-                    />
-                  </div>
-                )}
-              </>
-            )
-          ) : (
-            <div className="text-gray-500">Нет данных о прогрессе</div>
-          )}
-        </Card>
+  <h2 className="text-xl font-semibold mb-4">📊 Прогресс по курсу</h2>
+
+  {progressLoading ? (
+    <div className="text-gray-500">Загрузка прогресса...</div>
+  ) : progressError ? (
+    <div className="text-red-500">{progressError}</div>
+  ) : progress ? (
+    progress.total_assignments === 0 ? (
+      <div className="text-gray-500">Заданий в курсе пока нет</div>
+    ) : (
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 text-center">
+          <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+            <p className="text-sm text-gray-600">Сдано заданий</p>
+            <p className="text-xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
+          </div>
+          <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+            <p className="text-sm text-gray-600">Процент завершения</p>
+            <p className="text-xl font-bold">{completionRate.toFixed(1)}%</p>
+          </div>
+          <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+            <p className="text-sm text-gray-600">Набрано баллов</p>
+            <p className="text-xl font-bold">{totalPoints.toFixed(1)}</p>
+          </div>
+        </div>
+
+        <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4">
+          <div
+            className="bg-blue-500 h-4 transition-all duration-500 ease-in-out"
+            style={{ width: `${completionRate}%` }}
+          />
+        </div>
+
+        {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
+          <div className="mt-6">
+            <Line
+              data={chartData}
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { position: 'top' },
+                  title: { display: true, text: 'Динамика выполнения заданий' },
+                },
+                scales: {
+                  y: { beginAtZero: true, title: { display: true, text: 'Сдано заданий' } },
+                  x: { title: { display: true, text: 'Дата' } },
+                },
+              }}
+            />
+          </div>
+        )}
+      </>
+    )
+  ) : (
+    <div className="text-gray-500">Нет данных о прогрессе</div>
+  )}
+</Card>
+
       )}
 
       <div className="flex justify-between items-center mb-4">

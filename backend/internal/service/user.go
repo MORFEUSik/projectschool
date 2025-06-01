@@ -19,6 +19,7 @@ type UserService interface {
 	UpdateRole(userID, adminID uint, role model.Role) error
 	UpdateProfile(userID uint, username, email string) error
 	ListAll() ([]model.User, error)
+	GetAchievements(userID uint) ([]model.UserAchievement, error)
 }
 
 type userService struct {
@@ -185,4 +186,10 @@ func (s *userService) ListAll() ([]model.User, error) {
 	var users []model.User
 	err := s.db.Find(&users).Error
 	return users, err
+}
+
+func (s *userService) GetAchievements(userID uint) ([]model.UserAchievement, error) {
+	var achievements []model.UserAchievement
+	err := s.db.Preload("Achievement").Where("user_id = ?", userID).Find(&achievements).Error
+	return achievements, err
 }

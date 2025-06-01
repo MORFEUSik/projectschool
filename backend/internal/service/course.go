@@ -372,38 +372,28 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 }
 
 func (s *courseService) CheckDeadlines() error {
-	logger.Log.Info("Checking deadlines for assignments")
-
-	// Устанавливаем диапазон времени (например, за 24 часа до дедлайна)
 	deadlineThreshold := time.Now().Add(24 * time.Hour)
-
 	var assignments []model.Assignment
-	if err := s.db.Where("due_date BETWEEN ? AND ?", time.Now(), deadlineThreshold).Preload("Course").Find(&assignments).Error; err != nil {
-		logger.Log.Errorf("Failed to fetch assignments with upcoming deadlines: %v", err)
+	if err := s.db.
+		Where("due_date BETWEEN ? AND ?", time.Now(), deadlineThreshold).
+		Preload("Course").
+		Find(&assignments).Error; err != nil {
 		return err
 	}
-
 	for _, assignment := range assignments {
-		// Получаем всех студентов, записанных на курс
 		var enrollments []model.Enrollment
 		if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err != nil {
-			logger.Log.Errorf("Failed to fetch enrollments for course %d: %v", assignment.CourseID, err)
 			continue
 		}
-
 		for _, enrollment := range enrollments {
-			notification := &model.Notification{
+			msg := fmt.Sprintf("Дедлайн задания '%s' на курсе '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123))
+			_ = s.notificationRepo.Create(&model.Notification{
 				UserID:    enrollment.UserID,
-				Message:   fmt.Sprintf("Дедлайн задания '%s' на курсе '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123)),
+				Message:   msg,
 				IsRead:    false,
 				CreatedAt: time.Now(),
-			}
-			if err := s.notificationRepo.Create(notification); err != nil {
-				logger.Log.Errorf("Failed to create deadline notification for user %d: %v", enrollment.UserID, err)
-			}
+			})
 		}
 	}
-
-	logger.Log.Info("Deadline check completed")
 	return nil
 }

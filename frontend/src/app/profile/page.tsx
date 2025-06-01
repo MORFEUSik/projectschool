@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
+import Link from 'next/link';
 
 interface ErrorResponse {
   error?: string;
@@ -105,6 +106,12 @@ export default function ProfilePage() {
           </>
         )}
       </Card>
+		<div className="mt-6">
+  <Link href="/achievements">
+    <Button>Мои достижения 🏆</Button>
+  </Link>
+</div>
+
     </div>
   );
 }
