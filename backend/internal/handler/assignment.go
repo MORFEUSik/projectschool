@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository" // ← вот это добавь
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -89,6 +91,8 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			MaxScore    uint      `form:"max_score" validate:"required,gte=0"`
 			DueDate     time.Time `form:"due_date" validate:"required"`
 			CourseID    uint      `form:"course_id" validate:"required"`
+			Type        string    `form:"type"`     // ← новое поле
+			SubtasksRaw string    `form:"subtasks"` // ← JSON-строка
 		}
 
 		var input AssignmentInput
@@ -96,6 +100,15 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			logger.Log.Errorf("Failed to bind form data: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
+		}
+
+		var subtasks []model.Subtask
+		if input.SubtasksRaw != "" {
+			if err := json.Unmarshal([]byte(input.SubtasksRaw), &subtasks); err != nil {
+				logger.Log.Errorf("Failed to parse subtasks JSON: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки подзаданий"})
+				return
+			}
 		}
 
 		// Получаем userID из контекста
@@ -217,6 +230,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		assignment := model.Assignment{
 			Title:       input.Title,
 			Description: input.Description,
+			Type:        input.Type,
 			MaxScore:    input.MaxScore,
 			DueDate:     input.DueDate,
 			CourseID:    input.CourseID,
@@ -240,7 +254,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		}
 
 		// Сохранение через сервис
-		if err := assignmentService.Create(&assignment); err != nil {
+		if err := assignmentService.Create(&assignment, subtasks); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
 			return
@@ -504,5 +518,54 @@ func UploadFile() gin.HandlerFunc {
 		logger.Log.Infof("File saved successfully: %s", fileURL)
 
 		c.JSON(http.StatusOK, gin.H{"file_url": fileURL})
+	}
+}
+
+func SubmitQuizAssignment(submissionService service.SubmissionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		assignmentID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
+			return
+		}
+
+		userID := c.GetUint("userID")
+
+		var input struct {
+			Answers []model.SubtaskSubmission `json:"answers" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			return
+		}
+
+		grade, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Решение отправлено",
+			"grade":   grade,
+		})
+	}
+}
+
+func GetSubtasks(subtaskRepo repository.SubtaskRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		assignmentID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
+			return
+		}
+
+		subtasks, err := subtaskRepo.FindByAssignment(uint(assignmentID))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения подзаданий"})
+			return
+		}
+
+		c.JSON(http.StatusOK, subtasks)
 	}
 }

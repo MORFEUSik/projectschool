@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -17,6 +18,7 @@ import (
 type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
+	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error)
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
 	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) // Добавляем метод
@@ -281,4 +283,89 @@ func (s *submissionService) GetUserSubmissions(ctx context.Context, userID uint)
 
 	logger.Log.Infof("Fetched %d submissions for user %d", len(submissions), userID)
 	return submissions, nil
+}
+
+func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error) {
+	// 1. Получаем подзадания
+	var subtasks []model.Subtask
+	if err := s.db.Where("assignment_id = ?", assignmentID).Find(&subtasks).Error; err != nil {
+		return 0, err
+	}
+	subtaskMap := make(map[uint]model.Subtask)
+	for _, st := range subtasks {
+		subtaskMap[st.ID] = st
+	}
+
+	// 2. Считаем пребаллы
+	var totalPrePoints, maxPrePoints float64
+	for _, answer := range answers {
+		sub, ok := subtaskMap[answer.SubtaskID]
+		if !ok {
+			continue
+		}
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.ToLower(sub.Answer)
+		pre := 0.0
+		if isCorrect {
+			if answer.Attempts == 1 {
+				pre = 1.0
+			} else if answer.Attempts == 2 {
+				pre = 0.8
+			} else {
+				pre = 0.5
+			}
+		}
+		maxPrePoints += 1
+		totalPrePoints += pre
+
+		answer.IsCorrect = isCorrect
+		answer.UserID = userID
+
+		if err := s.db.Create(&answer).Error; err != nil {
+			return 0, err
+		}
+	}
+
+	// 3. Итоговая оценка
+	percent := totalPrePoints / maxPrePoints * 100
+	var grade float64
+	switch {
+	case percent >= 80:
+		grade = 5
+	case percent >= 60:
+		grade = 4
+	case percent >= 40:
+		grade = 3
+	case percent >= 20:
+		grade = 2
+	default:
+		grade = 1
+	}
+
+	// 4. Сохраняем submission
+	submission := model.Submission{
+		AssignmentID: assignmentID,
+		UserID:       userID,
+		Grade:        grade,
+	}
+	if err := s.db.Create(&submission).Error; err != nil {
+		return 0, err
+	}
+
+	// 5. Начисляем баллы (по весу макс. баллов задания)
+	var assignment model.Assignment
+	if err := s.db.First(&assignment, assignmentID).Error; err == nil {
+		points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+		s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
+	}
+
+	// Уведомление
+	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
+	s.notificationRepo.Create(&model.Notification{
+		UserID:    userID,
+		Message:   msg,
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	})
+
+	return grade, nil
 }

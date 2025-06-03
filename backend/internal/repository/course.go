@@ -42,32 +42,56 @@ func (r *courseRepository) Delete(id uint) error {
 	return r.db.Delete(&model.Course{}, id).Error
 }
 
-func (r *courseRepository) GetStats(id uint) (map[string]interface{}, error) {
-	var stats struct {
-		StudentsCount  int64   `gorm:"column:students_count"`
-		AverageGrade   float64 `gorm:"column:average_grade"`
-		CompletionRate float64 `gorm:"column:completion_rate"`
-	}
-	err := r.db.Raw(`
-		SELECT 
-			COUNT(DISTINCT e.user_id) as students_count,
-			COALESCE(AVG(s.grade), 0) as average_grade,
-			COALESCE(
-				COUNT(DISTINCT s.id)::float / NULLIF(COUNT(DISTINCT a.id) * COUNT(DISTINCT e.user_id), 0),
-				0
-			) as completion_rate
-		FROM courses c
-		LEFT JOIN enrollments e ON e.course_id = c.id
-		LEFT JOIN assignments a ON a.course_id = c.id
-		LEFT JOIN submissions s ON s.assignment_id = a.id
-		WHERE c.id = ?
-	`, id).Scan(&stats).Error
-	if err != nil {
+func (r *courseRepository) GetStats(courseID uint) (map[string]interface{}, error) {
+	var (
+		studentsCount    int64
+		assignmentsCount int64
+		submissionsCount int64
+		averageGrade     float64
+	)
+
+	// Сколько студентов записано
+	if err := r.db.Model(&model.Enrollment{}).
+		Where("course_id = ?", courseID).
+		Count(&studentsCount).Error; err != nil {
 		return nil, err
 	}
+
+	// Сколько заданий у курса
+	if err := r.db.Model(&model.Assignment{}).
+		Where("course_id = ?", courseID).
+		Count(&assignmentsCount).Error; err != nil {
+		return nil, err
+	}
+
+	// Сколько всего решений у этих заданий
+	if err := r.db.Model(&model.Submission{}).
+		Joins("JOIN assignments ON submissions.assignment_id = assignments.id").
+		Where("assignments.course_id = ?", courseID).
+		Count(&submissionsCount).Error; err != nil {
+		return nil, err
+	}
+
+	// Средняя оценка (по только тем, у кого grade > 0)
+	if err := r.db.Model(&model.Submission{}).
+		Select("AVG(grade)").
+		Where("grade > 0").
+		Joins("JOIN assignments ON submissions.assignment_id = assignments.id").
+		Where("assignments.course_id = ?", courseID).
+		Scan(&averageGrade).Error; err != nil {
+		return nil, err
+	}
+
+	// Общий процент завершения курса
+	var completionRate float64 = 0
+	if studentsCount > 0 && assignmentsCount > 0 {
+		totalPossible := float64(studentsCount * assignmentsCount)
+		completionRate = float64(submissionsCount) / totalPossible * 100
+	}
+
 	return map[string]interface{}{
-		"students_count":  stats.StudentsCount,
-		"average_grade":   stats.AverageGrade,
-		"completion_rate": stats.CompletionRate,
+		"students_count":  studentsCount,
+		"average_grade":   averageGrade,
+		"completion_rate": completionRate,
 	}, nil
 }

@@ -30,6 +30,13 @@ interface Progress {
   completion_timeline?: { date: string; completed: number }[]; // Новый поле
 }
 
+interface Stats {
+  students_count: number;
+  average_grade: number;
+  completion_rate: number;
+}
+
+
 interface ErrorResponse {
   error?: string;
 }
@@ -43,9 +50,37 @@ export default function CoursePage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseError, setCourseError] = useState('');
+  
   const [progress, setProgress] = useState<Progress | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressError, setProgressError] = useState('');
+
+const [stats, setStats] = useState<Stats | null>(null);
+const [statsLoading, setStatsLoading] = useState(false);
+const [statsError, setStatsError] = useState('');
+
+	useEffect(() => {
+  async function fetchStats() {
+    if (!['teacher', 'admin'].includes(user?.role || '')) return;
+    setStatsLoading(true);
+    try {
+      const response = await api.get<Stats>(`/courses/${courseId}/stats`);
+      setStats(response.data);
+      setStatsError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
+      setStatsError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setStatsLoading(false);
+    }
+  }
+  if (courseId) {
+    fetchStats();
+  }
+}, [courseId, user]);
+
 
   useEffect(() => {
     async function fetchCourse() {
@@ -116,104 +151,159 @@ export default function CoursePage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">{course.title}</h1>
+  <div className="max-w-4xl mx-auto mt-8">
+    <h1 className="text-3xl font-bold mb-6">{course.title}</h1>
+
+    <Card className="p-6 mb-6">
+      <p className="mb-2">{course.description}</p>
+      <p>
+        <strong>Преподаватель:</strong> {course.teacher.username}
+      </p>
+    </Card>
+
+    {/* Статистика (для teacher и admin) */}
+    {['teacher', 'admin'].includes(user?.role || '') && (
       <Card className="p-6 mb-6">
-        <p className="mb-2">{course.description}</p>
-        <p>
-          <strong>Преподаватель:</strong> {course.teacher.username}
-        </p>
-      </Card>
-
-      {user?.role === 'student' && (
-        <Card className="p-6 mb-6">
-  <h2 className="text-xl font-semibold mb-4">📊 Прогресс по курсу</h2>
-
-  {progressLoading ? (
-    <div className="text-gray-500">Загрузка прогресса...</div>
-  ) : progressError ? (
-    <div className="text-red-500">{progressError}</div>
-  ) : progress ? (
-    progress.total_assignments === 0 ? (
-      <div className="text-gray-500">Заданий в курсе пока нет</div>
-    ) : (
-      <>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 text-center">
-          <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-            <p className="text-sm text-gray-600">Сдано заданий</p>
-            <p className="text-xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
-          </div>
-          <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-            <p className="text-sm text-gray-600">Процент завершения</p>
-            <p className="text-xl font-bold">{completionRate.toFixed(1)}%</p>
-          </div>
-          <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-            <p className="text-sm text-gray-600">Набрано баллов</p>
-            <p className="text-xl font-bold">{totalPoints.toFixed(1)}</p>
-          </div>
-        </div>
-
-        <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4">
-          <div
-            className="bg-blue-500 h-4 transition-all duration-500 ease-in-out"
-            style={{ width: `${completionRate}%` }}
-          />
-        </div>
-
-        {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
-          <div className="mt-6">
-            <Line
-              data={chartData}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: { position: 'top' },
-                  title: { display: true, text: 'Динамика выполнения заданий' },
-                },
-                scales: {
-                  y: { beginAtZero: true, title: { display: true, text: 'Сдано заданий' } },
-                  x: { title: { display: true, text: 'Дата' } },
-                },
-              }}
-            />
-          </div>
-        )}
-      </>
-    )
-  ) : (
-    <div className="text-gray-500">Нет данных о прогрессе</div>
-  )}
-</Card>
-
-      )}
-
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold">Задания</h2>
-        {(user?.role === 'teacher' || user?.role === 'admin') && (
-          <Link href={`/courses/${courseId}/assignments/new`}>
-            <Button>Создать задание</Button>
-          </Link>
-        )}
-      </div>
-      <div className="space-y-4">
-        {assignments.map((assignment) => (
-          <Card key={assignment.id} className="p-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold">{assignment.title}</h3>
-              <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
-                <Button variant="outline">Открыть</Button>
-              </Link>
+        <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
+        {statsLoading ? (
+          <div className="text-gray-500">Загрузка статистики...</div>
+        ) : statsError ? (
+          <div className="text-red-500">{statsError}</div>
+        ) : stats ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Студентов на курсе</p>
+              <p className="text-xl font-bold">{stats.students_count}</p>
             </div>
-            <p className="mt-2">{assignment.description}</p>
-            <p className="mt-2">
-              <strong>Максимальный балл:</strong> {assignment.max_score}
-            </p>
-            <p className="mt-2">
-              <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
-            </p>
-          </Card>
-        ))}
-      </div>
+            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Средний балл</p>
+              <p className="text-xl font-bold">{stats.average_grade.toFixed(2)}</p>
+            </div>
+            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Завершено заданий</p>
+              <p className="text-xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
+            </div>
+          </div>
+        ) : (
+          <div className="text-gray-500">Нет данных о статистике</div>
+        )}
+      </Card>
+    )}
+
+    {/* Прогресс (для student) */}
+    {user?.role === 'student' && (
+      <Card className="p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">📊 Прогресс по курсу</h2>
+
+        {progressLoading ? (
+          <div className="text-gray-500">Загрузка прогресса...</div>
+        ) : progressError ? (
+          <div className="text-red-500">{progressError}</div>
+        ) : progress ? (
+          progress.total_assignments === 0 ? (
+            <div className="text-gray-500">Заданий в курсе пока нет</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 text-center">
+                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">Сдано заданий</p>
+                  <p className="text-xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
+                </div>
+                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">Процент завершения</p>
+                  <p className="text-xl font-bold">{completionRate.toFixed(1)}%</p>
+                </div>
+                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">Набрано баллов</p>
+                  <p className="text-xl font-bold">{totalPoints.toFixed(1)}</p>
+                </div>
+              </div>
+
+              <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4">
+                <div
+                  className="bg-blue-500 h-4 transition-all duration-500 ease-in-out"
+                  style={{ width: `${completionRate}%` }}
+                />
+              </div>
+
+              {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
+                <div className="mt-6">
+                  <Line
+                    data={chartData}
+                    options={{
+                      responsive: true,
+                      plugins: {
+                        legend: { position: 'top' },
+                        title: { display: true, text: 'Динамика выполнения заданий' },
+                      },
+                      scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Сдано заданий' } },
+                        x: { title: { display: true, text: 'Дата' } },
+                      },
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          )
+        ) : (
+          <div className="text-gray-500">Нет данных о прогрессе</div>
+        )}
+      </Card>
+    )}
+
+    {/* Список заданий */}
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-2xl font-semibold">Задания</h2>
+      {(user?.role === 'teacher' || user?.role === 'admin') && (
+        <Link href={`/courses/${courseId}/assignments/new`}>
+          <Button>Создать задание</Button>
+        </Link>
+      )}
     </div>
-  );
+
+    <div className="space-y-4">
+      {assignments.map((assignment) => (
+        <Card key={assignment.id} className="p-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold">{assignment.title}</h3>
+            <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+              <Button variant="outline">Открыть</Button>
+            </Link>
+          </div>
+          <p className="mt-2">{assignment.description}</p>
+          <p className="mt-2">
+            <strong>Максимальный балл:</strong> {assignment.max_score}
+          </p>
+          <p className="mt-2">
+            <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
+          </p>
+        </Card>
+      ))}
+    </div>
+
+    {/* Удаление курса (admin) */}
+    {user?.role === 'admin' && (
+      <Button
+        variant="destructive"
+        className="mt-4"
+        onClick={async () => {
+          if (confirm('Вы уверены, что хотите удалить этот курс?')) {
+            try {
+              await api.delete(`/courses/${courseId}`);
+              toast.success('Курс успешно удалён');
+              window.location.href = '/courses';
+            } catch (err) {
+              console.error('Ошибка при удалении курса:', err);
+              toast.error('Ошибка при удалении курса');
+            }
+          }
+        }}
+      >
+        Удалить курс
+      </Button>
+    )}
+  </div>
+);
+
 }

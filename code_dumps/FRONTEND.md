@@ -8,7 +8,7 @@ frontend/
 ├── next-env.d.ts
 ├── next.config.ts
 ├── package.json
-├── postcss.config.mjs
+├── postcss.config.js
 ├── public
 │   ├── file.svg
 │   ├── globe.svg
@@ -17,6 +17,8 @@ frontend/
 │   └── window.svg
 ├── src
 │   ├── app
+│   │   ├── achievements
+│   │   │   └── page.tsx
 │   │   ├── admin
 │   │   │   └── page.tsx
 │   │   ├── auth
@@ -68,15 +70,72 @@ frontend/
 │       │   ├── useAuth.tsx
 │       │   ├── useCourses.ts
 │       │   └── useSubmissions.ts
+│       ├── lib
+│       │   └── utils.ts
 │       └── ui
 │           ├── Button.tsx
 │           ├── Card.tsx
 │           └── Input.tsx
+├── tailwind.config.ts
 └── tsconfig.json
 
 ================================================================================
 СОДЕРЖИМОЕ ФАЙЛОВ
 ================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/tailwind.config.ts
+════════════════════════════════════════════════════════════════════════════════
+
+// frontend/tailwind.config.ts
+import type { Config } from 'tailwindcss';
+
+const config: Config = {
+  content: [
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx}',
+    './src/shared/ui/**/*.{js,ts,jsx,tsx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+  background: 'var(--background)',
+  foreground: 'var(--foreground)',
+  primary: '#2563eb',
+  accent: '#4f46e5',
+  highlight: '#10b981',
+},
+
+      animation: {
+        fadeIn: 'fadeIn 0.5s ease-out forwards',
+        slideUp: 'slideUp 0.6s ease-out forwards',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideUp: {
+          '0%': { opacity: 0, transform: 'translateY(20px)' },
+          '100%': { opacity: 1, transform: 'translateY(0)' },
+        },
+      },
+      boxShadow: {
+        soft: '0 4px 10px rgba(0, 0, 0, 0.08)',
+      },
+      borderRadius: {
+        xl: '1rem',
+        '2xl': '1.5rem',
+      },
+    },
+  },
+  plugins: [],
+  darkMode: 'class',
+};
+
+export default config;
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -211,24 +270,27 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header>
-        <nav className="flex justify-between items-center p-4 bg-blue-600 text-white shadow-md">
-          <Link href="/" className="text-xl font-bold">ProjectSchool</Link>
-          <div className="space-x-4">
-            <Link href="/courses" className="hover:underline">Курсы</Link>
-            <Link href="/leaderboard" className="hover:underline">Лидерборд</Link>
-            <Link href="/submissions" className="hover:underline">Мои решения</Link>
-            <Link href="/profile" className="hover:underline">Профиль</Link>
-            <Link href="/admin" className="hover:underline">Админка</Link>
-            {token ? (
-              <button onClick={logout} className="hover:underline">Выйти</button>
-            ) : (
-              <>
-                <Link href="/auth/login" className="hover:underline">Войти</Link>
-                <Link href="/auth/register" className="hover:underline">Регистрация</Link>
-              </>
-            )}
-          </div>
-        </nav>
+        <nav className="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-blue-700 to-indigo-600 text-white shadow-lg transition-all duration-300 animate-fadeIn">
+  <Link href="/" className="text-2xl font-extrabold tracking-tight hover:scale-105 transition-transform duration-300">
+    ProjectSchool
+  </Link>
+  <div className="flex gap-4 items-center text-sm font-medium">
+    <Link className="hover:text-yellow-300 transition-colors" href="/courses">Курсы</Link>
+    <Link className="hover:text-yellow-300 transition-colors" href="/leaderboard">Лидерборд</Link>
+    <Link className="hover:text-yellow-300 transition-colors" href="/submissions">Мои решения</Link>
+    <Link className="hover:text-yellow-300 transition-colors" href="/profile">Профиль</Link>
+    <Link className="hover:text-yellow-300 transition-colors" href="/admin">Админка</Link>
+    {token ? (
+      <button onClick={logout} className="hover:text-red-300 transition-colors">Выйти</button>
+    ) : (
+      <>
+        <Link className="hover:text-green-300 transition-colors" href="/auth/login">Войти</Link>
+        <Link className="hover:text-green-300 transition-colors" href="/auth/register">Регистрация</Link>
+      </>
+    )}
+  </div>
+</nav>
+
       </header>
       <main className="flex-grow p-4">{children}</main>
       <footer className="p-4 bg-gray-800 text-white text-center">
@@ -571,6 +633,13 @@ interface Progress {
   completion_timeline?: { date: string; completed: number }[]; // Новый поле
 }
 
+interface Stats {
+  students_count: number;
+  average_grade: number;
+  completion_rate: number;
+}
+
+
 interface ErrorResponse {
   error?: string;
 }
@@ -584,9 +653,37 @@ export default function CoursePage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseError, setCourseError] = useState('');
+  
   const [progress, setProgress] = useState<Progress | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressError, setProgressError] = useState('');
+
+const [stats, setStats] = useState<Stats | null>(null);
+const [statsLoading, setStatsLoading] = useState(false);
+const [statsError, setStatsError] = useState('');
+
+	useEffect(() => {
+  async function fetchStats() {
+    if (!['teacher', 'admin'].includes(user?.role || '')) return;
+    setStatsLoading(true);
+    try {
+      const response = await api.get<Stats>(`/courses/${courseId}/stats`);
+      setStats(response.data);
+      setStatsError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
+      setStatsError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setStatsLoading(false);
+    }
+  }
+  if (courseId) {
+    fetchStats();
+  }
+}, [courseId, user]);
+
 
   useEffect(() => {
     async function fetchCourse() {
@@ -657,93 +754,161 @@ export default function CoursePage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">{course.title}</h1>
+  <div className="max-w-4xl mx-auto mt-8">
+    <h1 className="text-3xl font-bold mb-6">{course.title}</h1>
+
+    <Card className="p-6 mb-6">
+      <p className="mb-2">{course.description}</p>
+      <p>
+        <strong>Преподаватель:</strong> {course.teacher.username}
+      </p>
+    </Card>
+
+    {/* Статистика (для teacher и admin) */}
+    {['teacher', 'admin'].includes(user?.role || '') && (
       <Card className="p-6 mb-6">
-        <p className="mb-2">{course.description}</p>
-        <p>
-          <strong>Преподаватель:</strong> {course.teacher.username}
-        </p>
-      </Card>
-
-      {user?.role === 'student' && (
-        <Card className="p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-2">Прогресс</h2>
-          {progressLoading ? (
-            <div className="text-gray-500">Загрузка прогресса...</div>
-          ) : progressError ? (
-            <div className="text-red-500">{progressError}</div>
-          ) : progress ? (
-            progress.total_assignments === 0 ? (
-              <div className="text-gray-500">Заданий в курсе пока нет</div>
-            ) : (
-              <>
-                <p>Завершено: {progress.completed_assignments}/{progress.total_assignments}</p>
-                <p>Процент завершения: {completionRate.toFixed(2)}%</p>
-                <p>Набрано баллов: {totalPoints.toFixed(2)}</p>
-                <div className="relative w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                  <div
-                    className="bg-blue-600 h-2.5 rounded-full flex items-center justify-center text-xs text-white"
-                    style={{ width: `${completionRate}%` }}
-                  >
-                    {completionRate > 10 && `${completionRate.toFixed(2)}%`}
-                  </div>
-                </div>
-                {progress.completion_timeline && progress.completion_timeline.length > 0 && (
-                  <div className="mt-4">
-                    <Line
-                      data={chartData}
-                      options={{
-                        responsive: true,
-                        plugins: {
-                          legend: { position: 'top' },
-                          title: { display: true, text: 'Прогресс по курсу' },
-                        },
-                        scales: {
-                          y: { beginAtZero: true, title: { display: true, text: 'Завершённые задания' } },
-                          x: { title: { display: true, text: 'Дата' } },
-                        },
-                      }}
-                    />
-                  </div>
-                )}
-              </>
-            )
-          ) : (
-            <div className="text-gray-500">Нет данных о прогрессе</div>
-          )}
-        </Card>
-      )}
-
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold">Задания</h2>
-        {(user?.role === 'teacher' || user?.role === 'admin') && (
-          <Link href={`/courses/${courseId}/assignments/new`}>
-            <Button>Создать задание</Button>
-          </Link>
-        )}
-      </div>
-      <div className="space-y-4">
-        {assignments.map((assignment) => (
-          <Card key={assignment.id} className="p-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold">{assignment.title}</h3>
-              <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
-                <Button variant="outline">Открыть</Button>
-              </Link>
+        <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
+        {statsLoading ? (
+          <div className="text-gray-500">Загрузка статистики...</div>
+        ) : statsError ? (
+          <div className="text-red-500">{statsError}</div>
+        ) : stats ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Студентов на курсе</p>
+              <p className="text-xl font-bold">{stats.students_count}</p>
             </div>
-            <p className="mt-2">{assignment.description}</p>
-            <p className="mt-2">
-              <strong>Максимальный балл:</strong> {assignment.max_score}
-            </p>
-            <p className="mt-2">
-              <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
-            </p>
-          </Card>
-        ))}
-      </div>
+            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Средний балл</p>
+              <p className="text-xl font-bold">{stats.average_grade.toFixed(2)}</p>
+            </div>
+            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Завершено заданий</p>
+              <p className="text-xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
+            </div>
+          </div>
+        ) : (
+          <div className="text-gray-500">Нет данных о статистике</div>
+        )}
+      </Card>
+    )}
+
+    {/* Прогресс (для student) */}
+    {user?.role === 'student' && (
+      <Card className="p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">📊 Прогресс по курсу</h2>
+
+        {progressLoading ? (
+          <div className="text-gray-500">Загрузка прогресса...</div>
+        ) : progressError ? (
+          <div className="text-red-500">{progressError}</div>
+        ) : progress ? (
+          progress.total_assignments === 0 ? (
+            <div className="text-gray-500">Заданий в курсе пока нет</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 text-center">
+                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">Сдано заданий</p>
+                  <p className="text-xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
+                </div>
+                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">Процент завершения</p>
+                  <p className="text-xl font-bold">{completionRate.toFixed(1)}%</p>
+                </div>
+                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">Набрано баллов</p>
+                  <p className="text-xl font-bold">{totalPoints.toFixed(1)}</p>
+                </div>
+              </div>
+
+              <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4">
+                <div
+                  className="bg-blue-500 h-4 transition-all duration-500 ease-in-out"
+                  style={{ width: `${completionRate}%` }}
+                />
+              </div>
+
+              {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
+                <div className="mt-6">
+                  <Line
+                    data={chartData}
+                    options={{
+                      responsive: true,
+                      plugins: {
+                        legend: { position: 'top' },
+                        title: { display: true, text: 'Динамика выполнения заданий' },
+                      },
+                      scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Сдано заданий' } },
+                        x: { title: { display: true, text: 'Дата' } },
+                      },
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          )
+        ) : (
+          <div className="text-gray-500">Нет данных о прогрессе</div>
+        )}
+      </Card>
+    )}
+
+    {/* Список заданий */}
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-2xl font-semibold">Задания</h2>
+      {(user?.role === 'teacher' || user?.role === 'admin') && (
+        <Link href={`/courses/${courseId}/assignments/new`}>
+          <Button>Создать задание</Button>
+        </Link>
+      )}
     </div>
-  );
+
+    <div className="space-y-4">
+      {assignments.map((assignment) => (
+        <Card key={assignment.id} className="p-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold">{assignment.title}</h3>
+            <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+              <Button variant="outline">Открыть</Button>
+            </Link>
+          </div>
+          <p className="mt-2">{assignment.description}</p>
+          <p className="mt-2">
+            <strong>Максимальный балл:</strong> {assignment.max_score}
+          </p>
+          <p className="mt-2">
+            <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
+          </p>
+        </Card>
+      ))}
+    </div>
+
+    {/* Удаление курса (admin) */}
+    {user?.role === 'admin' && (
+      <Button
+        variant="destructive"
+        className="mt-4"
+        onClick={async () => {
+          if (confirm('Вы уверены, что хотите удалить этот курс?')) {
+            try {
+              await api.delete(`/courses/${courseId}`);
+              toast.success('Курс успешно удалён');
+              window.location.href = '/courses';
+            } catch (err) {
+              console.error('Ошибка при удалении курса:', err);
+              toast.error('Ошибка при удалении курса');
+            }
+          }
+        }}
+      >
+        Удалить курс
+      </Button>
+    )}
+  </div>
+);
+
 }
 
 
@@ -797,11 +962,13 @@ const submissionSchema = z.object({
 });
 
 const gradeSchema = z.object({
-  score: z.number().min(0, 'Оценка не может быть отрицательной'),
+  grade: z.number().min(0, 'Оценка не может быть отрицательной').max(5, 'Максимум — 5'),
 });
+
 
 type SubmissionFormData = z.infer<typeof submissionSchema>;
 type GradeFormData = z.infer<typeof gradeSchema>;
+
 
 export default function AssignmentPage() {
   const { id: courseId, assignmentId } = useParams();
@@ -820,7 +987,7 @@ export default function AssignmentPage() {
 
   const gradeForm = useForm<GradeFormData>({
     resolver: zodResolver(gradeSchema),
-    defaultValues: { score: 0 },
+    defaultValues: { grade: 0 },
   });
 
   useEffect(() => {
@@ -888,9 +1055,10 @@ export default function AssignmentPage() {
 
   const handleGrade = async (submissionId: number, data: GradeFormData) => {
     try {
-      await api.put(`/submissions/${submissionId}/grade`, data);
+      await api.put(`/submissions/${submissionId}/grade`, { grade: data.grade });
+
       setSubmissions((prev) =>
-        prev.map((sub) => (sub.id === submissionId ? { ...sub, score: data.score } : sub))
+        prev.map((sub) => (sub.id === submissionId ? { ...sub, grade: data.grade } : sub))
       );
       gradeForm.reset();
       toast.success('Оценка выставлена');
@@ -1010,18 +1178,19 @@ export default function AssignmentPage() {
                     className="mt-4 flex space-x-2"
                   >
                     <Input
-                      type="number"
-                      {...gradeForm.register('score', { valueAsNumber: true })}
-                      placeholder="Оценка"
-                      className="w-24"
-                    />
+  type="number"
+  {...gradeForm.register('grade', { valueAsNumber: true })}
+  placeholder="Оценка"
+  className="w-24"
+/>
+
                     <Button type="submit" disabled={gradeForm.formState.isSubmitting}>
                       Выставить
                     </Button>
                   </form>
-                  {gradeForm.formState.errors.score && (
-                    <p className="text-red-500 text-sm">{gradeForm.formState.errors.score.message}</p>
-                  )}
+                  {gradeForm.formState.errors.grade && (
+  <p className="text-red-500 text-sm">{gradeForm.formState.errors.grade.message}</p>
+)}
                 </div>
               ))}
             </div>
@@ -1549,6 +1718,7 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
+import Link from 'next/link';
 
 interface ErrorResponse {
   error?: string;
@@ -1648,6 +1818,74 @@ export default function ProfilePage() {
           </>
         )}
       </Card>
+		<div className="mt-6">
+  <Link href="/achievements">
+    <Button>Мои достижения 🏆</Button>
+  </Link>
+</div>
+
+    </div>
+  );
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/achievements/page.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+'use client';
+import { useEffect, useState } from 'react';
+import { api } from '@/shared/api';
+import { Card } from '@/shared/ui/Card';
+import { useUser } from '@/entities/user/hook';
+
+interface Achievement {
+  title: string;
+  description: string;
+  awarded_at: string;
+}
+
+export default function AchievementsPage() {
+  useUser(); // если нужен вызов для авторизации
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchAchievements() {
+      try {
+        const response = await api.get<Achievement[]>('/users/me/achievements');
+        setAchievements(response.data);
+      } catch {
+        setError('Не удалось загрузить достижения');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchAchievements();
+  }, []);
+
+  if (loading) return <div className="text-center mt-8">Загрузка...</div>;
+  if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+
+  return (
+    <div className="max-w-3xl mx-auto mt-8">
+      <h1 className="text-3xl font-bold mb-6">Мои достижения</h1>
+      {achievements.length === 0 ? (
+        <p className="text-gray-500">Вы ещё не получили ни одного достижения.</p>
+      ) : (
+        <div className="space-y-4">
+          {achievements.map((ach, index) => (
+            <Card key={index} className="p-4">
+              <h2 className="text-xl font-semibold">{ach.title}</h2>
+              <p className="text-gray-700">{ach.description}</p>
+              <p className="text-sm text-gray-400">Получено: {new Date(ach.awarded_at).toLocaleString()}</p>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2268,4 +2506,16 @@ interface CardProps {
 
 export function Card({ children, className = '' }: CardProps) {
   return <div className={`bg-white p-4 rounded shadow ${className}`}>{children}</div>;
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/shared/lib/utils.ts
+════════════════════════════════════════════════════════════════════════════════
+
+import { ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
 }

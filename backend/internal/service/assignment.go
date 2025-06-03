@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	//"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
 type AssignmentService interface {
-	Create(assignment *model.Assignment) error
+	Create(assignment *model.Assignment, subtasks []model.Subtask) error
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
@@ -32,13 +32,22 @@ func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo
 	}
 }
 
-func (s *assignmentService) Create(assignment *model.Assignment) error {
-	// Создание задания
+func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask) error {
+	// Сохраняем задание
 	if err := s.repo.Create(assignment); err != nil {
 		return err
 	}
 
-	// Уведомить всех студентов курса
+	// Сохраняем подзадания (если есть)
+	for i := range subtasks {
+		subtasks[i].AssignmentID = assignment.ID
+		subtasks[i].Order = i + 1
+		if err := s.db.Create(&subtasks[i]).Error; err != nil {
+			return err
+		}
+	}
+
+	// Уведомляем студентов — без изменений
 	var enrollments []model.Enrollment
 	if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err == nil {
 		var course model.Course
@@ -50,9 +59,7 @@ func (s *assignmentService) Create(assignment *model.Assignment) error {
 					IsRead:    false,
 					CreatedAt: time.Now(),
 				}
-				if err := s.notificationRepo.Create(notification); err != nil {
-					logger.Log.Errorf("Failed to create notification for user %d: %v", e.UserID, err)
-				}
+				s.notificationRepo.Create(notification)
 			}
 		}
 	}

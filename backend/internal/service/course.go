@@ -258,38 +258,29 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 func (s *courseService) Delete(userID, courseID uint) error {
 	logger.Log.Infof("User %d deleting course %d", userID, courseID)
 
-	// Проверка: существует ли курс
 	course, err := s.repo.FindByID(courseID)
 	if err != nil {
-		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("курс не найден")
 		}
 		return err
 	}
 
-	// Проверка: имеет ли пользователь права
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
-		logger.Log.Errorf("User %d not found: %v", userID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("пользователь не найден")
 		}
 		return err
 	}
-	if user.Role == model.Teacher && course.TeacherID != userID {
-		logger.Log.Warnf("Teacher %d does not own course %d", userID, courseID)
+
+	// 💥 Вот тут даём право админу
+	if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
 		return errors.New("нет прав для удаления курса")
 	}
-	if user.Role != model.Teacher && user.Role != model.Admin {
-		logger.Log.Warnf("User %d does not have permission to delete course", userID)
-		return errors.New("недостаточно прав")
-	}
 
-	// Удаление курса
 	if err := s.repo.Delete(courseID); err != nil {
-		logger.Log.Errorf("Failed to delete course %d: %v", courseID, err)
-		return err
+		return fmt.Errorf("ошибка при удалении курса: %w", err)
 	}
 
 	logger.Log.Infof("Course %d deleted by user %d", courseID, userID)

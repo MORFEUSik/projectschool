@@ -15,6 +15,7 @@ backend/
 │   ├── error
 │   │   └── error.go
 │   ├── handler
+│   │   ├── achievement.go
 │   │   ├── assignment.go
 │   │   ├── auth.go
 │   │   ├── course.go
@@ -2054,6 +2055,42 @@ func CheckDeadlines(courseService service.CourseService) gin.HandlerFunc {
 
 
 ════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/handler/achievement.go
+════════════════════════════════════════════════════════════════════════════════
+
+package handler
+
+import (
+	"net/http"
+
+	"github.com/MORFEUSik/projectschool/backend/internal/error"
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	"github.com/MORFEUSik/projectschool/backend/internal/service"
+	"github.com/gin-gonic/gin"
+)
+
+func GetMyAchievements(service service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		achievements, err := service.GetAchievements(userID.(uint))
+		if err != nil {
+			logger.Log.Errorf("Ошибка при получении достижений: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось получить достижения"})
+			return
+		}
+
+		c.JSON(http.StatusOK, achievements)
+	}
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/jwt/jwt.go
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -2283,7 +2320,7 @@ import (
 type Enrollment struct {
 	ID         uint      `gorm:"primaryKey"`
 	UserID     uint      `gorm:"not null;index" validate:"required"`
-	CourseID   uint      `gorm:"not null;index" validate:"required"`
+	CourseID   uint      `gorm:"not null;index;foreignKey:CourseID;constraint:OnDelete:CASCADE" validate:"required"`
 	User       User      `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Course     Course    `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE"`
 	EnrolledAt time.Time `gorm:"default:current_timestamp"`
@@ -2722,33 +2759,57 @@ func (r *courseRepository) Delete(id uint) error {
 	return r.db.Delete(&model.Course{}, id).Error
 }
 
-func (r *courseRepository) GetStats(id uint) (map[string]interface{}, error) {
-	var stats struct {
-		StudentsCount  int64   `gorm:"column:students_count"`
-		AverageGrade   float64 `gorm:"column:average_grade"`
-		CompletionRate float64 `gorm:"column:completion_rate"`
-	}
-	err := r.db.Raw(`
-		SELECT 
-			COUNT(DISTINCT e.user_id) as students_count,
-			COALESCE(AVG(s.grade), 0) as average_grade,
-			COALESCE(
-				COUNT(DISTINCT s.id)::float / NULLIF(COUNT(DISTINCT a.id) * COUNT(DISTINCT e.user_id), 0),
-				0
-			) as completion_rate
-		FROM courses c
-		LEFT JOIN enrollments e ON e.course_id = c.id
-		LEFT JOIN assignments a ON a.course_id = c.id
-		LEFT JOIN submissions s ON s.assignment_id = a.id
-		WHERE c.id = ?
-	`, id).Scan(&stats).Error
-	if err != nil {
+func (r *courseRepository) GetStats(courseID uint) (map[string]interface{}, error) {
+	var (
+		studentsCount    int64
+		assignmentsCount int64
+		submissionsCount int64
+		averageGrade     float64
+	)
+
+	// Сколько студентов записано
+	if err := r.db.Model(&model.Enrollment{}).
+		Where("course_id = ?", courseID).
+		Count(&studentsCount).Error; err != nil {
 		return nil, err
 	}
+
+	// Сколько заданий у курса
+	if err := r.db.Model(&model.Assignment{}).
+		Where("course_id = ?", courseID).
+		Count(&assignmentsCount).Error; err != nil {
+		return nil, err
+	}
+
+	// Сколько всего решений у этих заданий
+	if err := r.db.Model(&model.Submission{}).
+		Joins("JOIN assignments ON submissions.assignment_id = assignments.id").
+		Where("assignments.course_id = ?", courseID).
+		Count(&submissionsCount).Error; err != nil {
+		return nil, err
+	}
+
+	// Средняя оценка (по только тем, у кого grade > 0)
+	if err := r.db.Model(&model.Submission{}).
+		Select("AVG(grade)").
+		Where("grade > 0").
+		Joins("JOIN assignments ON submissions.assignment_id = assignments.id").
+		Where("assignments.course_id = ?", courseID).
+		Scan(&averageGrade).Error; err != nil {
+		return nil, err
+	}
+
+	// Общий процент завершения курса
+	var completionRate float64 = 0
+	if studentsCount > 0 && assignmentsCount > 0 {
+		totalPossible := float64(studentsCount * assignmentsCount)
+		completionRate = float64(submissionsCount) / totalPossible * 100
+	}
+
 	return map[string]interface{}{
-		"students_count":  stats.StudentsCount,
-		"average_grade":   stats.AverageGrade,
-		"completion_rate": stats.CompletionRate,
+		"students_count":  studentsCount,
+		"average_grade":   averageGrade,
+		"completion_rate": completionRate,
 	}, nil
 }
 
@@ -3448,6 +3509,7 @@ type UserService interface {
 	UpdateRole(userID, adminID uint, role model.Role) error
 	UpdateProfile(userID uint, username, email string) error
 	ListAll() ([]model.User, error)
+	GetAchievements(userID uint) ([]model.UserAchievement, error)
 }
 
 type userService struct {
@@ -3614,6 +3676,12 @@ func (s *userService) ListAll() ([]model.User, error) {
 	var users []model.User
 	err := s.db.Find(&users).Error
 	return users, err
+}
+
+func (s *userService) GetAchievements(userID uint) ([]model.UserAchievement, error) {
+	var achievements []model.UserAchievement
+	err := s.db.Preload("Achievement").Where("user_id = ?", userID).Find(&achievements).Error
+	return achievements, err
 }
 
 
@@ -4019,38 +4087,29 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 func (s *courseService) Delete(userID, courseID uint) error {
 	logger.Log.Infof("User %d deleting course %d", userID, courseID)
 
-	// Проверка: существует ли курс
 	course, err := s.repo.FindByID(courseID)
 	if err != nil {
-		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("курс не найден")
 		}
 		return err
 	}
 
-	// Проверка: имеет ли пользователь права
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
-		logger.Log.Errorf("User %d not found: %v", userID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("пользователь не найден")
 		}
 		return err
 	}
-	if user.Role == model.Teacher && course.TeacherID != userID {
-		logger.Log.Warnf("Teacher %d does not own course %d", userID, courseID)
+
+	// 💥 Вот тут даём право админу
+	if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
 		return errors.New("нет прав для удаления курса")
 	}
-	if user.Role != model.Teacher && user.Role != model.Admin {
-		logger.Log.Warnf("User %d does not have permission to delete course", userID)
-		return errors.New("недостаточно прав")
-	}
 
-	// Удаление курса
 	if err := s.repo.Delete(courseID); err != nil {
-		logger.Log.Errorf("Failed to delete course %d: %v", courseID, err)
-		return err
+		return fmt.Errorf("ошибка при удалении курса: %w", err)
 	}
 
 	logger.Log.Infof("Course %d deleted by user %d", courseID, userID)
@@ -4133,39 +4192,29 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 }
 
 func (s *courseService) CheckDeadlines() error {
-	logger.Log.Info("Checking deadlines for assignments")
-
-	// Устанавливаем диапазон времени (например, за 24 часа до дедлайна)
 	deadlineThreshold := time.Now().Add(24 * time.Hour)
-
 	var assignments []model.Assignment
-	if err := s.db.Where("due_date BETWEEN ? AND ?", time.Now(), deadlineThreshold).Preload("Course").Find(&assignments).Error; err != nil {
-		logger.Log.Errorf("Failed to fetch assignments with upcoming deadlines: %v", err)
+	if err := s.db.
+		Where("due_date BETWEEN ? AND ?", time.Now(), deadlineThreshold).
+		Preload("Course").
+		Find(&assignments).Error; err != nil {
 		return err
 	}
-
 	for _, assignment := range assignments {
-		// Получаем всех студентов, записанных на курс
 		var enrollments []model.Enrollment
 		if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err != nil {
-			logger.Log.Errorf("Failed to fetch enrollments for course %d: %v", assignment.CourseID, err)
 			continue
 		}
-
 		for _, enrollment := range enrollments {
-			notification := &model.Notification{
+			msg := fmt.Sprintf("Дедлайн задания '%s' на курсе '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123))
+			_ = s.notificationRepo.Create(&model.Notification{
 				UserID:    enrollment.UserID,
-				Message:   fmt.Sprintf("Дедлайн задания '%s' на курсе '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123)),
+				Message:   msg,
 				IsRead:    false,
 				CreatedAt: time.Now(),
-			}
-			if err := s.notificationRepo.Create(notification); err != nil {
-				logger.Log.Errorf("Failed to create deadline notification for user %d: %v", enrollment.UserID, err)
-			}
+			})
 		}
 	}
-
-	logger.Log.Info("Deadline check completed")
 	return nil
 }
 
@@ -4408,17 +4457,12 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 
-	// Настройка cron для проверки дедлайнов
 	c := cron.New()
-	_, err = c.AddFunc("@every 1h", func() {
-		logger.Log.Info("Running scheduled deadline check...")
+	c.AddFunc("@every 24h", func() {
 		if err := courseService.CheckDeadlines(); err != nil {
-			logger.Log.Errorf("Failed to check deadlines: %v", err)
+			logger.Log.Errorf("Ошибка при проверке дедлайнов: %v", err)
 		}
 	})
-	if err != nil {
-		logger.Log.Fatalf("Failed to add cron job: %v", err)
-	}
 	c.Start()
 
 	// Группа API
@@ -4441,6 +4485,7 @@ func main() {
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 			protected.POST("/check-deadlines", handler.CheckDeadlines(courseService))
+			protected.GET("/users/me/achievements", handler.GetMyAchievements(userService))
 
 			courses := protected.Group("/courses")
 			{

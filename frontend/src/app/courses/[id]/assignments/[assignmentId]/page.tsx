@@ -1,20 +1,22 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+
+import { useEffect, useState } from 'react';
+import { useParams} from 'next/navigation';
 import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
-import { AxiosError } from 'axios';
-import toast from 'react-hot-toast';
+//import { Input } from '@/shared/ui/Input';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import toast from 'react-hot-toast';
 import Image from 'next/image';
+import { QuizForm } from '@/shared/ui/QuizForm';
+import { AxiosError } from 'axios';
 
 interface Assignment {
   id: number;
@@ -24,15 +26,14 @@ interface Assignment {
   due_date: string;
   course_id: number;
   file_url?: string;
+  type: string; // text | multiple_choice
 }
 
-interface Submission {
+interface Subtask {
   id: number;
-  user_id: number;
-  username: string;
-  content: string;
-  score: number | null;
-  submitted_at: string;
+  question: string;
+  options: string[];
+  order: number;
 }
 
 interface ErrorResponse {
@@ -43,119 +44,65 @@ const submissionSchema = z.object({
   content: z.string().min(1, 'Решение не может быть пустым'),
 });
 
-const gradeSchema = z.object({
-  score: z.number().min(0, 'Оценка не может быть отрицательной'),
-});
-
 type SubmissionFormData = z.infer<typeof submissionSchema>;
-type GradeFormData = z.infer<typeof gradeSchema>;
 
 export default function AssignmentPage() {
   const { id: courseId, assignmentId } = useParams();
   const { user } = useUser();
-  const router = useRouter();
+  //const router = useRouter();
+
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [imageError, setImageError] = useState<string | null>(null); // Добавлено для ошибок изображения
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const submissionForm = useForm<SubmissionFormData>({
     resolver: zodResolver(submissionSchema),
     defaultValues: { content: '' },
   });
 
-  const gradeForm = useForm<GradeFormData>({
-    resolver: zodResolver(gradeSchema),
-    defaultValues: { score: 0 },
-  });
-
   useEffect(() => {
-    async function fetchAssignment() {
+    async function fetchData() {
       setIsLoading(true);
       try {
-        const assignmentResponse = await api.get<Assignment>(`/courses/${courseId}/assignments/${assignmentId}`);
-        console.log('Assignment response:', assignmentResponse.data); // Логируем ответ API
-        setAssignment(assignmentResponse.data);
-        if (user?.role === 'teacher' || user?.role === 'admin') {
-          const submissionsResponse = await api.get<Submission[]>(`/submissions?assignment_id=${assignmentId}`);
-          setSubmissions(submissionsResponse.data);
+        const assignmentRes = await api.get<Assignment>(`/courses/${courseId}/assignments/${assignmentId}`);
+        setAssignment(assignmentRes.data);
+
+        if (assignmentRes.data.type === 'multiple_choice') {
+          const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
+          setSubtasks(subtasksRes.data);
         }
       } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        setError(axiosError.response?.data?.error || 'Ошибка загрузки задания');
+        const axiosErr = err as AxiosError<ErrorResponse>;
+        setError(axiosErr.response?.data?.error || 'Ошибка загрузки задания');
       } finally {
         setIsLoading(false);
       }
     }
-    fetchAssignment();
-  }, [courseId, assignmentId, user]);
 
-  const handleDelete = async () => {
-    if (!confirm('Вы уверены, что хотите удалить задание?')) return;
-    try {
-      const token = localStorage.getItem('token');
-      console.log('Attempting to delete assignment:', assignmentId, 'Token:', token);
-      if (!token) {
-        console.error('No token found in localStorage');
-        setError('Токен отсутствует, пожалуйста, войдите снова');
-        router.push('/auth/login');
-        return;
-      }
-      const response = await api.delete(`/assignments/${assignmentId}`);
-      console.log('Delete response:', response.data);
-      setError('');
-      router.push(`/courses/${courseId}`);
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка удаления задания';
-      console.error('Delete error:', axiosError.response?.data, 'Status:', axiosError.response?.status);
-      setError(errorMessage);
-    }
-  };
+    fetchData();
+  }, [assignmentId, courseId]);
 
-  const handleSubmitSolution = async (data: SubmissionFormData) => {
-    if (new Date(assignment!.due_date) < new Date()) {
-      setError('Дедлайн истёк');
-      toast.error('Дедлайн истёк');
-      return;
-    }
+  const isStudent = user?.role === 'student';
+  const isDeadlinePassed = assignment ? new Date(assignment.due_date) < new Date() : false;
+
+  const handleSubmit = async (data: SubmissionFormData) => {
+    if (!assignment) return;
+
     try {
       await api.post(`/assignments/${assignmentId}/submit`, data);
-      setError('');
       submissionForm.reset();
-      toast.success('Решение отправлено! Проверьте уведомления для новых достижений.');
+      toast.success('Решение отправлено!');
     } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка отправки решения';
-      setError(errorMessage);
-      toast.error(errorMessage);
-    }
-  };
-
-  const handleGrade = async (submissionId: number, data: GradeFormData) => {
-    try {
-      await api.put(`/submissions/${submissionId}/grade`, data);
-      setSubmissions((prev) =>
-        prev.map((sub) => (sub.id === submissionId ? { ...sub, score: data.score } : sub))
-      );
-      gradeForm.reset();
-      toast.success('Оценка выставлена');
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка выставления оценки';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      const axiosErr = err as AxiosError<ErrorResponse>;
+      toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
     }
   };
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error && !assignment) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
   if (!assignment) return <div className="text-center mt-8">Задание не найдено</div>;
-
-  const isTeacherOrAdmin = user?.role === 'teacher' || user?.role === 'admin';
-  const isStudent = user?.role === 'student';
-  const isDeadlinePassed = new Date(assignment.due_date) < new Date();
 
   return (
     <div className="max-w-4xl mx-auto mt-8">
@@ -166,64 +113,64 @@ export default function AssignmentPage() {
             {assignment.description}
           </ReactMarkdown>
         </div>
+
         {assignment.file_url && (
           <div className="mt-4">
             {assignment.file_url.endsWith('.pdf') ? (
-              <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a
+                href={assignment.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
                 Просмотреть PDF
               </a>
             ) : (
               <>
                 <Image
-  src={assignment.file_url}
-  alt="Assignment image"
-  width={500}
-  height={500}
-  className="rounded"
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onError={(_) => {
-    console.error('Image load error:', assignment.file_url); // Логируем ошибку
-    setImageError('Не удалось загрузить изображение');
-  }}
-/>
-                {imageError && <p className="text-red-500 text-sm mt-2">{imageError}</p>}
+                  src={assignment.file_url}
+                  alt="Файл"
+                  width={500}
+                  height={500}
+                  className="rounded"
+                  onError={() => setImageError('Ошибка загрузки изображения')}
+                />
+                {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
               </>
             )}
           </div>
         )}
-        <p className="mb-2 mt-4">
-          <strong>Максимальный балл:</strong> {assignment.max_score}
+
+        <p className="mt-4">
+          <strong>Макс. балл:</strong> {assignment.max_score}
         </p>
-        <p className="mb-2">
-          <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
+        <p>
+          <strong>Срок:</strong>{' '}
+          {new Date(assignment.due_date).toLocaleString('ru-RU', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })}
         </p>
-        {isTeacherOrAdmin && (
-          <div className="flex space-x-4 mt-4">
-            <Button variant="destructive" onClick={handleDelete}>
-              Удалить
-            </Button>
-          </div>
-        )}
       </Card>
 
-      {isStudent && !isDeadlinePassed && (
-        <Card className="p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4">Отправить решение</h2>
-          <form onSubmit={submissionForm.handleSubmit(handleSubmitSolution)} className="space-y-4">
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+      {isStudent && !isDeadlinePassed && assignment.type === 'text' && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
+          <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
               <label htmlFor="content" className="block text-sm font-medium mb-1">
-                Решение
+                Ответ
               </label>
               <textarea
                 id="content"
                 {...submissionForm.register('content')}
                 className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
                 rows={5}
-                placeholder="Введите ваше решение"
               />
               {submissionForm.formState.errors.content && (
-                <p className="text-red-500 text-sm">{submissionForm.formState.errors.content.message}</p>
+                <p className="text-red-500 text-sm">
+                  {submissionForm.formState.errors.content.message}
+                </p>
               )}
             </div>
             <Button type="submit" disabled={submissionForm.formState.isSubmitting}>
@@ -233,46 +180,10 @@ export default function AssignmentPage() {
         </Card>
       )}
 
-      {isTeacherOrAdmin && (
+      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && (
         <Card className="p-6">
-          <h2 className="text-2xl font-semibold mb-4">Решения студентов</h2>
-          {submissions.length === 0 ? (
-            <p>Решений пока нет</p>
-          ) : (
-            <div className="space-y-4">
-              {submissions.map((submission) => (
-                <div key={submission.id} className="border p-4 rounded">
-                  <p>
-                    <strong>Студент:</strong> {submission.username}
-                  </p>
-                  <p className="mt-2">{submission.content}</p>
-                  <p className="mt-2">
-                    <strong>Отправлено:</strong> {new Date(submission.submitted_at).toLocaleString()}
-                  </p>
-                  <p className="mt-2">
-                    <strong>Оценка:</strong> {submission.score ?? 'Не выставлена'}
-                  </p>
-                  <form
-                    onSubmit={gradeForm.handleSubmit((data) => handleGrade(submission.id, data))}
-                    className="mt-4 flex space-x-2"
-                  >
-                    <Input
-                      type="number"
-                      {...gradeForm.register('score', { valueAsNumber: true })}
-                      placeholder="Оценка"
-                      className="w-24"
-                    />
-                    <Button type="submit" disabled={gradeForm.formState.isSubmitting}>
-                      Выставить
-                    </Button>
-                  </form>
-                  {gradeForm.formState.errors.score && (
-                    <p className="text-red-500 text-sm">{gradeForm.formState.errors.score.message}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <h2 className="text-xl font-semibold mb-4">Квиз</h2>
+          <QuizForm assignmentId={assignment.id} subtasks={subtasks} />
         </Card>
       )}
     </div>
