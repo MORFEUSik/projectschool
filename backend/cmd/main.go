@@ -84,7 +84,6 @@ func main() {
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
-	subtaskRepo := repository.NewSubtaskRepository()
 
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
@@ -92,6 +91,7 @@ func main() {
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo)
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
+	subtaskService := service.NewSubtaskService(db.DB)
 
 	c := cron.New()
 	c.AddFunc("@every 24h", func() {
@@ -147,7 +147,7 @@ func main() {
 				assignments.POST("/:id/submit", handler.RoleMiddleware(model.Student), handler.SubmitAssignment(submissionService))
 				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
 				assignments.POST("/:id/submit-quiz", handler.RoleMiddleware(model.Student), handler.SubmitQuizAssignment(submissionService))
-				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskRepo)) // ← вот он!
+				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskService))
 
 			}
 

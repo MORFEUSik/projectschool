@@ -17,7 +17,6 @@ import (
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"github.com/MORFEUSik/projectschool/backend/internal/repository" // ← вот это добавь
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -552,20 +551,18 @@ func SubmitQuizAssignment(submissionService service.SubmissionService) gin.Handl
 	}
 }
 
-func GetSubtasks(subtaskRepo repository.SubtaskRepository) gin.HandlerFunc {
+func GetSubtasks(subtaskService service.SubtaskService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		assignmentID, err := strconv.Atoi(c.Param("id"))
+		assignmentID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
-
-		subtasks, err := subtaskRepo.FindByAssignment(uint(assignmentID))
+		subtasks, err := subtaskService.GetByAssignmentID(uint(assignmentID))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения подзаданий"})
 			return
 		}
-
 		c.JSON(http.StatusOK, subtasks)
 	}
 }

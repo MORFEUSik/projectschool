@@ -38,6 +38,8 @@ backend/
 │   │   ├── global_achievement.go
 │   │   ├── notification.go
 │   │   ├── submission.go
+│   │   ├── subtask.go
+│   │   ├── subtask_submission.go
 │   │   ├── user.go
 │   │   └── user_achievement.go
 │   ├── repository
@@ -45,6 +47,7 @@ backend/
 │   │   ├── course.go
 │   │   ├── notification.go
 │   │   ├── submission.go
+│   │   ├── subtask.go
 │   │   └── user.go
 │   └── service
 │       ├── achievement.go
@@ -981,6 +984,7 @@ func MarkNotificationAsRead(notificationService service.NotificationService) gin
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -996,6 +1000,7 @@ import (
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository" // ← вот это добавь
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -1069,6 +1074,8 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			MaxScore    uint      `form:"max_score" validate:"required,gte=0"`
 			DueDate     time.Time `form:"due_date" validate:"required"`
 			CourseID    uint      `form:"course_id" validate:"required"`
+			Type        string    `form:"type"`     // ← новое поле
+			SubtasksRaw string    `form:"subtasks"` // ← JSON-строка
 		}
 
 		var input AssignmentInput
@@ -1076,6 +1083,15 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			logger.Log.Errorf("Failed to bind form data: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
+		}
+
+		var subtasks []model.Subtask
+		if input.SubtasksRaw != "" {
+			if err := json.Unmarshal([]byte(input.SubtasksRaw), &subtasks); err != nil {
+				logger.Log.Errorf("Failed to parse subtasks JSON: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки подзаданий"})
+				return
+			}
 		}
 
 		// Получаем userID из контекста
@@ -1197,6 +1213,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		assignment := model.Assignment{
 			Title:       input.Title,
 			Description: input.Description,
+			Type:        input.Type,
 			MaxScore:    input.MaxScore,
 			DueDate:     input.DueDate,
 			CourseID:    input.CourseID,
@@ -1220,7 +1237,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		}
 
 		// Сохранение через сервис
-		if err := assignmentService.Create(&assignment); err != nil {
+		if err := assignmentService.Create(&assignment, subtasks); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
 			return
@@ -1484,6 +1501,55 @@ func UploadFile() gin.HandlerFunc {
 		logger.Log.Infof("File saved successfully: %s", fileURL)
 
 		c.JSON(http.StatusOK, gin.H{"file_url": fileURL})
+	}
+}
+
+func SubmitQuizAssignment(submissionService service.SubmissionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		assignmentID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
+			return
+		}
+
+		userID := c.GetUint("userID")
+
+		var input struct {
+			Answers []model.SubtaskSubmission `json:"answers" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			return
+		}
+
+		grade, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Решение отправлено",
+			"grade":   grade,
+		})
+	}
+}
+
+func GetSubtasks(subtaskRepo repository.SubtaskRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		assignmentID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
+			return
+		}
+
+		subtasks, err := subtaskRepo.FindByAssignment(uint(assignmentID))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения подзаданий"})
+			return
+		}
+
+		c.JSON(http.StatusOK, subtasks)
 	}
 }
 
@@ -2196,6 +2262,24 @@ func ValidateToken(tokenString string) (uint, error) {
 
 
 ════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/model/subtask_submission.go
+════════════════════════════════════════════════════════════════════════════════
+
+// model/subtask_submission.go
+package model
+
+type SubtaskSubmission struct {
+	ID        uint   `gorm:"primaryKey"`
+	UserID    uint   `gorm:"not null;index"`
+	SubtaskID uint   `gorm:"not null;index"`
+	Answer    string `gorm:"not null"` // ответ пользователя
+	IsCorrect bool   `gorm:"not null"` // правильно ли
+	Attempts  int    `gorm:"not null"` // сколько попыток потребовалось
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/model/submission.go
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -2222,6 +2306,24 @@ type Submission struct {
 func (s *Submission) Validate() error {
 	validate := validator.New()
 	return validate.Struct(s)
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/model/subtask.go
+════════════════════════════════════════════════════════════════════════════════
+
+// model/subtask.go
+package model
+
+type Subtask struct {
+	ID           uint     `gorm:"primaryKey"`
+	AssignmentID uint     `gorm:"not null;index"`             // привязка к заданию
+	Question     string   `gorm:"type:text;not null"`         // текст вопроса
+	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
+	Answer       string   `gorm:"not null"`                   // правильный ответ
+	Order        int      `gorm:"not null"`                   // порядок следования
 }
 
 
@@ -2352,6 +2454,7 @@ type Assignment struct {
 	Course      Course       `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"course" validate:"-" description:"Информация о курсе"` // Добавлен validate:"-"
 	Title       string       `gorm:"not null" validate:"required,min=3,max=100" json:"title" swaggertype:"string" example:"Test Assignment" description:"Название задания (обязательное, 3-100 символов)"`
 	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Test Description" description:"Описание задания (опциональное)"`
+	Type        string       `gorm:"type:varchar(32);not null;default:'text'" json:"type"`
 	MaxScore    uint         `gorm:"not null" validate:"required,gte=0" json:"max_score" swaggertype:"integer" example:"100" description:"Максимальный балл за задание"`
 	DueDate     time.Time    `validate:"required" json:"due_date" swaggertype:"string" example:"2025-04-19T12:00:00Z" description:"Срок сдачи задания"`
 	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя, создавшего задание"`
@@ -2508,6 +2611,38 @@ func (r *submissionRepository) FindByUserID(userID uint) ([]model.Submission, er
 	var submissions []model.Submission
 	err := r.db.Where("user_id = ?", userID).Find(&submissions).Error
 	return submissions, err
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/repository/subtask.go
+════════════════════════════════════════════════════════════════════════════════
+
+package repository
+
+import (
+	"github.com/MORFEUSik/projectschool/backend/internal/db"
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"gorm.io/gorm"
+)
+
+type SubtaskRepository interface {
+	FindByAssignment(assignmentID uint) ([]model.Subtask, error)
+}
+
+type subtaskRepository struct {
+	db *gorm.DB
+}
+
+func NewSubtaskRepository() SubtaskRepository {
+	return &subtaskRepository{db: db.DB}
+}
+
+func (r *subtaskRepository) FindByAssignment(assignmentID uint) ([]model.Subtask, error) {
+	var subtasks []model.Subtask
+	err := r.db.Where("assignment_id = ?", assignmentID).Order("order ASC").Find(&subtasks).Error
+	return subtasks, err
 }
 
 
@@ -3204,6 +3339,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -3216,6 +3352,7 @@ import (
 type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
+	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error)
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
 	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) // Добавляем метод
@@ -3480,6 +3617,91 @@ func (s *submissionService) GetUserSubmissions(ctx context.Context, userID uint)
 
 	logger.Log.Infof("Fetched %d submissions for user %d", len(submissions), userID)
 	return submissions, nil
+}
+
+func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error) {
+	// 1. Получаем подзадания
+	var subtasks []model.Subtask
+	if err := s.db.Where("assignment_id = ?", assignmentID).Find(&subtasks).Error; err != nil {
+		return 0, err
+	}
+	subtaskMap := make(map[uint]model.Subtask)
+	for _, st := range subtasks {
+		subtaskMap[st.ID] = st
+	}
+
+	// 2. Считаем пребаллы
+	var totalPrePoints, maxPrePoints float64
+	for _, answer := range answers {
+		sub, ok := subtaskMap[answer.SubtaskID]
+		if !ok {
+			continue
+		}
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.ToLower(sub.Answer)
+		pre := 0.0
+		if isCorrect {
+			if answer.Attempts == 1 {
+				pre = 1.0
+			} else if answer.Attempts == 2 {
+				pre = 0.8
+			} else {
+				pre = 0.5
+			}
+		}
+		maxPrePoints += 1
+		totalPrePoints += pre
+
+		answer.IsCorrect = isCorrect
+		answer.UserID = userID
+
+		if err := s.db.Create(&answer).Error; err != nil {
+			return 0, err
+		}
+	}
+
+	// 3. Итоговая оценка
+	percent := totalPrePoints / maxPrePoints * 100
+	var grade float64
+	switch {
+	case percent >= 80:
+		grade = 5
+	case percent >= 60:
+		grade = 4
+	case percent >= 40:
+		grade = 3
+	case percent >= 20:
+		grade = 2
+	default:
+		grade = 1
+	}
+
+	// 4. Сохраняем submission
+	submission := model.Submission{
+		AssignmentID: assignmentID,
+		UserID:       userID,
+		Grade:        grade,
+	}
+	if err := s.db.Create(&submission).Error; err != nil {
+		return 0, err
+	}
+
+	// 5. Начисляем баллы (по весу макс. баллов задания)
+	var assignment model.Assignment
+	if err := s.db.First(&assignment, assignmentID).Error; err == nil {
+		points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+		s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
+	}
+
+	// Уведомление
+	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
+	s.notificationRepo.Create(&model.Notification{
+		UserID:    userID,
+		Message:   msg,
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	})
+
+	return grade, nil
 }
 
 
@@ -3749,14 +3971,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	//"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
 type AssignmentService interface {
-	Create(assignment *model.Assignment) error
+	Create(assignment *model.Assignment, subtasks []model.Subtask) error
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
@@ -3777,13 +3999,22 @@ func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo
 	}
 }
 
-func (s *assignmentService) Create(assignment *model.Assignment) error {
-	// Создание задания
+func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask) error {
+	// Сохраняем задание
 	if err := s.repo.Create(assignment); err != nil {
 		return err
 	}
 
-	// Уведомить всех студентов курса
+	// Сохраняем подзадания (если есть)
+	for i := range subtasks {
+		subtasks[i].AssignmentID = assignment.ID
+		subtasks[i].Order = i + 1
+		if err := s.db.Create(&subtasks[i]).Error; err != nil {
+			return err
+		}
+	}
+
+	// Уведомляем студентов — без изменений
 	var enrollments []model.Enrollment
 	if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err == nil {
 		var course model.Course
@@ -3795,9 +4026,7 @@ func (s *assignmentService) Create(assignment *model.Assignment) error {
 					IsRead:    false,
 					CreatedAt: time.Now(),
 				}
-				if err := s.notificationRepo.Create(notification); err != nil {
-					logger.Log.Errorf("Failed to create notification for user %d: %v", e.UserID, err)
-				}
+				s.notificationRepo.Create(notification)
 			}
 		}
 	}
@@ -4413,6 +4642,8 @@ func main() {
 		&model.User{},
 		&model.Course{},
 		&model.Assignment{},
+		&model.Subtask{},
+		&model.SubtaskSubmission{},
 		&model.Submission{},
 		&model.GlobalAchievement{},
 		&model.UserAchievement{},
@@ -4449,6 +4680,7 @@ func main() {
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
+	subtaskRepo := repository.NewSubtaskRepository()
 
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
@@ -4510,6 +4742,9 @@ func main() {
 				assignments.POST("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.CreateAssignment(assignmentService))
 				assignments.POST("/:id/submit", handler.RoleMiddleware(model.Student), handler.SubmitAssignment(submissionService))
 				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
+				assignments.POST("/:id/submit-quiz", handler.RoleMiddleware(model.Student), handler.SubmitQuizAssignment(submissionService))
+				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskRepo)) // ← вот он!
+
 			}
 
 			submissions := protected.Group("/submissions")
