@@ -868,12 +868,11 @@ const [statsError, setStatsError] = useState('');
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams} from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-//import { Input } from '@/shared/ui/Input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -893,14 +892,21 @@ interface Assignment {
   due_date: string;
   course_id: number;
   file_url?: string;
-  type: string; // text | multiple_choice
+  type: string;
 }
 
 interface Subtask {
   id: number;
   question: string;
   options: string[];
-  order: number;
+  sort_order: number;
+  answer: string; // индекс (например, '2')
+}
+
+interface QuizResult {
+  grade: number;
+  totalScore: number;
+  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
 }
 
 interface ErrorResponse {
@@ -916,13 +922,13 @@ type SubmissionFormData = z.infer<typeof submissionSchema>;
 export default function AssignmentPage() {
   const { id: courseId, assignmentId } = useParams();
   const { user } = useUser();
-  //const router = useRouter();
-
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
 
   const submissionForm = useForm<SubmissionFormData>({
     resolver: zodResolver(submissionSchema),
@@ -967,6 +973,11 @@ export default function AssignmentPage() {
     }
   };
 
+  const handleQuizSubmit = (result: QuizResult) => {
+    setQuizResult(result);
+    setIsSubmitted(true);
+  };
+
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error && !assignment) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
   if (!assignment) return <div className="text-center mt-8">Задание не найдено</div>;
@@ -984,12 +995,7 @@ export default function AssignmentPage() {
         {assignment.file_url && (
           <div className="mt-4">
             {assignment.file_url.endsWith('.pdf') ? (
-              <a
-                href={assignment.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
+              <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                 Просмотреть PDF
               </a>
             ) : (
@@ -1025,19 +1031,15 @@ export default function AssignmentPage() {
           <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
           <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
-              <label htmlFor="content" className="block text-sm font-medium mb-1">
-                Ответ
-              </label>
+              <label htmlFor="content" className="block text-sm font-medium mb-1">Ответ</label>
               <textarea
                 id="content"
                 {...submissionForm.register('content')}
-                className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="border p-2 rounded w-full"
                 rows={5}
               />
               {submissionForm.formState.errors.content && (
-                <p className="text-red-500 text-sm">
-                  {submissionForm.formState.errors.content.message}
-                </p>
+                <p className="text-red-500 text-sm">{submissionForm.formState.errors.content.message}</p>
               )}
             </div>
             <Button type="submit" disabled={submissionForm.formState.isSubmitting}>
@@ -1047,10 +1049,44 @@ export default function AssignmentPage() {
         </Card>
       )}
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Квиз</h2>
-          <QuizForm assignmentId={assignment.id} subtasks={subtasks} />
+      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && !isSubmitted && (
+        <Card className="p-6 mt-4">
+          <h2 className="text-2xl font-semibold mb-4">Квиз</h2>
+          <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+        </Card>
+      )}
+
+      {isSubmitted && quizResult && (
+        <Card className="p-6 mt-4">
+          <h2 className="text-2xl font-semibold mb-4">Результаты теста</h2>
+          <p><strong>Оценка:</strong> {quizResult.grade.toFixed(1)}</p>
+          <p><strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)}</p>
+          <div className="mt-4 space-y-4">
+            {quizResult.answers.map((answer, idx) => {
+              const subtask = subtasks.find((st) => st.id === answer.SubtaskID);
+              if (!subtask || !subtask.options.length) return null;
+
+              const correctIndex = parseInt(subtask.answer, 10) - 1;
+              const correctOption = subtask.options[correctIndex] ?? '(неизвестно)';
+              const userIndex = subtask.options.findIndex(
+                (opt) => opt.trim().toLowerCase() === answer.Answer.trim().toLowerCase()
+              );
+              const isCorrect = userIndex === correctIndex;
+
+              return (
+                <div key={idx} className="border rounded p-3">
+                  <p className="mb-1 font-semibold">Вопрос {idx + 1}: {subtask.question}</p>
+                  <p>
+                    Результат: <span className={isCorrect ? 'text-green-600' : 'text-red-600'}>
+                      {isCorrect ? '✅ Правильно' : '❌ Неправильно'}
+                    </span>
+                  </p>
+                  <p>Ваш ответ: <strong>{answer.Answer}</strong></p>
+                  {!isCorrect && <p>Правильный ответ: <strong>{correctOption}</strong></p>}
+                </div>
+              );
+            })}
+          </div>
         </Card>
       )}
     </div>
@@ -1064,6 +1100,7 @@ export default function AssignmentPage() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -1086,9 +1123,16 @@ const assignmentSchema = z.object({
     message: 'Срок сдачи должен быть в будущем',
   }),
   file: z.any().optional(),
+  type: z.string().optional(),
 });
 
 type FormData = z.infer<typeof assignmentSchema>;
+
+interface Subtask {
+  question: string;
+  options: string[];
+  answer: string;
+}
 
 interface ErrorResponse {
   error?: string;
@@ -1100,6 +1144,8 @@ export default function CreateAssignmentPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const [assignmentType, setAssignmentType] = useState('text');
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
 
   const { register, handleSubmit, formState: { errors }, setValue } = useForm<FormData>({
     resolver: zodResolver(assignmentSchema),
@@ -1108,12 +1154,38 @@ export default function CreateAssignmentPage() {
       description: '',
       max_score: 100,
       due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      type: 'text',
     },
   });
 
-  if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
-    return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
-  }
+  const handleAddSubtask = () => {
+    setSubtasks([...subtasks, { question: '', options: ['', '', '', ''], answer: '' }]);
+  };
+
+  const handleRemoveSubtask = (index: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== index));
+  };
+
+  const handleSubtaskChange = (
+    index: number,
+    field: keyof Subtask,
+    value: string | string[]
+  ) => {
+    const newSubtasks = [...subtasks];
+    if (field === 'options' && Array.isArray(value)) {
+      newSubtasks[index].options = value;
+    } else if (field !== 'options' && typeof value === 'string') {
+      if (field === 'answer') {
+        // Проверка, что ответ входит в варианты
+        if (value && !newSubtasks[index].options.includes(value)) {
+          toast.error('Правильный ответ должен быть одним из вариантов');
+          return;
+        }
+      }
+      newSubtasks[index][field] = value;
+    }
+    setSubtasks(newSubtasks);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1140,113 +1212,184 @@ export default function CreateAssignmentPage() {
     setError('');
     setIsSubmitting(true);
     try {
-        if (!courseId || typeof courseId !== 'string') {
-            const errorMessage = 'ID курса не указан';
-            setError(errorMessage);
-            toast.error(errorMessage);
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('title', data.title);
-        if (data.description) formData.append('description', data.description);
-        formData.append('max_score', data.max_score.toString());
-        formData.append('due_date', `${data.due_date}:00+00:00`);
-        formData.append('course_id', courseId);
-        if (data.file) {
-            formData.append('file', data.file);
-        }
-
-        // Отладка
-        console.log('Sending FormData:', Object.fromEntries(formData));
-
-        await api.post('/assignments', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        toast.success('Задание успешно создано!');
-        window.location.href = `/courses/${courseId}`;
-    } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
+      if (!courseId || typeof courseId !== 'string') {
+        const errorMessage = 'ID курса не указан';
         setError(errorMessage);
         toast.error(errorMessage);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('title', data.title);
+      if (data.description) formData.append('description', data.description);
+      formData.append('max_score', data.max_score.toString());
+      formData.append('due_date', `${data.due_date}:00+00:00`);
+      formData.append('course_id', courseId);
+      formData.append('type', assignmentType);
+      if (data.file) formData.append('file', data.file);
+      if (assignmentType === 'multiple_choice') {
+        // Валидация подзаданий
+        if (subtasks.length === 0) {
+          setError('Тест должен содержать хотя бы одно подзадание');
+          toast.error('Тест должен содержать хотя бы одно подзадание');
+          return;
+        }
+        for (const subtask of subtasks) {
+          if (!subtask.question) {
+            setError('Все вопросы должны быть заполнены');
+            toast.error('Все вопросы должны быть заполнены');
+            return;
+          }
+          if (subtask.options.filter(opt => opt.trim()).length < 2) {
+            setError('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+            toast.error('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+            return;
+          }
+          if (!subtask.answer) {
+            setError('Все подзадания должны иметь правильный ответ');
+            toast.error('Все подзадания должны иметь правильный ответ');
+            return;
+          }
+        }
+
+        const normalizedSubtasks = subtasks.map((subtask, index) => ({
+          Question: subtask.question,
+          Options: subtask.options,
+          Answer: subtask.answer,
+          SortOrder: index + 1,
+        }));
+        formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
+      }
+
+      const response = await api.post('/assignments', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success('Задание успешно создано!');
+      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-};
+  };
+
+  if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
+    return <div>Доступ запрещён</div>;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Создать задание</h1>
-      <Card className="p-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium mb-1">Название</label>
-            <Input
-              id="title"
-              {...register('title')}
-              placeholder="Название задания"
-            />
-            {errors.title && <p className="text-red-500 text-sm">{errors.title.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium mb-1">Описание (поддерживает Markdown)</label>
-            <textarea
-              id="description"
-              {...register('description')}
-              className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
-              rows={5}
-              placeholder="Опишите задание, используйте Markdown для форматирования"
-            />
-            {errors.description && <p className="text-red-500 text-sm">{errors.description.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="max_score" className="block text-sm font-medium mb-1">Максимальный балл</label>
-            <Input
-              id="max_score"
-              type="number"
-              {...register('max_score', { valueAsNumber: true })}
-              placeholder="100"
-            />
-            {errors.max_score && <p className="text-red-500 text-sm">{errors.max_score.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="due_date" className="block text-sm font-medium mb-1">Срок сдачи</label>
-            <Input
-              id="due_date"
-              type="datetime-local"
-              {...register('due_date')}
-            />
-            {errors.due_date && <p className="text-red-500 text-sm">{errors.due_date.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="file" className="block text-sm font-medium mb-1">Файл (jpg, png, pdf)</label>
-            <input
-              id="file"
-              type="file"
-              accept="image/jpeg,image/png,application/pdf"
-              onChange={handleFileChange}
+    <div className="container mx-auto p-4">
+      <Card title="Создать задание">
+        <form onSubmit={handleSubmit(onSubmit)}>
+          {error && <div className="text-red-500 mb-4">{error}</div>}
+
+          <div className="mb-4">
+            <label className="block mb-2">Тип задания</label>
+            <select
+              value={assignmentType}
+              onChange={(e) => setAssignmentType(e.target.value)}
               className="border p-2 rounded w-full"
-            />
+            >
+              <option value="text">Обычное задание</option>
+              <option value="multiple_choice">Тест с вариантами</option>
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Название</label>
+            <Input {...register('title')} />
+            {errors.title && <p className="text-red-500">{errors.title.message}</p>}
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Описание</label>
+            <Input {...register('description')} />
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Максимальный балл</label>
+            <Input type="number" {...register('max_score', { valueAsNumber: true })} />
+            {errors.max_score && <p className="text-red-500">{errors.max_score.message}</p>}
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Срок сдачи</label>
+            <Input type="datetime-local" {...register('due_date')} />
+            {errors.due_date && <p className="text-red-500">{errors.due_date.message}</p>}
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Файл (jpg, png, pdf)</label>
+            <input type="file" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} />
             {preview && (
               <div className="mt-2">
                 {preview.endsWith('.pdf') ? (
-                  <a href={preview} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                  <a href={preview} target="_blank" rel="noopener noreferrer">
                     Просмотреть PDF
                   </a>
                 ) : (
-                  <Image
-                    src={preview}
-                    alt="Preview"
-                    width={300}
-                    height={300}
-                    className="rounded"
-                  />
+                  <Image src={preview} alt="Preview" width={200} height={200} />
                 )}
               </div>
             )}
           </div>
+
+          {assignmentType === 'multiple_choice' && (
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold">Подзадания</h3>
+              {subtasks.map((subtask, idx) => (
+                <div key={idx} className="border p-4 mb-2 rounded">
+                  <label className="block mb-2">Вопрос</label>
+                  <Input
+                    value={subtask.question}
+                    onChange={(e) => handleSubtaskChange(idx, 'question', e.target.value)}
+                    className="mb-2"
+                  />
+                  <label className="block mb-2">Варианты ответа</label>
+                  {subtask.options.map((option, optIdx) => (
+                    <Input
+                      key={optIdx}
+                      value={option}
+                      onChange={(e) => {
+                        const newOptions = [...subtask.options];
+                        newOptions[optIdx] = e.target.value;
+                        handleSubtaskChange(idx, 'options', newOptions);
+                      }}
+                      className="mb-1"
+                    />
+                  ))}
+                  <label className="block mb-2">Правильный ответ</label>
+                  <select
+  value={subtask.answer}
+  onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
+  className="border p-2 rounded w-full"
+>
+  <option value="">Выберите номер правильного варианта</option>
+  {subtask.options.map((_, i) => (
+    <option key={i} value={(i + 1).toString()}>
+      Вариант {i + 1}
+    </option>
+  ))}
+</select>
+
+                  <Button
+                    type="button"
+                    onClick={() => handleRemoveSubtask(idx)}
+                    className="mt-2 bg-red-600 text-white"
+                  >
+                    Удалить подзадание
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" onClick={handleAddSubtask}>
+                Добавить подзадание
+              </Button>
+            </div>
+          )}
+
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Создаётся...' : 'Создать'}
           </Button>
@@ -2325,11 +2468,12 @@ export function Input({ className = '', ...props }: InputProps) {
 ║ frontend/src/shared/ui/Button.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-import { ButtonHTMLAttributes } from 'react';
+import { ButtonHTMLAttributes, ReactNode } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
   variant?: 'default' | 'outline' | 'destructive';
+  children?: ReactNode; // ⬅ Явно добавлено
 }
 
 export function Button({ children, className = '', variant = 'default', ...props }: ButtonProps) {
@@ -2343,7 +2487,7 @@ export function Button({ children, className = '', variant = 'default', ...props
       className={`${variantStyles[variant]} ${className}`}
       {...props}
     >
-      {children}
+      {children ?? 'Default Button'} {/* ⬅ Защита от undefined */}
     </button>
   );
 }
@@ -2353,17 +2497,23 @@ export function Button({ children, className = '', variant = 'default', ...props
 ║ frontend/src/shared/ui/Card.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// src/shared/ui/Card.tsx
 import { ReactNode } from 'react';
 
 interface CardProps {
   children: ReactNode;
   className?: string;
+  title?: string; // Добавляем пропс title
 }
 
-export function Card({ children, className = '' }: CardProps) {
-  return <div className={`bg-white p-4 rounded shadow ${className}`}>{children}</div>;
+export function Card({ children, className = '', title }: CardProps) {
+  return (
+    <div className={`bg-white p-4 rounded shadow ${className}`}>
+      {title && <h2 className="text-xl font-semibold mb-4">{title}</h2>}
+      {children}
+    </div>
+  );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2371,112 +2521,132 @@ export function Card({ children, className = '' }: CardProps) {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
 import { api } from '@/shared/api';
-import { Button } from '@/shared/ui/Button';
 import toast from 'react-hot-toast';
+import { AxiosError } from 'axios';
 
 interface Subtask {
   id: number;
   question: string;
   options: string[];
-  order: number;
+  sort_order: number;
+  answer: string;
 }
 
-interface Props {
+interface QuizResult {
+  grade: number;
+  totalScore: number;
+  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
+}
+
+interface QuizFormProps {
   assignmentId: number;
   subtasks: Subtask[];
+  onSubmit: (result: QuizResult) => void;
 }
 
-export function QuizForm({ assignmentId, subtasks }: Props) {
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<
-    { subtaskId: number; answer: string; attempts: number }[]
-  >([]);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [disabledOptions, setDisabledOptions] = useState<string[]>([]);
-  const [finished, setFinished] = useState(false);
-  const [grade, setGrade] = useState<number | null>(null);
+export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
+  const [answers, setAnswers] = useState<Record<number, { answer: string; attempts: number }>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleOptionClick = (option: string) => {
-    const subtask = subtasks[current];
-    const isCorrect = option === subtask.options.find((o) => o === subtask.options.find(ans => ans === option));
-    const correct = option === subtask.options.find(ans => ans === subtask.options.find((o) => o === subtask.options.find((p) => p === o && p === subtask.answer)));
+  useEffect(() => {
+    const initialAnswers: Record<number, { answer: string; attempts: number }> = {};
+    subtasks.forEach((subtask) => {
+      const subtaskId = subtask.id;
+      const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
+      const attempts = stored ? JSON.parse(stored).attempts || 1 : 1;
+      initialAnswers[subtaskId] = { answer: '', attempts };
+    });
+    setAnswers(initialAnswers);
+  }, [assignmentId, subtasks]);
 
-    const prev = answers.find((a) => a.subtaskId === subtask.id);
-    const attempts = prev ? prev.attempts + 1 : 1;
-
-    if (option === subtask.answer) {
-      setAnswers([...answers, { subtaskId: subtask.id, answer: option, attempts }]);
-      setSelected([]);
-      setDisabledOptions([]);
-      if (current + 1 < subtasks.length) {
-        setCurrent(current + 1);
-      } else {
-        submitQuiz([...answers, { subtaskId: subtask.id, answer: option, attempts }]);
-      }
-    } else {
-      if (attempts >= subtask.options.length - 1) {
-        // Последняя попытка — переходим дальше
-        setAnswers([...answers, { subtaskId: subtask.id, answer: '', attempts }]);
-        setSelected([]);
-        setDisabledOptions([]);
-        if (current + 1 < subtasks.length) {
-          setCurrent(current + 1);
-        } else {
-          submitQuiz([...answers, { subtaskId: subtask.id, answer: '', attempts }]);
-        }
-      } else {
-        setDisabledOptions([...disabledOptions, option]);
-      }
-    }
+  const handleChange = (subtaskId: number, answer: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [subtaskId]: {
+        answer,
+        attempts: prev[subtaskId]?.attempts ?? 1,
+      },
+    }));
+    localStorage.setItem(
+      `quiz_${assignmentId}_${subtaskId}`,
+      JSON.stringify({ attempts: (answers[subtaskId]?.attempts || 1) + 1 })
+    );
   };
 
-  const submitQuiz = async (finalAnswers: typeof answers) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const payload = subtasks.map((subtask) => {
+      const subtaskId = subtask.id;
+      const selectedAnswer = answers[subtaskId]?.answer || '';
+      const selectedIndex = subtask.options.findIndex((opt) => opt === selectedAnswer);
+
+      return {
+        SubtaskID: subtaskId,
+        Answer: selectedIndex >= 0 ? String(selectedIndex + 1) : '',
+        Attempts: answers[subtaskId]?.attempts || 1,
+      };
+    });
+
+    if (payload.some((ans) => ans.Answer === '')) {
+      toast.error('Пожалуйста, ответьте на все вопросы');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const formatted = finalAnswers.map((a) => ({
-        subtask_id: a.subtaskId,
-        answer: a.answer,
-        attempts: a.attempts,
-      }));
-      const res = await api.post(`/assignments/${assignmentId}/submit-quiz`, {
-        answers: formatted,
+      const response = await api.post(`/assignments/${assignmentId}/submit-quiz`, { answers: payload });
+      toast.success('Ответы отправлены!');
+      onSubmit(response.data);
+
+      // Очистка localStorage
+      subtasks.forEach((subtask) => {
+        localStorage.removeItem(`quiz_${assignmentId}_${subtask.id}`);
       });
-      setGrade(res.data.grade);
-      setFinished(true);
-      toast.success(`Оценка: ${res.data.grade}`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Ошибка при отправке квиза');
+    } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{ error?: string }>;
+      toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  if (finished) {
-    return <div className="text-xl font-bold text-green-600">Оценка: {grade}</div>;
-  }
-
-  const subtask = subtasks[current];
 
   return (
-    <div>
-      <p className="mb-2 text-lg font-semibold">
-        {current + 1}. {subtask.question}
-      </p>
-      <div className="space-y-2">
-        {subtask.options.map((opt) => (
-          <Button
-            key={opt}
-            variant={disabledOptions.includes(opt) ? 'destructive' : 'outline'}
-            disabled={disabledOptions.includes(opt)}
-            onClick={() => handleOptionClick(opt)}
-            className="block w-full text-left"
-          >
-            {opt}
-          </Button>
-        ))}
+  <form onSubmit={handleSubmit} className="space-y-6">
+    {Array.isArray(subtasks) && subtasks.map((subtask, idx) => (
+      <div key={subtask.id}>
+        <p className="font-medium mb-2">{idx + 1}. {subtask.question}</p>
+        <div className="space-y-1">
+          {subtask.options.map((option, i) => (
+            <label key={i} className="flex items-center space-x-2">
+              <input
+                type="radio"
+                name={`subtask-${subtask.id}`}
+                value={option}
+                checked={answers[subtask.id]?.answer === option}
+                onChange={() => handleChange(subtask.id, option)}
+                className="accent-blue-600"
+              />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    ))}
+
+    <button
+      type="submit"
+      disabled={isSubmitting}
+      className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"
+    >
+      {isSubmitting ? 'Отправка...' : 'Отправить тест'}
+    </button>
+  </form>
+);
+
 }
 
 
@@ -2545,7 +2715,6 @@ backend/
 │   │   ├── course.go
 │   │   ├── notification.go
 │   │   ├── submission.go
-│   │   ├── subtask.go
 │   │   └── user.go
 │   └── service
 │       ├── achievement.go
@@ -2554,6 +2723,7 @@ backend/
 │       ├── course.go
 │       ├── notification.go
 │       ├── submission.go
+│       ├── subtask.go
 │       └── user.go
 
 ================================================================================
@@ -3485,6 +3655,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"net/http"
 	"os"
 	"path/filepath"
@@ -3492,16 +3663,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"github.com/MORFEUSik/projectschool/backend/internal/repository" // ← вот это добавь
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -3544,12 +3713,14 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Produce json
 // @Security BearerAuth
 // @Param title formData string true "Название задания"
-// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
+// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/Uploads/...'>)"
 // @Param max_score formData integer true "Максимальный балл"
 // @Param due_date formData string true "Срок сдачи (ISO 8601)"
 // @Param course_id formData integer true "ID курса"
+// @Param type formData string true "Тип задания (text | multiple_choice)"
+// @Param subtasks_json formData string false "JSON подзаданий для multiple_choice"
 // @Param file formData file false "Файл (jpg, png, pdf)"
-// @Success 200 {object} map[string]interface{} "message, assignment"
+// @Success 200 {object} map[string]interface{} "message, assignment_id"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
 // @Failure 403 {object} map[string]string "error"
@@ -3567,13 +3738,13 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 
 		// Структура для входных данных
 		type AssignmentInput struct {
-			Title       string    `form:"title" validate:"required,min=3,max=100"`
-			Description string    `form:"description"`
-			MaxScore    uint      `form:"max_score" validate:"required,gte=0"`
-			DueDate     time.Time `form:"due_date" validate:"required"`
-			CourseID    uint      `form:"course_id" validate:"required"`
-			Type        string    `form:"type"`     // ← новое поле
-			SubtasksRaw string    `form:"subtasks"` // ← JSON-строка
+			Title        string    `form:"title" validate:"required,min=3,max=100"`
+			Description  string    `form:"description"`
+			MaxScore     uint      `form:"max_score" validate:"required,gte=0"`
+			DueDate      time.Time `form:"due_date" validate:"required"`
+			CourseID     uint      `form:"course_id" validate:"required"`
+			Type         string    `form:"type" validate:"required,oneof=text multiple_choice"`
+			SubtasksJSON string    `form:"subtasks_json"` // Синхронизировано с фронтендом
 		}
 
 		var input AssignmentInput
@@ -3583,13 +3754,20 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
+		// Десериализация подзаданий
 		var subtasks []model.Subtask
-		if input.SubtasksRaw != "" {
-			if err := json.Unmarshal([]byte(input.SubtasksRaw), &subtasks); err != nil {
+		if input.Type == "multiple_choice" {
+			if input.SubtasksJSON == "" {
+				logger.Log.Errorf("Subtasks required for multiple_choice assignment")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Тест должен содержать подзадания"})
+				return
+			}
+			if err := json.Unmarshal([]byte(input.SubtasksJSON), &subtasks); err != nil {
 				logger.Log.Errorf("Failed to parse subtasks JSON: %v", err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки подзаданий"})
 				return
 			}
+			logger.Log.Infof("Successfully deserialized %d subtasks", len(subtasks))
 		}
 
 		// Получаем userID из контекста
@@ -3652,7 +3830,6 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого курса"})
 			return
 		}
-		// Админы могут создавать задания для любого курса
 
 		// Обработка файла
 		var fileURL string
@@ -3681,7 +3858,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./uploads"
+			uploadDir := "./Uploads"
 			if err := os.MkdirAll(uploadDir, 0755); err != nil {
 				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -3737,30 +3914,16 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		// Сохранение через сервис
 		if err := assignmentService.Create(&assignment, subtasks); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		logger.Log.Infof("Assignment %s (ID: %d) created by user %d with file: %s", assignment.Title, assignment.ID, userID, fileURL)
-		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment": assignment})
+		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment_id": assignment.ID})
 	}
 }
 
 // GetAssignment возвращает задание по ID в контексте курса
-// @Summary Получить задание в курсе
-// @Description Возвращает задание по ID, проверяя его принадлежность к курсу. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
-// @Tags assignments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param courseId path int true "ID курса"
-// @Param assignmentId path int true "ID задания"
-// @Success 200 {object} model.Assignment
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 404 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /courses/{courseId}/assignments/{assignmentId} [get]
 func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		courseID, err := strconv.Atoi(c.Param("id"))
@@ -3800,20 +3963,6 @@ func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc 
 }
 
 // DeleteAssignment удаляет задание
-// @Summary Удалить задание
-// @Description Удаляет задание по его ID. Доступно только для учителей (создателей задания) и админов.
-// @Tags assignments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path int true "ID задания"
-// @Success 200 {object} map[string]string "message: Задание удалено"
-// @Failure 400 {object} map[string]string "error: Неверный ID"
-// @Failure 401 {object} map[string]string "error: Не авторизован"
-// @Failure 403 {object} map[string]string "error: Доступ запрещён"
-// @Failure 404 {object} map[string]string "error: Задание не найдено"
-// @Failure 500 {object} map[string]string "error: Внутренняя ошибка сервера"
-// @Router /assignments/{id} [delete]
 func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Получаем ID задания
@@ -3878,19 +4027,6 @@ func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 }
 
 // UploadFile загружает файл для задания
-// @Summary Загрузить файл
-// @Description Загружает файл (jpg, png, pdf) и возвращает URL. Требуется JWT-токен. Доступно для ролей: teacher, admin.
-// @Tags assignments
-// @Accept multipart/form-data
-// @Produce json
-// @Security BearerAuth
-// @Param file formData file true "Файл (jpg, png, pdf)"
-// @Success 200 {object} map[string]string "file_url"
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /assignments/upload [post]
 func UploadFile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Проверка Content-Type
@@ -3976,7 +4112,7 @@ func UploadFile() gin.HandlerFunc {
 		// Сохранение файла
 		ext := filepath.Ext(file.Filename)
 		filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-		uploadDir := "./uploads" // Физическая папка
+		uploadDir := "./Uploads"
 		if err := os.MkdirAll(uploadDir, 0755); err != nil {
 			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -3989,64 +4125,88 @@ func UploadFile() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
 			return
 		}
-		// Проверяем, существует ли файл
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			logger.Log.Errorf("File %s does not exist after saving", filePath)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл не был сохранён"})
 			return
 		}
-		fileURL := "http://localhost:8080/uploads/" + filename // URL с маленькой буквы
+		fileURL := "http://localhost:8080/uploads/" + filename
 		logger.Log.Infof("File saved successfully: %s", fileURL)
 
 		c.JSON(http.StatusOK, gin.H{"file_url": fileURL})
 	}
 }
 
+// SubmitQuizAssignment отправляет ответы на тест
+// @Summary Отправить ответы на тест
+// @Description Отправляет ответы на тест (multiple_choice). Требуется JWT-токен. Доступно для роли: student.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID задания"
+// @Param answers body object true "Ответы на подзадания"
+// @Success 200 {object} map[string]interface{} "message, grade, totalScore, answers"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /assignments/{id}/submit-quiz [post]
 func SubmitQuizAssignment(submissionService service.SubmissionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		assignmentID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
 
 		userID := c.GetUint("userID")
+		if userID == 0 {
+			logger.Log.Error("UserID not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не аутентифицирован"})
+			return
+		}
 
 		var input struct {
 			Answers []model.SubtaskSubmission `json:"answers" binding:"required"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON data: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
 
-		grade, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
+		result, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
 		if err != nil {
+			logger.Log.Errorf("Failed to process quiz submission: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Решение отправлено",
-			"grade":   grade,
+			"message":    "Решение отправлено",
+			"grade":      result["grade"],
+			"totalScore": result["totalScore"],
+			"answers":    result["answers"],
 		})
 	}
 }
 
-func GetSubtasks(subtaskRepo repository.SubtaskRepository) gin.HandlerFunc {
+// GetSubtasks возвращает подзадания для задания
+func GetSubtasks(subtaskService service.SubtaskService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		assignmentID, err := strconv.Atoi(c.Param("id"))
+		assignmentID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
-
-		subtasks, err := subtaskRepo.FindByAssignment(uint(assignmentID))
+		subtasks, err := subtaskService.GetByAssignmentID(uint(assignmentID))
 		if err != nil {
+			logger.Log.Errorf("Failed to get subtasks: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения подзаданий"})
 			return
 		}
-
 		c.JSON(http.StatusOK, subtasks)
 	}
 }
@@ -4821,7 +4981,7 @@ type Subtask struct {
 	Question     string   `gorm:"type:text;not null"`         // текст вопроса
 	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
 	Answer       string   `gorm:"not null"`                   // правильный ответ
-	Order        int      `gorm:"not null"`                   // порядок следования
+	SortOrder    int      `gorm:"column:sort_order"`
 }
 
 
@@ -5114,38 +5274,6 @@ func (r *submissionRepository) FindByUserID(userID uint) ([]model.Submission, er
 
 
 ════════════════════════════════════════════════════════════════════════════════
-║ backend/internal/repository/subtask.go
-════════════════════════════════════════════════════════════════════════════════
-
-package repository
-
-import (
-	"github.com/MORFEUSik/projectschool/backend/internal/db"
-	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"gorm.io/gorm"
-)
-
-type SubtaskRepository interface {
-	FindByAssignment(assignmentID uint) ([]model.Subtask, error)
-}
-
-type subtaskRepository struct {
-	db *gorm.DB
-}
-
-func NewSubtaskRepository() SubtaskRepository {
-	return &subtaskRepository{db: db.DB}
-}
-
-func (r *subtaskRepository) FindByAssignment(assignmentID uint) ([]model.Subtask, error) {
-	var subtasks []model.Subtask
-	err := r.db.Where("assignment_id = ?", assignmentID).Order("order ASC").Find(&subtasks).Error
-	return subtasks, err
-}
-
-
-
-════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/repository/user.go
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -5293,6 +5421,7 @@ import (
 
 type AssignmentRepository interface {
 	Create(assignment *model.Assignment) error
+	CreateWithTx(tx *gorm.DB, assignment *model.Assignment) error
 	FindByCourseID(courseID uint) ([]model.Assignment, error)
 	FindByID(id uint) (*model.Assignment, error)
 	FindByUserID(userID uint) ([]model.Assignment, error)
@@ -5340,6 +5469,10 @@ func (r *assignmentRepository) Delete(id uint) error {
 		return fmt.Errorf("assignment not found")
 	}
 	return nil
+}
+
+func (r *assignmentRepository) CreateWithTx(tx *gorm.DB, assignment *model.Assignment) error {
+	return tx.Create(assignment).Error
 }
 
 
@@ -5850,10 +5983,10 @@ import (
 type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
-	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error)
+	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (map[string]interface{}, error)
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
-	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) // Добавляем метод
+	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
@@ -5882,7 +6015,6 @@ func NewSubmissionService(
 func (s *submissionService) Create(submission *model.Submission) error {
 	logger.Log.Infof("Creating submission for user %d, assignment %d", submission.UserID, submission.AssignmentID)
 
-	// Проверка: существует ли пользователь
 	_, err := s.userRepo.FindByID(submission.UserID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", submission.UserID, err)
@@ -5892,7 +6024,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: существует ли задание
 	assignment, err := s.assignmentRepo.FindByID(submission.AssignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
@@ -5902,7 +6033,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: принадлежит ли пользователь курсу
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", submission.UserID, assignment.CourseID).First(&enrollment).Error
 	if err != nil {
@@ -5913,7 +6043,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: не отправлено ли решение ранее
 	var existingSubmission model.Submission
 	err = s.db.Where("user_id = ? AND assignment_id = ?", submission.UserID, submission.AssignmentID).First(&existingSubmission).Error
 	if err == nil {
@@ -5925,13 +6054,11 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Создание решения
 	if err := s.repo.Create(submission); err != nil {
 		logger.Log.Errorf("Failed to create submission: %v", err)
 		return err
 	}
 
-	// Создание уведомления о подаче решения
 	notification := &model.Notification{
 		UserID:    submission.UserID,
 		Message:   fmt.Sprintf("Вы отправили решение для задания #%d", submission.AssignmentID),
@@ -5951,7 +6078,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) error {
 	logger.Log.Infof("Setting grade %f for submission %d by user %d", grade, submissionID, userID)
 
-	// Проверка: существует ли решение
 	var submission model.Submission
 	if err := s.db.First(&submission, submissionID).Error; err != nil {
 		logger.Log.Errorf("Submission %d not found: %v", submissionID, err)
@@ -5961,7 +6087,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Проверка: имеет ли пользователь права (учитель или админ)
 	var user model.User
 	if err := s.db.First(&user, userID).Error; err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -5972,7 +6097,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Проверка: принадлежит ли задание курсу, где пользователь — учитель
 	var assignment model.Assignment
 	if err := s.db.First(&assignment, submission.AssignmentID).Error; err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
@@ -5988,17 +6112,14 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Установка оценки и начисление баллов в транзакции
 	var submissionUser model.User
 	var points uint
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Установка оценки
 		submission.Grade = grade
 		if err := tx.Save(&submission).Error; err != nil {
 			return err
 		}
 
-		// Начисление баллов пользователю
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
@@ -6015,7 +6136,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Создание уведомления об оценке
 	notification := &model.Notification{
 		UserID:    submission.UserID,
 		Message:   fmt.Sprintf("Ваше решение для задания #%d оценено: %.2f", submission.AssignmentID, grade),
@@ -6026,7 +6146,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		logger.Log.Errorf("Failed to create grade notification: %v", err)
 	}
 
-	// Проверка достижений
 	achievementService := NewAchievementService(s.db)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
@@ -6044,7 +6163,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Создание уведомлений для новых достижений
 	for _, ach := range newAchievements {
 		notification := &model.Notification{
 			UserID:    submission.UserID,
@@ -6077,7 +6195,7 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submission, error) {
 	logger.Log.Infof("Fetching submissions for assignment %d", assignmentID)
 
-	// Проверка: существует ли задание
+	// Проверяем существование задания
 	_, err := s.assignmentRepo.FindByID(assignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
@@ -6087,7 +6205,6 @@ func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submissi
 		return nil, err
 	}
 
-	// Получение решений с предзагрузкой пользователя, задания и курса
 	var submissions []model.Submission
 	err = s.db.Preload("User").Preload("Assignment.Course").Where("assignment_id = ?", assignmentID).Find(&submissions).Error
 	if err != nil {
@@ -6117,25 +6234,51 @@ func (s *submissionService) GetUserSubmissions(ctx context.Context, userID uint)
 	return submissions, nil
 }
 
-func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error) {
-	// 1. Получаем подзадания
+func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (map[string]interface{}, error) {
+	logger.Log.Infof("Processing quiz submission for user %d, assignment %d", userID, assignmentID)
+
+	assignment, err := s.assignmentRepo.FindByID(assignmentID)
+	if err != nil {
+		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("задание не найдено")
+		}
+		return nil, err
+	}
+
+	if assignment.DueDate.Before(time.Now()) {
+		logger.Log.Warnf("Submission deadline passed for assignment %d", assignmentID)
+		return nil, errors.New("дедлайн задания истёк")
+	}
+
+	var existingSubmission model.Submission
+	err = s.db.Where("user_id = ? AND assignment_id = ?", userID, assignmentID).First(&existingSubmission).Error
+	if err == nil {
+		logger.Log.Warnf("Submission already exists for user %d, assignment %d", userID, assignmentID)
+		return nil, errors.New("решение уже отправлено")
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Log.Errorf("Error checking existing submission: %v", err)
+		return nil, err
+	}
+
 	var subtasks []model.Subtask
 	if err := s.db.Where("assignment_id = ?", assignmentID).Find(&subtasks).Error; err != nil {
-		return 0, err
+		logger.Log.Errorf("Failed to fetch subtasks for assignment %d: %v", assignmentID, err)
+		return nil, err
 	}
 	subtaskMap := make(map[uint]model.Subtask)
 	for _, st := range subtasks {
 		subtaskMap[st.ID] = st
 	}
 
-	// 2. Считаем пребаллы
 	var totalPrePoints, maxPrePoints float64
 	for _, answer := range answers {
 		sub, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
 			continue
 		}
-		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.ToLower(sub.Answer)
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(sub.Answer))
 		pre := 0.0
 		if isCorrect {
 			if answer.Attempts == 1 {
@@ -6153,11 +6296,11 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		answer.UserID = userID
 
 		if err := s.db.Create(&answer).Error; err != nil {
-			return 0, err
+			logger.Log.Errorf("Failed to save subtask submission: %v", err)
+			return nil, err
 		}
 	}
 
-	// 3. Итоговая оценка
 	percent := totalPrePoints / maxPrePoints * 100
 	var grade float64
 	switch {
@@ -6173,24 +6316,19 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		grade = 1
 	}
 
-	// 4. Сохраняем submission
 	submission := model.Submission{
 		AssignmentID: assignmentID,
 		UserID:       userID,
 		Grade:        grade,
 	}
 	if err := s.db.Create(&submission).Error; err != nil {
-		return 0, err
+		logger.Log.Errorf("Failed to save submission: %v", err)
+		return nil, err
 	}
 
-	// 5. Начисляем баллы (по весу макс. баллов задания)
-	var assignment model.Assignment
-	if err := s.db.First(&assignment, assignmentID).Error; err == nil {
-		points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
-		s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
-	}
+	points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+	s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
 
-	// Уведомление
 	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
 	s.notificationRepo.Create(&model.Notification{
 		UserID:    userID,
@@ -6199,7 +6337,47 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		CreatedAt: time.Now(),
 	})
 
-	return grade, nil
+	response := map[string]interface{}{
+		"grade":      grade,
+		"totalScore": totalPrePoints / maxPrePoints * float64(assignment.MaxScore),
+		"answers":    answers,
+	}
+
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f", userID, assignmentID, grade, response["totalScore"])
+	return response, nil
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/service/subtask.go
+════════════════════════════════════════════════════════════════════════════════
+
+package service
+
+import (
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"gorm.io/gorm"
+)
+
+type SubtaskService interface {
+	GetByAssignmentID(assignmentID uint) ([]model.Subtask, error)
+}
+
+type subtaskService struct {
+	db *gorm.DB
+}
+
+func NewSubtaskService(db *gorm.DB) SubtaskService {
+	return &subtaskService{db: db}
+}
+
+func (s *subtaskService) GetByAssignmentID(assignmentID uint) ([]model.Subtask, error) {
+	var subtasks []model.Subtask
+	if err := s.db.Where("assignment_id = ?", assignmentID).Order("sort_order asc").Find(&subtasks).Error; err != nil {
+		return nil, err
+	}
+	return subtasks, nil
 }
 
 
@@ -6466,10 +6644,12 @@ func (s *notificationService) MarkAsRead(id uint, userID uint) error {
 package service
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	//"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
@@ -6498,38 +6678,67 @@ func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo
 }
 
 func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask) error {
-	// Сохраняем задание
-	if err := s.repo.Create(assignment); err != nil {
-		return err
+	logger.Log.Infof("Creating assignment: %s", assignment.Title)
+	if assignment.Type == "multiple_choice" && len(subtasks) == 0 {
+		logger.Log.Errorf("Multiple choice assignment must have at least one subtask")
+		return errors.New("тест должен содержать хотя бы одно подзадание")
 	}
 
-	// Сохраняем подзадания (если есть)
-	for i := range subtasks {
-		subtasks[i].AssignmentID = assignment.ID
-		subtasks[i].Order = i + 1
-		if err := s.db.Create(&subtasks[i]).Error; err != nil {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.repo.CreateWithTx(tx, assignment); err != nil {
+			logger.Log.Errorf("Failed to create assignment: %v", err)
 			return err
 		}
-	}
 
-	// Уведомляем студентов — без изменений
-	var enrollments []model.Enrollment
-	if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err == nil {
-		var course model.Course
-		if err := s.db.First(&course, assignment.CourseID).Error; err == nil {
-			for _, e := range enrollments {
-				notification := &model.Notification{
-					UserID:    e.UserID,
-					Message:   fmt.Sprintf("Новое задание в курсе %s: %s", course.Title, assignment.Title),
-					IsRead:    false,
-					CreatedAt: time.Now(),
-				}
-				s.notificationRepo.Create(notification)
+		for i := range subtasks {
+			if subtasks[i].Question == "" {
+				logger.Log.Errorf("Subtask question cannot be empty")
+				return errors.New("вопрос подзадания не может быть пустым")
+			}
+			if len(subtasks[i].Options) < 2 {
+				logger.Log.Errorf("Subtask must have at least 2 options")
+				return errors.New("подзадание должно содержать хотя бы 2 варианта ответа")
+			}
+			if !contains(subtasks[i].Options, subtasks[i].Answer) {
+				logger.Log.Errorf("Subtask answer must be one of the options")
+				return errors.New("правильный ответ должен быть одним из вариантов")
+			}
+			subtasks[i].AssignmentID = assignment.ID
+			subtasks[i].SortOrder = i + 1
+			if err := tx.Create(&subtasks[i]).Error; err != nil {
+				logger.Log.Errorf("Failed to create subtask: %v", err)
+				return err
 			}
 		}
-	}
 
-	return nil
+		var enrollments []model.Enrollment
+		if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err == nil {
+			var course model.Course
+			if err := s.db.First(&course, assignment.CourseID).Error; err == nil {
+				for _, e := range enrollments {
+					notification := &model.Notification{
+						UserID:    e.UserID,
+						Message:   fmt.Sprintf("Новое задание в курсе %s: %s", course.Title, assignment.Title),
+						IsRead:    false,
+						CreatedAt: time.Now(),
+					}
+					s.notificationRepo.Create(notification)
+				}
+			}
+		}
+
+		logger.Log.Infof("Assignment %s created successfully with %d subtasks", assignment.Title, len(subtasks))
+		return nil
+	})
+}
+
+func contains(options []string, answer string) bool {
+	for _, opt := range options {
+		if strings.TrimSpace(strings.ToLower(opt)) == strings.TrimSpace(strings.ToLower(answer)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *assignmentService) ListByCourse(courseID uint) ([]model.Assignment, error) {
@@ -7178,7 +7387,6 @@ func main() {
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
-	subtaskRepo := repository.NewSubtaskRepository()
 
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
@@ -7186,6 +7394,7 @@ func main() {
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo)
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
+	subtaskService := service.NewSubtaskService(db.DB)
 
 	c := cron.New()
 	c.AddFunc("@every 24h", func() {
@@ -7241,7 +7450,7 @@ func main() {
 				assignments.POST("/:id/submit", handler.RoleMiddleware(model.Student), handler.SubmitAssignment(submissionService))
 				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
 				assignments.POST("/:id/submit-quiz", handler.RoleMiddleware(model.Student), handler.SubmitQuizAssignment(submissionService))
-				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskRepo)) // ← вот он!
+				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskService))
 
 			}
 

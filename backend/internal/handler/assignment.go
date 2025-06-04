@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
@@ -20,6 +19,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -62,12 +62,14 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Produce json
 // @Security BearerAuth
 // @Param title formData string true "Название задания"
-// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
+// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/Uploads/...'>)"
 // @Param max_score formData integer true "Максимальный балл"
 // @Param due_date formData string true "Срок сдачи (ISO 8601)"
 // @Param course_id formData integer true "ID курса"
+// @Param type formData string true "Тип задания (text | multiple_choice)"
+// @Param subtasks_json formData string false "JSON подзаданий для multiple_choice"
 // @Param file formData file false "Файл (jpg, png, pdf)"
-// @Success 200 {object} map[string]interface{} "message, assignment"
+// @Success 200 {object} map[string]interface{} "message, assignment_id"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
 // @Failure 403 {object} map[string]string "error"
@@ -85,13 +87,13 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 
 		// Структура для входных данных
 		type AssignmentInput struct {
-			Title       string    `form:"title" validate:"required,min=3,max=100"`
-			Description string    `form:"description"`
-			MaxScore    uint      `form:"max_score" validate:"required,gte=0"`
-			DueDate     time.Time `form:"due_date" validate:"required"`
-			CourseID    uint      `form:"course_id" validate:"required"`
-			Type        string    `form:"type"`     // ← новое поле
-			SubtasksRaw string    `form:"subtasks"` // ← JSON-строка
+			Title        string    `form:"title" validate:"required,min=3,max=100"`
+			Description  string    `form:"description"`
+			MaxScore     uint      `form:"max_score" validate:"required,gte=0"`
+			DueDate      time.Time `form:"due_date" validate:"required"`
+			CourseID     uint      `form:"course_id" validate:"required"`
+			Type         string    `form:"type" validate:"required,oneof=text multiple_choice"`
+			SubtasksJSON string    `form:"subtasks_json"` // Синхронизировано с фронтендом
 		}
 
 		var input AssignmentInput
@@ -101,13 +103,20 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
+		// Десериализация подзаданий
 		var subtasks []model.Subtask
-		if input.SubtasksRaw != "" {
-			if err := json.Unmarshal([]byte(input.SubtasksRaw), &subtasks); err != nil {
+		if input.Type == "multiple_choice" {
+			if input.SubtasksJSON == "" {
+				logger.Log.Errorf("Subtasks required for multiple_choice assignment")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Тест должен содержать подзадания"})
+				return
+			}
+			if err := json.Unmarshal([]byte(input.SubtasksJSON), &subtasks); err != nil {
 				logger.Log.Errorf("Failed to parse subtasks JSON: %v", err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки подзаданий"})
 				return
 			}
+			logger.Log.Infof("Successfully deserialized %d subtasks", len(subtasks))
 		}
 
 		// Получаем userID из контекста
@@ -170,7 +179,6 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого курса"})
 			return
 		}
-		// Админы могут создавать задания для любого курса
 
 		// Обработка файла
 		var fileURL string
@@ -199,7 +207,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./uploads"
+			uploadDir := "./Uploads"
 			if err := os.MkdirAll(uploadDir, 0755); err != nil {
 				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -255,30 +263,16 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		// Сохранение через сервис
 		if err := assignmentService.Create(&assignment, subtasks); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		logger.Log.Infof("Assignment %s (ID: %d) created by user %d with file: %s", assignment.Title, assignment.ID, userID, fileURL)
-		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment": assignment})
+		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment_id": assignment.ID})
 	}
 }
 
 // GetAssignment возвращает задание по ID в контексте курса
-// @Summary Получить задание в курсе
-// @Description Возвращает задание по ID, проверяя его принадлежность к курсу. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
-// @Tags assignments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param courseId path int true "ID курса"
-// @Param assignmentId path int true "ID задания"
-// @Success 200 {object} model.Assignment
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 404 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /courses/{courseId}/assignments/{assignmentId} [get]
 func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		courseID, err := strconv.Atoi(c.Param("id"))
@@ -318,20 +312,6 @@ func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc 
 }
 
 // DeleteAssignment удаляет задание
-// @Summary Удалить задание
-// @Description Удаляет задание по его ID. Доступно только для учителей (создателей задания) и админов.
-// @Tags assignments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path int true "ID задания"
-// @Success 200 {object} map[string]string "message: Задание удалено"
-// @Failure 400 {object} map[string]string "error: Неверный ID"
-// @Failure 401 {object} map[string]string "error: Не авторизован"
-// @Failure 403 {object} map[string]string "error: Доступ запрещён"
-// @Failure 404 {object} map[string]string "error: Задание не найдено"
-// @Failure 500 {object} map[string]string "error: Внутренняя ошибка сервера"
-// @Router /assignments/{id} [delete]
 func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Получаем ID задания
@@ -396,19 +376,6 @@ func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 }
 
 // UploadFile загружает файл для задания
-// @Summary Загрузить файл
-// @Description Загружает файл (jpg, png, pdf) и возвращает URL. Требуется JWT-токен. Доступно для ролей: teacher, admin.
-// @Tags assignments
-// @Accept multipart/form-data
-// @Produce json
-// @Security BearerAuth
-// @Param file formData file true "Файл (jpg, png, pdf)"
-// @Success 200 {object} map[string]string "file_url"
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /assignments/upload [post]
 func UploadFile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Проверка Content-Type
@@ -494,7 +461,7 @@ func UploadFile() gin.HandlerFunc {
 		// Сохранение файла
 		ext := filepath.Ext(file.Filename)
 		filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-		uploadDir := "./uploads" // Физическая папка
+		uploadDir := "./Uploads"
 		if err := os.MkdirAll(uploadDir, 0755); err != nil {
 			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -507,59 +474,85 @@ func UploadFile() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
 			return
 		}
-		// Проверяем, существует ли файл
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			logger.Log.Errorf("File %s does not exist after saving", filePath)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл не был сохранён"})
 			return
 		}
-		fileURL := "http://localhost:8080/uploads/" + filename // URL с маленькой буквы
+		fileURL := "http://localhost:8080/uploads/" + filename
 		logger.Log.Infof("File saved successfully: %s", fileURL)
 
 		c.JSON(http.StatusOK, gin.H{"file_url": fileURL})
 	}
 }
 
+// SubmitQuizAssignment отправляет ответы на тест
+// @Summary Отправить ответы на тест
+// @Description Отправляет ответы на тест (multiple_choice). Требуется JWT-токен. Доступно для роли: student.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID задания"
+// @Param answers body object true "Ответы на подзадания"
+// @Success 200 {object} map[string]interface{} "message, grade, totalScore, answers"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /assignments/{id}/submit-quiz [post]
 func SubmitQuizAssignment(submissionService service.SubmissionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		assignmentID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
 
 		userID := c.GetUint("userID")
+		if userID == 0 {
+			logger.Log.Error("UserID not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не аутентифицирован"})
+			return
+		}
 
 		var input struct {
 			Answers []model.SubtaskSubmission `json:"answers" binding:"required"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON data: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
 
-		grade, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
+		result, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
 		if err != nil {
+			logger.Log.Errorf("Failed to process quiz submission: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Решение отправлено",
-			"grade":   grade,
+			"message":    "Решение отправлено",
+			"grade":      result["grade"],
+			"totalScore": result["totalScore"],
+			"answers":    result["answers"],
 		})
 	}
 }
 
+// GetSubtasks возвращает подзадания для задания
 func GetSubtasks(subtaskService service.SubtaskService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		assignmentID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
 		subtasks, err := subtaskService.GetByAssignmentID(uint(assignmentID))
 		if err != nil {
+			logger.Log.Errorf("Failed to get subtasks: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения подзаданий"})
 			return
 		}

@@ -19,7 +19,7 @@ func NewSubtaskService(db *gorm.DB) SubtaskService {
 
 func (s *subtaskService) GetByAssignmentID(assignmentID uint) ([]model.Subtask, error) {
 	var subtasks []model.Subtask
-	if err := s.db.Where("assignment_id = ?", assignmentID).Order("order asc").Find(&subtasks).Error; err != nil {
+	if err := s.db.Where("assignment_id = ?", assignmentID).Order("sort_order asc").Find(&subtasks).Error; err != nil {
 		return nil, err
 	}
 	return subtasks, nil

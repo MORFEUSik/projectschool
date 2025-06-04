@@ -7,5 +7,5 @@ type Subtask struct {
 	Question     string   `gorm:"type:text;not null"`         // текст вопроса
 	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
 	Answer       string   `gorm:"not null"`                   // правильный ответ
-	Order        int      `gorm:"not null"`                   // порядок следования
+	SortOrder    int      `gorm:"column:sort_order"`
 }

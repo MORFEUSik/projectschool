@@ -862,12 +862,11 @@ const [statsError, setStatsError] = useState('');
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams} from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-//import { Input } from '@/shared/ui/Input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -887,14 +886,21 @@ interface Assignment {
   due_date: string;
   course_id: number;
   file_url?: string;
-  type: string; // text | multiple_choice
+  type: string;
 }
 
 interface Subtask {
   id: number;
   question: string;
   options: string[];
-  order: number;
+  sort_order: number;
+  answer: string; // индекс (например, '2')
+}
+
+interface QuizResult {
+  grade: number;
+  totalScore: number;
+  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
 }
 
 interface ErrorResponse {
@@ -910,13 +916,13 @@ type SubmissionFormData = z.infer<typeof submissionSchema>;
 export default function AssignmentPage() {
   const { id: courseId, assignmentId } = useParams();
   const { user } = useUser();
-  //const router = useRouter();
-
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
 
   const submissionForm = useForm<SubmissionFormData>({
     resolver: zodResolver(submissionSchema),
@@ -961,6 +967,11 @@ export default function AssignmentPage() {
     }
   };
 
+  const handleQuizSubmit = (result: QuizResult) => {
+    setQuizResult(result);
+    setIsSubmitted(true);
+  };
+
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error && !assignment) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
   if (!assignment) return <div className="text-center mt-8">Задание не найдено</div>;
@@ -978,12 +989,7 @@ export default function AssignmentPage() {
         {assignment.file_url && (
           <div className="mt-4">
             {assignment.file_url.endsWith('.pdf') ? (
-              <a
-                href={assignment.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
+              <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                 Просмотреть PDF
               </a>
             ) : (
@@ -1019,19 +1025,15 @@ export default function AssignmentPage() {
           <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
           <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
-              <label htmlFor="content" className="block text-sm font-medium mb-1">
-                Ответ
-              </label>
+              <label htmlFor="content" className="block text-sm font-medium mb-1">Ответ</label>
               <textarea
                 id="content"
                 {...submissionForm.register('content')}
-                className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="border p-2 rounded w-full"
                 rows={5}
               />
               {submissionForm.formState.errors.content && (
-                <p className="text-red-500 text-sm">
-                  {submissionForm.formState.errors.content.message}
-                </p>
+                <p className="text-red-500 text-sm">{submissionForm.formState.errors.content.message}</p>
               )}
             </div>
             <Button type="submit" disabled={submissionForm.formState.isSubmitting}>
@@ -1041,10 +1043,44 @@ export default function AssignmentPage() {
         </Card>
       )}
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Квиз</h2>
-          <QuizForm assignmentId={assignment.id} subtasks={subtasks} />
+      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && !isSubmitted && (
+        <Card className="p-6 mt-4">
+          <h2 className="text-2xl font-semibold mb-4">Квиз</h2>
+          <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+        </Card>
+      )}
+
+      {isSubmitted && quizResult && (
+        <Card className="p-6 mt-4">
+          <h2 className="text-2xl font-semibold mb-4">Результаты теста</h2>
+          <p><strong>Оценка:</strong> {quizResult.grade.toFixed(1)}</p>
+          <p><strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)}</p>
+          <div className="mt-4 space-y-4">
+            {quizResult.answers.map((answer, idx) => {
+              const subtask = subtasks.find((st) => st.id === answer.SubtaskID);
+              if (!subtask || !subtask.options.length) return null;
+
+              const correctIndex = parseInt(subtask.answer, 10) - 1;
+              const correctOption = subtask.options[correctIndex] ?? '(неизвестно)';
+              const userIndex = subtask.options.findIndex(
+                (opt) => opt.trim().toLowerCase() === answer.Answer.trim().toLowerCase()
+              );
+              const isCorrect = userIndex === correctIndex;
+
+              return (
+                <div key={idx} className="border rounded p-3">
+                  <p className="mb-1 font-semibold">Вопрос {idx + 1}: {subtask.question}</p>
+                  <p>
+                    Результат: <span className={isCorrect ? 'text-green-600' : 'text-red-600'}>
+                      {isCorrect ? '✅ Правильно' : '❌ Неправильно'}
+                    </span>
+                  </p>
+                  <p>Ваш ответ: <strong>{answer.Answer}</strong></p>
+                  {!isCorrect && <p>Правильный ответ: <strong>{correctOption}</strong></p>}
+                </div>
+              );
+            })}
+          </div>
         </Card>
       )}
     </div>
@@ -1058,6 +1094,7 @@ export default function AssignmentPage() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -1080,9 +1117,16 @@ const assignmentSchema = z.object({
     message: 'Срок сдачи должен быть в будущем',
   }),
   file: z.any().optional(),
+  type: z.string().optional(),
 });
 
 type FormData = z.infer<typeof assignmentSchema>;
+
+interface Subtask {
+  question: string;
+  options: string[];
+  answer: string;
+}
 
 interface ErrorResponse {
   error?: string;
@@ -1094,6 +1138,8 @@ export default function CreateAssignmentPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const [assignmentType, setAssignmentType] = useState('text');
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
 
   const { register, handleSubmit, formState: { errors }, setValue } = useForm<FormData>({
     resolver: zodResolver(assignmentSchema),
@@ -1102,12 +1148,38 @@ export default function CreateAssignmentPage() {
       description: '',
       max_score: 100,
       due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      type: 'text',
     },
   });
 
-  if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
-    return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
-  }
+  const handleAddSubtask = () => {
+    setSubtasks([...subtasks, { question: '', options: ['', '', '', ''], answer: '' }]);
+  };
+
+  const handleRemoveSubtask = (index: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== index));
+  };
+
+  const handleSubtaskChange = (
+    index: number,
+    field: keyof Subtask,
+    value: string | string[]
+  ) => {
+    const newSubtasks = [...subtasks];
+    if (field === 'options' && Array.isArray(value)) {
+      newSubtasks[index].options = value;
+    } else if (field !== 'options' && typeof value === 'string') {
+      if (field === 'answer') {
+        // Проверка, что ответ входит в варианты
+        if (value && !newSubtasks[index].options.includes(value)) {
+          toast.error('Правильный ответ должен быть одним из вариантов');
+          return;
+        }
+      }
+      newSubtasks[index][field] = value;
+    }
+    setSubtasks(newSubtasks);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1134,113 +1206,184 @@ export default function CreateAssignmentPage() {
     setError('');
     setIsSubmitting(true);
     try {
-        if (!courseId || typeof courseId !== 'string') {
-            const errorMessage = 'ID курса не указан';
-            setError(errorMessage);
-            toast.error(errorMessage);
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('title', data.title);
-        if (data.description) formData.append('description', data.description);
-        formData.append('max_score', data.max_score.toString());
-        formData.append('due_date', `${data.due_date}:00+00:00`);
-        formData.append('course_id', courseId);
-        if (data.file) {
-            formData.append('file', data.file);
-        }
-
-        // Отладка
-        console.log('Sending FormData:', Object.fromEntries(formData));
-
-        await api.post('/assignments', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        toast.success('Задание успешно создано!');
-        window.location.href = `/courses/${courseId}`;
-    } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
+      if (!courseId || typeof courseId !== 'string') {
+        const errorMessage = 'ID курса не указан';
         setError(errorMessage);
         toast.error(errorMessage);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('title', data.title);
+      if (data.description) formData.append('description', data.description);
+      formData.append('max_score', data.max_score.toString());
+      formData.append('due_date', `${data.due_date}:00+00:00`);
+      formData.append('course_id', courseId);
+      formData.append('type', assignmentType);
+      if (data.file) formData.append('file', data.file);
+      if (assignmentType === 'multiple_choice') {
+        // Валидация подзаданий
+        if (subtasks.length === 0) {
+          setError('Тест должен содержать хотя бы одно подзадание');
+          toast.error('Тест должен содержать хотя бы одно подзадание');
+          return;
+        }
+        for (const subtask of subtasks) {
+          if (!subtask.question) {
+            setError('Все вопросы должны быть заполнены');
+            toast.error('Все вопросы должны быть заполнены');
+            return;
+          }
+          if (subtask.options.filter(opt => opt.trim()).length < 2) {
+            setError('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+            toast.error('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+            return;
+          }
+          if (!subtask.answer) {
+            setError('Все подзадания должны иметь правильный ответ');
+            toast.error('Все подзадания должны иметь правильный ответ');
+            return;
+          }
+        }
+
+        const normalizedSubtasks = subtasks.map((subtask, index) => ({
+          Question: subtask.question,
+          Options: subtask.options,
+          Answer: subtask.answer,
+          SortOrder: index + 1,
+        }));
+        formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
+      }
+
+      const response = await api.post('/assignments', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success('Задание успешно создано!');
+      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-};
+  };
+
+  if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
+    return <div>Доступ запрещён</div>;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Создать задание</h1>
-      <Card className="p-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium mb-1">Название</label>
-            <Input
-              id="title"
-              {...register('title')}
-              placeholder="Название задания"
-            />
-            {errors.title && <p className="text-red-500 text-sm">{errors.title.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium mb-1">Описание (поддерживает Markdown)</label>
-            <textarea
-              id="description"
-              {...register('description')}
-              className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
-              rows={5}
-              placeholder="Опишите задание, используйте Markdown для форматирования"
-            />
-            {errors.description && <p className="text-red-500 text-sm">{errors.description.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="max_score" className="block text-sm font-medium mb-1">Максимальный балл</label>
-            <Input
-              id="max_score"
-              type="number"
-              {...register('max_score', { valueAsNumber: true })}
-              placeholder="100"
-            />
-            {errors.max_score && <p className="text-red-500 text-sm">{errors.max_score.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="due_date" className="block text-sm font-medium mb-1">Срок сдачи</label>
-            <Input
-              id="due_date"
-              type="datetime-local"
-              {...register('due_date')}
-            />
-            {errors.due_date && <p className="text-red-500 text-sm">{errors.due_date.message}</p>}
-          </div>
-          <div>
-            <label htmlFor="file" className="block text-sm font-medium mb-1">Файл (jpg, png, pdf)</label>
-            <input
-              id="file"
-              type="file"
-              accept="image/jpeg,image/png,application/pdf"
-              onChange={handleFileChange}
+    <div className="container mx-auto p-4">
+      <Card title="Создать задание">
+        <form onSubmit={handleSubmit(onSubmit)}>
+          {error && <div className="text-red-500 mb-4">{error}</div>}
+
+          <div className="mb-4">
+            <label className="block mb-2">Тип задания</label>
+            <select
+              value={assignmentType}
+              onChange={(e) => setAssignmentType(e.target.value)}
               className="border p-2 rounded w-full"
-            />
+            >
+              <option value="text">Обычное задание</option>
+              <option value="multiple_choice">Тест с вариантами</option>
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Название</label>
+            <Input {...register('title')} />
+            {errors.title && <p className="text-red-500">{errors.title.message}</p>}
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Описание</label>
+            <Input {...register('description')} />
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Максимальный балл</label>
+            <Input type="number" {...register('max_score', { valueAsNumber: true })} />
+            {errors.max_score && <p className="text-red-500">{errors.max_score.message}</p>}
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Срок сдачи</label>
+            <Input type="datetime-local" {...register('due_date')} />
+            {errors.due_date && <p className="text-red-500">{errors.due_date.message}</p>}
+          </div>
+
+          <div className="mb-4">
+            <label className="block mb-2">Файл (jpg, png, pdf)</label>
+            <input type="file" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} />
             {preview && (
               <div className="mt-2">
                 {preview.endsWith('.pdf') ? (
-                  <a href={preview} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                  <a href={preview} target="_blank" rel="noopener noreferrer">
                     Просмотреть PDF
                   </a>
                 ) : (
-                  <Image
-                    src={preview}
-                    alt="Preview"
-                    width={300}
-                    height={300}
-                    className="rounded"
-                  />
+                  <Image src={preview} alt="Preview" width={200} height={200} />
                 )}
               </div>
             )}
           </div>
+
+          {assignmentType === 'multiple_choice' && (
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold">Подзадания</h3>
+              {subtasks.map((subtask, idx) => (
+                <div key={idx} className="border p-4 mb-2 rounded">
+                  <label className="block mb-2">Вопрос</label>
+                  <Input
+                    value={subtask.question}
+                    onChange={(e) => handleSubtaskChange(idx, 'question', e.target.value)}
+                    className="mb-2"
+                  />
+                  <label className="block mb-2">Варианты ответа</label>
+                  {subtask.options.map((option, optIdx) => (
+                    <Input
+                      key={optIdx}
+                      value={option}
+                      onChange={(e) => {
+                        const newOptions = [...subtask.options];
+                        newOptions[optIdx] = e.target.value;
+                        handleSubtaskChange(idx, 'options', newOptions);
+                      }}
+                      className="mb-1"
+                    />
+                  ))}
+                  <label className="block mb-2">Правильный ответ</label>
+                  <select
+  value={subtask.answer}
+  onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
+  className="border p-2 rounded w-full"
+>
+  <option value="">Выберите номер правильного варианта</option>
+  {subtask.options.map((_, i) => (
+    <option key={i} value={(i + 1).toString()}>
+      Вариант {i + 1}
+    </option>
+  ))}
+</select>
+
+                  <Button
+                    type="button"
+                    onClick={() => handleRemoveSubtask(idx)}
+                    className="mt-2 bg-red-600 text-white"
+                  >
+                    Удалить подзадание
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" onClick={handleAddSubtask}>
+                Добавить подзадание
+              </Button>
+            </div>
+          )}
+
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Создаётся...' : 'Создать'}
           </Button>
@@ -2319,11 +2462,12 @@ export function Input({ className = '', ...props }: InputProps) {
 ║ frontend/src/shared/ui/Button.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-import { ButtonHTMLAttributes } from 'react';
+import { ButtonHTMLAttributes, ReactNode } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
   variant?: 'default' | 'outline' | 'destructive';
+  children?: ReactNode; // ⬅ Явно добавлено
 }
 
 export function Button({ children, className = '', variant = 'default', ...props }: ButtonProps) {
@@ -2337,7 +2481,7 @@ export function Button({ children, className = '', variant = 'default', ...props
       className={`${variantStyles[variant]} ${className}`}
       {...props}
     >
-      {children}
+      {children ?? 'Default Button'} {/* ⬅ Защита от undefined */}
     </button>
   );
 }
@@ -2347,17 +2491,23 @@ export function Button({ children, className = '', variant = 'default', ...props
 ║ frontend/src/shared/ui/Card.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// src/shared/ui/Card.tsx
 import { ReactNode } from 'react';
 
 interface CardProps {
   children: ReactNode;
   className?: string;
+  title?: string; // Добавляем пропс title
 }
 
-export function Card({ children, className = '' }: CardProps) {
-  return <div className={`bg-white p-4 rounded shadow ${className}`}>{children}</div>;
+export function Card({ children, className = '', title }: CardProps) {
+  return (
+    <div className={`bg-white p-4 rounded shadow ${className}`}>
+      {title && <h2 className="text-xl font-semibold mb-4">{title}</h2>}
+      {children}
+    </div>
+  );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2365,112 +2515,132 @@ export function Card({ children, className = '' }: CardProps) {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
 import { api } from '@/shared/api';
-import { Button } from '@/shared/ui/Button';
 import toast from 'react-hot-toast';
+import { AxiosError } from 'axios';
 
 interface Subtask {
   id: number;
   question: string;
   options: string[];
-  order: number;
+  sort_order: number;
+  answer: string;
 }
 
-interface Props {
+interface QuizResult {
+  grade: number;
+  totalScore: number;
+  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
+}
+
+interface QuizFormProps {
   assignmentId: number;
   subtasks: Subtask[];
+  onSubmit: (result: QuizResult) => void;
 }
 
-export function QuizForm({ assignmentId, subtasks }: Props) {
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<
-    { subtaskId: number; answer: string; attempts: number }[]
-  >([]);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [disabledOptions, setDisabledOptions] = useState<string[]>([]);
-  const [finished, setFinished] = useState(false);
-  const [grade, setGrade] = useState<number | null>(null);
+export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
+  const [answers, setAnswers] = useState<Record<number, { answer: string; attempts: number }>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleOptionClick = (option: string) => {
-    const subtask = subtasks[current];
-    const isCorrect = option === subtask.options.find((o) => o === subtask.options.find(ans => ans === option));
-    const correct = option === subtask.options.find(ans => ans === subtask.options.find((o) => o === subtask.options.find((p) => p === o && p === subtask.answer)));
+  useEffect(() => {
+    const initialAnswers: Record<number, { answer: string; attempts: number }> = {};
+    subtasks.forEach((subtask) => {
+      const subtaskId = subtask.id;
+      const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
+      const attempts = stored ? JSON.parse(stored).attempts || 1 : 1;
+      initialAnswers[subtaskId] = { answer: '', attempts };
+    });
+    setAnswers(initialAnswers);
+  }, [assignmentId, subtasks]);
 
-    const prev = answers.find((a) => a.subtaskId === subtask.id);
-    const attempts = prev ? prev.attempts + 1 : 1;
-
-    if (option === subtask.answer) {
-      setAnswers([...answers, { subtaskId: subtask.id, answer: option, attempts }]);
-      setSelected([]);
-      setDisabledOptions([]);
-      if (current + 1 < subtasks.length) {
-        setCurrent(current + 1);
-      } else {
-        submitQuiz([...answers, { subtaskId: subtask.id, answer: option, attempts }]);
-      }
-    } else {
-      if (attempts >= subtask.options.length - 1) {
-        // Последняя попытка — переходим дальше
-        setAnswers([...answers, { subtaskId: subtask.id, answer: '', attempts }]);
-        setSelected([]);
-        setDisabledOptions([]);
-        if (current + 1 < subtasks.length) {
-          setCurrent(current + 1);
-        } else {
-          submitQuiz([...answers, { subtaskId: subtask.id, answer: '', attempts }]);
-        }
-      } else {
-        setDisabledOptions([...disabledOptions, option]);
-      }
-    }
+  const handleChange = (subtaskId: number, answer: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [subtaskId]: {
+        answer,
+        attempts: prev[subtaskId]?.attempts ?? 1,
+      },
+    }));
+    localStorage.setItem(
+      `quiz_${assignmentId}_${subtaskId}`,
+      JSON.stringify({ attempts: (answers[subtaskId]?.attempts || 1) + 1 })
+    );
   };
 
-  const submitQuiz = async (finalAnswers: typeof answers) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const payload = subtasks.map((subtask) => {
+      const subtaskId = subtask.id;
+      const selectedAnswer = answers[subtaskId]?.answer || '';
+      const selectedIndex = subtask.options.findIndex((opt) => opt === selectedAnswer);
+
+      return {
+        SubtaskID: subtaskId,
+        Answer: selectedIndex >= 0 ? String(selectedIndex + 1) : '',
+        Attempts: answers[subtaskId]?.attempts || 1,
+      };
+    });
+
+    if (payload.some((ans) => ans.Answer === '')) {
+      toast.error('Пожалуйста, ответьте на все вопросы');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const formatted = finalAnswers.map((a) => ({
-        subtask_id: a.subtaskId,
-        answer: a.answer,
-        attempts: a.attempts,
-      }));
-      const res = await api.post(`/assignments/${assignmentId}/submit-quiz`, {
-        answers: formatted,
+      const response = await api.post(`/assignments/${assignmentId}/submit-quiz`, { answers: payload });
+      toast.success('Ответы отправлены!');
+      onSubmit(response.data);
+
+      // Очистка localStorage
+      subtasks.forEach((subtask) => {
+        localStorage.removeItem(`quiz_${assignmentId}_${subtask.id}`);
       });
-      setGrade(res.data.grade);
-      setFinished(true);
-      toast.success(`Оценка: ${res.data.grade}`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Ошибка при отправке квиза');
+    } catch (err: unknown) {
+      const axiosErr = err as AxiosError<{ error?: string }>;
+      toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  if (finished) {
-    return <div className="text-xl font-bold text-green-600">Оценка: {grade}</div>;
-  }
-
-  const subtask = subtasks[current];
 
   return (
-    <div>
-      <p className="mb-2 text-lg font-semibold">
-        {current + 1}. {subtask.question}
-      </p>
-      <div className="space-y-2">
-        {subtask.options.map((opt) => (
-          <Button
-            key={opt}
-            variant={disabledOptions.includes(opt) ? 'destructive' : 'outline'}
-            disabled={disabledOptions.includes(opt)}
-            onClick={() => handleOptionClick(opt)}
-            className="block w-full text-left"
-          >
-            {opt}
-          </Button>
-        ))}
+  <form onSubmit={handleSubmit} className="space-y-6">
+    {Array.isArray(subtasks) && subtasks.map((subtask, idx) => (
+      <div key={subtask.id}>
+        <p className="font-medium mb-2">{idx + 1}. {subtask.question}</p>
+        <div className="space-y-1">
+          {subtask.options.map((option, i) => (
+            <label key={i} className="flex items-center space-x-2">
+              <input
+                type="radio"
+                name={`subtask-${subtask.id}`}
+                value={option}
+                checked={answers[subtask.id]?.answer === option}
+                onChange={() => handleChange(subtask.id, option)}
+                className="accent-blue-600"
+              />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    ))}
+
+    <button
+      type="submit"
+      disabled={isSubmitting}
+      className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"
+    >
+      {isSubmitting ? 'Отправка...' : 'Отправить тест'}
+    </button>
+  </form>
+);
+
 }
 
 

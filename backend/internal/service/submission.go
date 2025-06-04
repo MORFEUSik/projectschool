@@ -18,10 +18,10 @@ import (
 type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
-	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error)
+	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (map[string]interface{}, error)
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
-	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) // Добавляем метод
+	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
@@ -50,7 +50,6 @@ func NewSubmissionService(
 func (s *submissionService) Create(submission *model.Submission) error {
 	logger.Log.Infof("Creating submission for user %d, assignment %d", submission.UserID, submission.AssignmentID)
 
-	// Проверка: существует ли пользователь
 	_, err := s.userRepo.FindByID(submission.UserID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", submission.UserID, err)
@@ -60,7 +59,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: существует ли задание
 	assignment, err := s.assignmentRepo.FindByID(submission.AssignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
@@ -70,7 +68,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: принадлежит ли пользователь курсу
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", submission.UserID, assignment.CourseID).First(&enrollment).Error
 	if err != nil {
@@ -81,7 +78,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: не отправлено ли решение ранее
 	var existingSubmission model.Submission
 	err = s.db.Where("user_id = ? AND assignment_id = ?", submission.UserID, submission.AssignmentID).First(&existingSubmission).Error
 	if err == nil {
@@ -93,13 +89,11 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Создание решения
 	if err := s.repo.Create(submission); err != nil {
 		logger.Log.Errorf("Failed to create submission: %v", err)
 		return err
 	}
 
-	// Создание уведомления о подаче решения
 	notification := &model.Notification{
 		UserID:    submission.UserID,
 		Message:   fmt.Sprintf("Вы отправили решение для задания #%d", submission.AssignmentID),
@@ -119,7 +113,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) error {
 	logger.Log.Infof("Setting grade %f for submission %d by user %d", grade, submissionID, userID)
 
-	// Проверка: существует ли решение
 	var submission model.Submission
 	if err := s.db.First(&submission, submissionID).Error; err != nil {
 		logger.Log.Errorf("Submission %d not found: %v", submissionID, err)
@@ -129,7 +122,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Проверка: имеет ли пользователь права (учитель или админ)
 	var user model.User
 	if err := s.db.First(&user, userID).Error; err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -140,7 +132,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Проверка: принадлежит ли задание курсу, где пользователь — учитель
 	var assignment model.Assignment
 	if err := s.db.First(&assignment, submission.AssignmentID).Error; err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
@@ -156,17 +147,14 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Установка оценки и начисление баллов в транзакции
 	var submissionUser model.User
 	var points uint
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Установка оценки
 		submission.Grade = grade
 		if err := tx.Save(&submission).Error; err != nil {
 			return err
 		}
 
-		// Начисление баллов пользователю
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
@@ -183,7 +171,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Создание уведомления об оценке
 	notification := &model.Notification{
 		UserID:    submission.UserID,
 		Message:   fmt.Sprintf("Ваше решение для задания #%d оценено: %.2f", submission.AssignmentID, grade),
@@ -194,7 +181,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		logger.Log.Errorf("Failed to create grade notification: %v", err)
 	}
 
-	// Проверка достижений
 	achievementService := NewAchievementService(s.db)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
@@ -212,7 +198,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Создание уведомлений для новых достижений
 	for _, ach := range newAchievements {
 		notification := &model.Notification{
 			UserID:    submission.UserID,
@@ -245,7 +230,7 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submission, error) {
 	logger.Log.Infof("Fetching submissions for assignment %d", assignmentID)
 
-	// Проверка: существует ли задание
+	// Проверяем существование задания
 	_, err := s.assignmentRepo.FindByID(assignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
@@ -255,7 +240,6 @@ func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submissi
 		return nil, err
 	}
 
-	// Получение решений с предзагрузкой пользователя, задания и курса
 	var submissions []model.Submission
 	err = s.db.Preload("User").Preload("Assignment.Course").Where("assignment_id = ?", assignmentID).Find(&submissions).Error
 	if err != nil {
@@ -285,25 +269,51 @@ func (s *submissionService) GetUserSubmissions(ctx context.Context, userID uint)
 	return submissions, nil
 }
 
-func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error) {
-	// 1. Получаем подзадания
+func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (map[string]interface{}, error) {
+	logger.Log.Infof("Processing quiz submission for user %d, assignment %d", userID, assignmentID)
+
+	assignment, err := s.assignmentRepo.FindByID(assignmentID)
+	if err != nil {
+		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("задание не найдено")
+		}
+		return nil, err
+	}
+
+	if assignment.DueDate.Before(time.Now()) {
+		logger.Log.Warnf("Submission deadline passed for assignment %d", assignmentID)
+		return nil, errors.New("дедлайн задания истёк")
+	}
+
+	var existingSubmission model.Submission
+	err = s.db.Where("user_id = ? AND assignment_id = ?", userID, assignmentID).First(&existingSubmission).Error
+	if err == nil {
+		logger.Log.Warnf("Submission already exists for user %d, assignment %d", userID, assignmentID)
+		return nil, errors.New("решение уже отправлено")
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Log.Errorf("Error checking existing submission: %v", err)
+		return nil, err
+	}
+
 	var subtasks []model.Subtask
 	if err := s.db.Where("assignment_id = ?", assignmentID).Find(&subtasks).Error; err != nil {
-		return 0, err
+		logger.Log.Errorf("Failed to fetch subtasks for assignment %d: %v", assignmentID, err)
+		return nil, err
 	}
 	subtaskMap := make(map[uint]model.Subtask)
 	for _, st := range subtasks {
 		subtaskMap[st.ID] = st
 	}
 
-	// 2. Считаем пребаллы
 	var totalPrePoints, maxPrePoints float64
 	for _, answer := range answers {
 		sub, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
 			continue
 		}
-		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.ToLower(sub.Answer)
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(sub.Answer))
 		pre := 0.0
 		if isCorrect {
 			if answer.Attempts == 1 {
@@ -321,11 +331,11 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		answer.UserID = userID
 
 		if err := s.db.Create(&answer).Error; err != nil {
-			return 0, err
+			logger.Log.Errorf("Failed to save subtask submission: %v", err)
+			return nil, err
 		}
 	}
 
-	// 3. Итоговая оценка
 	percent := totalPrePoints / maxPrePoints * 100
 	var grade float64
 	switch {
@@ -341,24 +351,19 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		grade = 1
 	}
 
-	// 4. Сохраняем submission
 	submission := model.Submission{
 		AssignmentID: assignmentID,
 		UserID:       userID,
 		Grade:        grade,
 	}
 	if err := s.db.Create(&submission).Error; err != nil {
-		return 0, err
+		logger.Log.Errorf("Failed to save submission: %v", err)
+		return nil, err
 	}
 
-	// 5. Начисляем баллы (по весу макс. баллов задания)
-	var assignment model.Assignment
-	if err := s.db.First(&assignment, assignmentID).Error; err == nil {
-		points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
-		s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
-	}
+	points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+	s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
 
-	// Уведомление
 	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
 	s.notificationRepo.Create(&model.Notification{
 		UserID:    userID,
@@ -367,5 +372,12 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		CreatedAt: time.Now(),
 	})
 
-	return grade, nil
+	response := map[string]interface{}{
+		"grade":      grade,
+		"totalScore": totalPrePoints / maxPrePoints * float64(assignment.MaxScore),
+		"answers":    answers,
+	}
+
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f", userID, assignmentID, grade, response["totalScore"])
+	return response, nil
 }

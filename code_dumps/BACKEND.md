@@ -47,7 +47,6 @@ backend/
 │   │   ├── course.go
 │   │   ├── notification.go
 │   │   ├── submission.go
-│   │   ├── subtask.go
 │   │   └── user.go
 │   └── service
 │       ├── achievement.go
@@ -56,6 +55,7 @@ backend/
 │       ├── course.go
 │       ├── notification.go
 │       ├── submission.go
+│       ├── subtask.go
 │       └── user.go
 
 ================================================================================
@@ -987,6 +987,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"net/http"
 	"os"
 	"path/filepath"
@@ -994,16 +995,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"github.com/MORFEUSik/projectschool/backend/internal/repository" // ← вот это добавь
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -1046,12 +1045,14 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Produce json
 // @Security BearerAuth
 // @Param title formData string true "Название задания"
-// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
+// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/Uploads/...'>)"
 // @Param max_score formData integer true "Максимальный балл"
 // @Param due_date formData string true "Срок сдачи (ISO 8601)"
 // @Param course_id formData integer true "ID курса"
+// @Param type formData string true "Тип задания (text | multiple_choice)"
+// @Param subtasks_json formData string false "JSON подзаданий для multiple_choice"
 // @Param file formData file false "Файл (jpg, png, pdf)"
-// @Success 200 {object} map[string]interface{} "message, assignment"
+// @Success 200 {object} map[string]interface{} "message, assignment_id"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
 // @Failure 403 {object} map[string]string "error"
@@ -1069,13 +1070,13 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 
 		// Структура для входных данных
 		type AssignmentInput struct {
-			Title       string    `form:"title" validate:"required,min=3,max=100"`
-			Description string    `form:"description"`
-			MaxScore    uint      `form:"max_score" validate:"required,gte=0"`
-			DueDate     time.Time `form:"due_date" validate:"required"`
-			CourseID    uint      `form:"course_id" validate:"required"`
-			Type        string    `form:"type"`     // ← новое поле
-			SubtasksRaw string    `form:"subtasks"` // ← JSON-строка
+			Title        string    `form:"title" validate:"required,min=3,max=100"`
+			Description  string    `form:"description"`
+			MaxScore     uint      `form:"max_score" validate:"required,gte=0"`
+			DueDate      time.Time `form:"due_date" validate:"required"`
+			CourseID     uint      `form:"course_id" validate:"required"`
+			Type         string    `form:"type" validate:"required,oneof=text multiple_choice"`
+			SubtasksJSON string    `form:"subtasks_json"` // Синхронизировано с фронтендом
 		}
 
 		var input AssignmentInput
@@ -1085,13 +1086,20 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
+		// Десериализация подзаданий
 		var subtasks []model.Subtask
-		if input.SubtasksRaw != "" {
-			if err := json.Unmarshal([]byte(input.SubtasksRaw), &subtasks); err != nil {
+		if input.Type == "multiple_choice" {
+			if input.SubtasksJSON == "" {
+				logger.Log.Errorf("Subtasks required for multiple_choice assignment")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Тест должен содержать подзадания"})
+				return
+			}
+			if err := json.Unmarshal([]byte(input.SubtasksJSON), &subtasks); err != nil {
 				logger.Log.Errorf("Failed to parse subtasks JSON: %v", err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки подзаданий"})
 				return
 			}
+			logger.Log.Infof("Successfully deserialized %d subtasks", len(subtasks))
 		}
 
 		// Получаем userID из контекста
@@ -1154,7 +1162,6 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого курса"})
 			return
 		}
-		// Админы могут создавать задания для любого курса
 
 		// Обработка файла
 		var fileURL string
@@ -1183,7 +1190,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./uploads"
+			uploadDir := "./Uploads"
 			if err := os.MkdirAll(uploadDir, 0755); err != nil {
 				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -1239,30 +1246,16 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		// Сохранение через сервис
 		if err := assignmentService.Create(&assignment, subtasks); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания задания"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		logger.Log.Infof("Assignment %s (ID: %d) created by user %d with file: %s", assignment.Title, assignment.ID, userID, fileURL)
-		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment": assignment})
+		c.JSON(http.StatusOK, gin.H{"message": "Задание создано", "assignment_id": assignment.ID})
 	}
 }
 
 // GetAssignment возвращает задание по ID в контексте курса
-// @Summary Получить задание в курсе
-// @Description Возвращает задание по ID, проверяя его принадлежность к курсу. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
-// @Tags assignments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param courseId path int true "ID курса"
-// @Param assignmentId path int true "ID задания"
-// @Success 200 {object} model.Assignment
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 404 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /courses/{courseId}/assignments/{assignmentId} [get]
 func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		courseID, err := strconv.Atoi(c.Param("id"))
@@ -1302,20 +1295,6 @@ func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc 
 }
 
 // DeleteAssignment удаляет задание
-// @Summary Удалить задание
-// @Description Удаляет задание по его ID. Доступно только для учителей (создателей задания) и админов.
-// @Tags assignments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path int true "ID задания"
-// @Success 200 {object} map[string]string "message: Задание удалено"
-// @Failure 400 {object} map[string]string "error: Неверный ID"
-// @Failure 401 {object} map[string]string "error: Не авторизован"
-// @Failure 403 {object} map[string]string "error: Доступ запрещён"
-// @Failure 404 {object} map[string]string "error: Задание не найдено"
-// @Failure 500 {object} map[string]string "error: Внутренняя ошибка сервера"
-// @Router /assignments/{id} [delete]
 func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Получаем ID задания
@@ -1380,19 +1359,6 @@ func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 }
 
 // UploadFile загружает файл для задания
-// @Summary Загрузить файл
-// @Description Загружает файл (jpg, png, pdf) и возвращает URL. Требуется JWT-токен. Доступно для ролей: teacher, admin.
-// @Tags assignments
-// @Accept multipart/form-data
-// @Produce json
-// @Security BearerAuth
-// @Param file formData file true "Файл (jpg, png, pdf)"
-// @Success 200 {object} map[string]string "file_url"
-// @Failure 400 {object} map[string]string "error"
-// @Failure 401 {object} map[string]string "error"
-// @Failure 403 {object} map[string]string "error"
-// @Failure 500 {object} map[string]string "error"
-// @Router /assignments/upload [post]
 func UploadFile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Проверка Content-Type
@@ -1478,7 +1444,7 @@ func UploadFile() gin.HandlerFunc {
 		// Сохранение файла
 		ext := filepath.Ext(file.Filename)
 		filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-		uploadDir := "./uploads" // Физическая папка
+		uploadDir := "./Uploads"
 		if err := os.MkdirAll(uploadDir, 0755); err != nil {
 			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -1491,64 +1457,88 @@ func UploadFile() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения файла"})
 			return
 		}
-		// Проверяем, существует ли файл
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			logger.Log.Errorf("File %s does not exist after saving", filePath)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Файл не был сохранён"})
 			return
 		}
-		fileURL := "http://localhost:8080/uploads/" + filename // URL с маленькой буквы
+		fileURL := "http://localhost:8080/uploads/" + filename
 		logger.Log.Infof("File saved successfully: %s", fileURL)
 
 		c.JSON(http.StatusOK, gin.H{"file_url": fileURL})
 	}
 }
 
+// SubmitQuizAssignment отправляет ответы на тест
+// @Summary Отправить ответы на тест
+// @Description Отправляет ответы на тест (multiple_choice). Требуется JWT-токен. Доступно для роли: student.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID задания"
+// @Param answers body object true "Ответы на подзадания"
+// @Success 200 {object} map[string]interface{} "message, grade, totalScore, answers"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /assignments/{id}/submit-quiz [post]
 func SubmitQuizAssignment(submissionService service.SubmissionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		assignmentID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
 
 		userID := c.GetUint("userID")
+		if userID == 0 {
+			logger.Log.Error("UserID not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не аутентифицирован"})
+			return
+		}
 
 		var input struct {
 			Answers []model.SubtaskSubmission `json:"answers" binding:"required"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON data: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
 			return
 		}
 
-		grade, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
+		result, err := submissionService.ProcessQuizSubmission(uint(assignmentID), userID, input.Answers)
 		if err != nil {
+			logger.Log.Errorf("Failed to process quiz submission: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Решение отправлено",
-			"grade":   grade,
+			"message":    "Решение отправлено",
+			"grade":      result["grade"],
+			"totalScore": result["totalScore"],
+			"answers":    result["answers"],
 		})
 	}
 }
 
-func GetSubtasks(subtaskRepo repository.SubtaskRepository) gin.HandlerFunc {
+// GetSubtasks возвращает подзадания для задания
+func GetSubtasks(subtaskService service.SubtaskService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		assignmentID, err := strconv.Atoi(c.Param("id"))
+		assignmentID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
 			return
 		}
-
-		subtasks, err := subtaskRepo.FindByAssignment(uint(assignmentID))
+		subtasks, err := subtaskService.GetByAssignmentID(uint(assignmentID))
 		if err != nil {
+			logger.Log.Errorf("Failed to get subtasks: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения подзаданий"})
 			return
 		}
-
 		c.JSON(http.StatusOK, subtasks)
 	}
 }
@@ -2323,7 +2313,7 @@ type Subtask struct {
 	Question     string   `gorm:"type:text;not null"`         // текст вопроса
 	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
 	Answer       string   `gorm:"not null"`                   // правильный ответ
-	Order        int      `gorm:"not null"`                   // порядок следования
+	SortOrder    int      `gorm:"column:sort_order"`
 }
 
 
@@ -2616,38 +2606,6 @@ func (r *submissionRepository) FindByUserID(userID uint) ([]model.Submission, er
 
 
 ════════════════════════════════════════════════════════════════════════════════
-║ backend/internal/repository/subtask.go
-════════════════════════════════════════════════════════════════════════════════
-
-package repository
-
-import (
-	"github.com/MORFEUSik/projectschool/backend/internal/db"
-	"github.com/MORFEUSik/projectschool/backend/internal/model"
-	"gorm.io/gorm"
-)
-
-type SubtaskRepository interface {
-	FindByAssignment(assignmentID uint) ([]model.Subtask, error)
-}
-
-type subtaskRepository struct {
-	db *gorm.DB
-}
-
-func NewSubtaskRepository() SubtaskRepository {
-	return &subtaskRepository{db: db.DB}
-}
-
-func (r *subtaskRepository) FindByAssignment(assignmentID uint) ([]model.Subtask, error) {
-	var subtasks []model.Subtask
-	err := r.db.Where("assignment_id = ?", assignmentID).Order("order ASC").Find(&subtasks).Error
-	return subtasks, err
-}
-
-
-
-════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/repository/user.go
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -2795,6 +2753,7 @@ import (
 
 type AssignmentRepository interface {
 	Create(assignment *model.Assignment) error
+	CreateWithTx(tx *gorm.DB, assignment *model.Assignment) error
 	FindByCourseID(courseID uint) ([]model.Assignment, error)
 	FindByID(id uint) (*model.Assignment, error)
 	FindByUserID(userID uint) ([]model.Assignment, error)
@@ -2842,6 +2801,10 @@ func (r *assignmentRepository) Delete(id uint) error {
 		return fmt.Errorf("assignment not found")
 	}
 	return nil
+}
+
+func (r *assignmentRepository) CreateWithTx(tx *gorm.DB, assignment *model.Assignment) error {
+	return tx.Create(assignment).Error
 }
 
 
@@ -3352,10 +3315,10 @@ import (
 type SubmissionService interface {
 	Create(submission *model.Submission) error
 	SetGrade(submissionID, userID uint, grade float64) error
-	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error)
+	ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (map[string]interface{}, error)
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
-	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error) // Добавляем метод
+	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
@@ -3384,7 +3347,6 @@ func NewSubmissionService(
 func (s *submissionService) Create(submission *model.Submission) error {
 	logger.Log.Infof("Creating submission for user %d, assignment %d", submission.UserID, submission.AssignmentID)
 
-	// Проверка: существует ли пользователь
 	_, err := s.userRepo.FindByID(submission.UserID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", submission.UserID, err)
@@ -3394,7 +3356,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: существует ли задание
 	assignment, err := s.assignmentRepo.FindByID(submission.AssignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
@@ -3404,7 +3365,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: принадлежит ли пользователь курсу
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", submission.UserID, assignment.CourseID).First(&enrollment).Error
 	if err != nil {
@@ -3415,7 +3375,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Проверка: не отправлено ли решение ранее
 	var existingSubmission model.Submission
 	err = s.db.Where("user_id = ? AND assignment_id = ?", submission.UserID, submission.AssignmentID).First(&existingSubmission).Error
 	if err == nil {
@@ -3427,13 +3386,11 @@ func (s *submissionService) Create(submission *model.Submission) error {
 		return err
 	}
 
-	// Создание решения
 	if err := s.repo.Create(submission); err != nil {
 		logger.Log.Errorf("Failed to create submission: %v", err)
 		return err
 	}
 
-	// Создание уведомления о подаче решения
 	notification := &model.Notification{
 		UserID:    submission.UserID,
 		Message:   fmt.Sprintf("Вы отправили решение для задания #%d", submission.AssignmentID),
@@ -3453,7 +3410,6 @@ func (s *submissionService) Create(submission *model.Submission) error {
 func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) error {
 	logger.Log.Infof("Setting grade %f for submission %d by user %d", grade, submissionID, userID)
 
-	// Проверка: существует ли решение
 	var submission model.Submission
 	if err := s.db.First(&submission, submissionID).Error; err != nil {
 		logger.Log.Errorf("Submission %d not found: %v", submissionID, err)
@@ -3463,7 +3419,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Проверка: имеет ли пользователь права (учитель или админ)
 	var user model.User
 	if err := s.db.First(&user, userID).Error; err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -3474,7 +3429,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Проверка: принадлежит ли задание курсу, где пользователь — учитель
 	var assignment model.Assignment
 	if err := s.db.First(&assignment, submission.AssignmentID).Error; err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", submission.AssignmentID, err)
@@ -3490,17 +3444,14 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return errors.New("нет прав для оценки")
 	}
 
-	// Установка оценки и начисление баллов в транзакции
 	var submissionUser model.User
 	var points uint
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Установка оценки
 		submission.Grade = grade
 		if err := tx.Save(&submission).Error; err != nil {
 			return err
 		}
 
-		// Начисление баллов пользователю
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
@@ -3517,7 +3468,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Создание уведомления об оценке
 	notification := &model.Notification{
 		UserID:    submission.UserID,
 		Message:   fmt.Sprintf("Ваше решение для задания #%d оценено: %.2f", submission.AssignmentID, grade),
@@ -3528,7 +3478,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		logger.Log.Errorf("Failed to create grade notification: %v", err)
 	}
 
-	// Проверка достижений
 	achievementService := NewAchievementService(s.db)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
@@ -3546,7 +3495,6 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		return err
 	}
 
-	// Создание уведомлений для новых достижений
 	for _, ach := range newAchievements {
 		notification := &model.Notification{
 			UserID:    submission.UserID,
@@ -3579,7 +3527,7 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submission, error) {
 	logger.Log.Infof("Fetching submissions for assignment %d", assignmentID)
 
-	// Проверка: существует ли задание
+	// Проверяем существование задания
 	_, err := s.assignmentRepo.FindByID(assignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
@@ -3589,7 +3537,6 @@ func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submissi
 		return nil, err
 	}
 
-	// Получение решений с предзагрузкой пользователя, задания и курса
 	var submissions []model.Submission
 	err = s.db.Preload("User").Preload("Assignment.Course").Where("assignment_id = ?", assignmentID).Find(&submissions).Error
 	if err != nil {
@@ -3619,25 +3566,51 @@ func (s *submissionService) GetUserSubmissions(ctx context.Context, userID uint)
 	return submissions, nil
 }
 
-func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (float64, error) {
-	// 1. Получаем подзадания
+func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, answers []model.SubtaskSubmission) (map[string]interface{}, error) {
+	logger.Log.Infof("Processing quiz submission for user %d, assignment %d", userID, assignmentID)
+
+	assignment, err := s.assignmentRepo.FindByID(assignmentID)
+	if err != nil {
+		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("задание не найдено")
+		}
+		return nil, err
+	}
+
+	if assignment.DueDate.Before(time.Now()) {
+		logger.Log.Warnf("Submission deadline passed for assignment %d", assignmentID)
+		return nil, errors.New("дедлайн задания истёк")
+	}
+
+	var existingSubmission model.Submission
+	err = s.db.Where("user_id = ? AND assignment_id = ?", userID, assignmentID).First(&existingSubmission).Error
+	if err == nil {
+		logger.Log.Warnf("Submission already exists for user %d, assignment %d", userID, assignmentID)
+		return nil, errors.New("решение уже отправлено")
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Log.Errorf("Error checking existing submission: %v", err)
+		return nil, err
+	}
+
 	var subtasks []model.Subtask
 	if err := s.db.Where("assignment_id = ?", assignmentID).Find(&subtasks).Error; err != nil {
-		return 0, err
+		logger.Log.Errorf("Failed to fetch subtasks for assignment %d: %v", assignmentID, err)
+		return nil, err
 	}
 	subtaskMap := make(map[uint]model.Subtask)
 	for _, st := range subtasks {
 		subtaskMap[st.ID] = st
 	}
 
-	// 2. Считаем пребаллы
 	var totalPrePoints, maxPrePoints float64
 	for _, answer := range answers {
 		sub, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
 			continue
 		}
-		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.ToLower(sub.Answer)
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(sub.Answer))
 		pre := 0.0
 		if isCorrect {
 			if answer.Attempts == 1 {
@@ -3655,11 +3628,11 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		answer.UserID = userID
 
 		if err := s.db.Create(&answer).Error; err != nil {
-			return 0, err
+			logger.Log.Errorf("Failed to save subtask submission: %v", err)
+			return nil, err
 		}
 	}
 
-	// 3. Итоговая оценка
 	percent := totalPrePoints / maxPrePoints * 100
 	var grade float64
 	switch {
@@ -3675,24 +3648,19 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		grade = 1
 	}
 
-	// 4. Сохраняем submission
 	submission := model.Submission{
 		AssignmentID: assignmentID,
 		UserID:       userID,
 		Grade:        grade,
 	}
 	if err := s.db.Create(&submission).Error; err != nil {
-		return 0, err
+		logger.Log.Errorf("Failed to save submission: %v", err)
+		return nil, err
 	}
 
-	// 5. Начисляем баллы (по весу макс. баллов задания)
-	var assignment model.Assignment
-	if err := s.db.First(&assignment, assignmentID).Error; err == nil {
-		points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
-		s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
-	}
+	points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+	s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
 
-	// Уведомление
 	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
 	s.notificationRepo.Create(&model.Notification{
 		UserID:    userID,
@@ -3701,7 +3669,47 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		CreatedAt: time.Now(),
 	})
 
-	return grade, nil
+	response := map[string]interface{}{
+		"grade":      grade,
+		"totalScore": totalPrePoints / maxPrePoints * float64(assignment.MaxScore),
+		"answers":    answers,
+	}
+
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f", userID, assignmentID, grade, response["totalScore"])
+	return response, nil
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/service/subtask.go
+════════════════════════════════════════════════════════════════════════════════
+
+package service
+
+import (
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"gorm.io/gorm"
+)
+
+type SubtaskService interface {
+	GetByAssignmentID(assignmentID uint) ([]model.Subtask, error)
+}
+
+type subtaskService struct {
+	db *gorm.DB
+}
+
+func NewSubtaskService(db *gorm.DB) SubtaskService {
+	return &subtaskService{db: db}
+}
+
+func (s *subtaskService) GetByAssignmentID(assignmentID uint) ([]model.Subtask, error) {
+	var subtasks []model.Subtask
+	if err := s.db.Where("assignment_id = ?", assignmentID).Order("sort_order asc").Find(&subtasks).Error; err != nil {
+		return nil, err
+	}
+	return subtasks, nil
 }
 
 
@@ -3968,10 +3976,12 @@ func (s *notificationService) MarkAsRead(id uint, userID uint) error {
 package service
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	//"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
@@ -4000,38 +4010,67 @@ func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo
 }
 
 func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask) error {
-	// Сохраняем задание
-	if err := s.repo.Create(assignment); err != nil {
-		return err
+	logger.Log.Infof("Creating assignment: %s", assignment.Title)
+	if assignment.Type == "multiple_choice" && len(subtasks) == 0 {
+		logger.Log.Errorf("Multiple choice assignment must have at least one subtask")
+		return errors.New("тест должен содержать хотя бы одно подзадание")
 	}
 
-	// Сохраняем подзадания (если есть)
-	for i := range subtasks {
-		subtasks[i].AssignmentID = assignment.ID
-		subtasks[i].Order = i + 1
-		if err := s.db.Create(&subtasks[i]).Error; err != nil {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.repo.CreateWithTx(tx, assignment); err != nil {
+			logger.Log.Errorf("Failed to create assignment: %v", err)
 			return err
 		}
-	}
 
-	// Уведомляем студентов — без изменений
-	var enrollments []model.Enrollment
-	if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err == nil {
-		var course model.Course
-		if err := s.db.First(&course, assignment.CourseID).Error; err == nil {
-			for _, e := range enrollments {
-				notification := &model.Notification{
-					UserID:    e.UserID,
-					Message:   fmt.Sprintf("Новое задание в курсе %s: %s", course.Title, assignment.Title),
-					IsRead:    false,
-					CreatedAt: time.Now(),
-				}
-				s.notificationRepo.Create(notification)
+		for i := range subtasks {
+			if subtasks[i].Question == "" {
+				logger.Log.Errorf("Subtask question cannot be empty")
+				return errors.New("вопрос подзадания не может быть пустым")
+			}
+			if len(subtasks[i].Options) < 2 {
+				logger.Log.Errorf("Subtask must have at least 2 options")
+				return errors.New("подзадание должно содержать хотя бы 2 варианта ответа")
+			}
+			if !contains(subtasks[i].Options, subtasks[i].Answer) {
+				logger.Log.Errorf("Subtask answer must be one of the options")
+				return errors.New("правильный ответ должен быть одним из вариантов")
+			}
+			subtasks[i].AssignmentID = assignment.ID
+			subtasks[i].SortOrder = i + 1
+			if err := tx.Create(&subtasks[i]).Error; err != nil {
+				logger.Log.Errorf("Failed to create subtask: %v", err)
+				return err
 			}
 		}
-	}
 
-	return nil
+		var enrollments []model.Enrollment
+		if err := s.db.Where("course_id = ?", assignment.CourseID).Find(&enrollments).Error; err == nil {
+			var course model.Course
+			if err := s.db.First(&course, assignment.CourseID).Error; err == nil {
+				for _, e := range enrollments {
+					notification := &model.Notification{
+						UserID:    e.UserID,
+						Message:   fmt.Sprintf("Новое задание в курсе %s: %s", course.Title, assignment.Title),
+						IsRead:    false,
+						CreatedAt: time.Now(),
+					}
+					s.notificationRepo.Create(notification)
+				}
+			}
+		}
+
+		logger.Log.Infof("Assignment %s created successfully with %d subtasks", assignment.Title, len(subtasks))
+		return nil
+	})
+}
+
+func contains(options []string, answer string) bool {
+	for _, opt := range options {
+		if strings.TrimSpace(strings.ToLower(opt)) == strings.TrimSpace(strings.ToLower(answer)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *assignmentService) ListByCourse(courseID uint) ([]model.Assignment, error) {
@@ -4680,7 +4719,6 @@ func main() {
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
-	subtaskRepo := repository.NewSubtaskRepository()
 
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
@@ -4688,6 +4726,7 @@ func main() {
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo)
 	userService := service.NewUserService(userRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
+	subtaskService := service.NewSubtaskService(db.DB)
 
 	c := cron.New()
 	c.AddFunc("@every 24h", func() {
@@ -4743,7 +4782,7 @@ func main() {
 				assignments.POST("/:id/submit", handler.RoleMiddleware(model.Student), handler.SubmitAssignment(submissionService))
 				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
 				assignments.POST("/:id/submit-quiz", handler.RoleMiddleware(model.Student), handler.SubmitQuizAssignment(submissionService))
-				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskRepo)) // ← вот он!
+				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskService))
 
 			}
 

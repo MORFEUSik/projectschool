@@ -1,8 +1,9 @@
-import { ButtonHTMLAttributes } from 'react';
+import { ButtonHTMLAttributes, ReactNode } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
   variant?: 'default' | 'outline' | 'destructive';
+  children?: ReactNode; // ⬅ Явно добавлено
 }
 
 export function Button({ children, className = '', variant = 'default', ...props }: ButtonProps) {
@@ -16,7 +17,7 @@ export function Button({ children, className = '', variant = 'default', ...props
       className={`${variantStyles[variant]} ${className}`}
       {...props}
     >
-      {children}
+      {children ?? 'Default Button'} {/* ⬅ Защита от undefined */}
     </button>
   );
 }

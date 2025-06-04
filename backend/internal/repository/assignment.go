@@ -9,6 +9,7 @@ import (
 
 type AssignmentRepository interface {
 	Create(assignment *model.Assignment) error
+	CreateWithTx(tx *gorm.DB, assignment *model.Assignment) error
 	FindByCourseID(courseID uint) ([]model.Assignment, error)
 	FindByID(id uint) (*model.Assignment, error)
 	FindByUserID(userID uint) ([]model.Assignment, error)
@@ -56,4 +57,8 @@ func (r *assignmentRepository) Delete(id uint) error {
 		return fmt.Errorf("assignment not found")
 	}
 	return nil
+}
+
+func (r *assignmentRepository) CreateWithTx(tx *gorm.DB, assignment *model.Assignment) error {
+	return tx.Create(assignment).Error
 }

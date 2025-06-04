@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams} from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-//import { Input } from '@/shared/ui/Input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,14 +25,24 @@ interface Assignment {
   due_date: string;
   course_id: number;
   file_url?: string;
-  type: string; // text | multiple_choice
+  type: string;
 }
 
 interface Subtask {
   id: number;
+  ID?: number;
   question: string;
-  options: string[];
-  order: number;
+  Question?: string;
+  options: string[] | undefined;
+  Options?: string[];
+  sort_order: number;
+  SortOrder?: number;
+}
+
+interface QuizResult {
+  grade: number;
+  totalScore: number;
+  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
 }
 
 interface ErrorResponse {
@@ -49,13 +58,13 @@ type SubmissionFormData = z.infer<typeof submissionSchema>;
 export default function AssignmentPage() {
   const { id: courseId, assignmentId } = useParams();
   const { user } = useUser();
-  //const router = useRouter();
-
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
 
   const submissionForm = useForm<SubmissionFormData>({
     resolver: zodResolver(submissionSchema),
@@ -71,7 +80,16 @@ export default function AssignmentPage() {
 
         if (assignmentRes.data.type === 'multiple_choice') {
           const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
-          setSubtasks(subtasksRes.data);
+          console.log('API subtasks response:', subtasksRes.data);
+
+          const normalizedSubtasks = subtasksRes.data.map((subtask) => ({
+            id: subtask.id ?? subtask.ID,
+            question: subtask.question ?? subtask.Question,
+            options: subtask.options ?? subtask.Options ?? [],
+            sort_order: subtask.sort_order ?? subtask.SortOrder,
+          }));
+          console.log('Normalized subtasks:', normalizedSubtasks);
+          setSubtasks(normalizedSubtasks);
         }
       } catch (err: unknown) {
         const axiosErr = err as AxiosError<ErrorResponse>;
@@ -98,6 +116,11 @@ export default function AssignmentPage() {
       const axiosErr = err as AxiosError<ErrorResponse>;
       toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
     }
+  };
+
+  const handleQuizSubmit = (result: QuizResult) => {
+    setQuizResult(result);
+    setIsSubmitted(true);
   };
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
@@ -180,10 +203,42 @@ export default function AssignmentPage() {
         </Card>
       )}
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Квиз</h2>
-          <QuizForm assignmentId={assignment.id} subtasks={subtasks} />
+      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && !isSubmitted && (
+        <Card className="p-6 mt-4">
+          <h2 className="text-2xl font-semibold mb-4">Квиз</h2>
+          <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+        </Card>
+      )}
+
+      {isSubmitted && quizResult && (
+        <Card className="p-6 mt-4">
+          <h2 className="text-2xl font-semibold mb-4">Результаты теста</h2>
+          <p>
+            <strong>Оценка:</strong> {quizResult.grade.toFixed(1)}
+          </p>
+          <p>
+            <strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)}
+          </p>
+          <div className="mt-4">
+            {quizResult.answers.map((answer, idx) => {
+              const subtask = subtasks.find((st) => (st.id ?? st.ID) === answer.SubtaskID);
+              return (
+                <div key={idx} className="mb-2">
+                  <p>
+                    Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question} —{' '}
+                    {answer.IsCorrect ? '✅ Правильно' : '❌ Неправильно'}
+                  </p>
+                  <p>Ваш ответ: {answer.Answer}</p>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {isSubmitted && !quizResult && (
+        <Card className="p-6 text-green-600 font-semibold text-center">
+          ✅ Вы успешно прошли этот тест
         </Card>
       )}
     </div>

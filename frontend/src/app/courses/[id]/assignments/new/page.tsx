@@ -1,4 +1,5 @@
 'use client';
+
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -60,20 +61,29 @@ export default function CreateAssignmentPage() {
     setSubtasks([...subtasks, { question: '', options: ['', '', '', ''], answer: '' }]);
   };
 
+  const handleRemoveSubtask = (index: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== index));
+  };
+
   const handleSubtaskChange = (
-  index: number,
-  field: keyof Subtask,
-  value: string | string[]
-) => {
-
+    index: number,
+    field: keyof Subtask,
+    value: string | string[]
+  ) => {
     const newSubtasks = [...subtasks];
-if (field === 'options' && Array.isArray(value)) {
-  newSubtasks[index].options = value;
-} else if (field !== 'options' && typeof value === 'string') {
-  newSubtasks[index][field] = value;
-}
-setSubtasks(newSubtasks);
-
+    if (field === 'options' && Array.isArray(value)) {
+      newSubtasks[index].options = value;
+    } else if (field !== 'options' && typeof value === 'string') {
+      if (field === 'answer') {
+        // Проверка, что ответ входит в варианты
+        if (value && !newSubtasks[index].options.includes(value)) {
+          toast.error('Правильный ответ должен быть одним из вариантов');
+          return;
+        }
+      }
+      newSubtasks[index][field] = value;
+    }
+    setSubtasks(newSubtasks);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,14 +127,44 @@ setSubtasks(newSubtasks);
       formData.append('type', assignmentType);
       if (data.file) formData.append('file', data.file);
       if (assignmentType === 'multiple_choice') {
-        formData.append('subtasks_json', JSON.stringify(subtasks));
+        // Валидация подзаданий
+        if (subtasks.length === 0) {
+          setError('Тест должен содержать хотя бы одно подзадание');
+          toast.error('Тест должен содержать хотя бы одно подзадание');
+          return;
+        }
+        for (const subtask of subtasks) {
+          if (!subtask.question) {
+            setError('Все вопросы должны быть заполнены');
+            toast.error('Все вопросы должны быть заполнены');
+            return;
+          }
+          if (subtask.options.filter(opt => opt.trim()).length < 2) {
+            setError('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+            toast.error('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+            return;
+          }
+          if (!subtask.answer) {
+            setError('Все подзадания должны иметь правильный ответ');
+            toast.error('Все подзадания должны иметь правильный ответ');
+            return;
+          }
+        }
+
+        const normalizedSubtasks = subtasks.map((subtask, index) => ({
+          Question: subtask.question,
+          Options: subtask.options,
+          Answer: subtask.answer,
+          SortOrder: index + 1,
+        }));
+        formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
       }
 
-      await api.post('/assignments', formData, {
+      const response = await api.post('/assignments', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}`;
+      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
@@ -136,73 +176,78 @@ setSubtasks(newSubtasks);
   };
 
   if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
-    return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
+    return <div>Доступ запрещён</div>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Создать задание</h1>
-      <Card className="p-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+    <div className="container mx-auto p-4">
+      <Card title="Создать задание">
+        <form onSubmit={handleSubmit(onSubmit)}>
+          {error && <div className="text-red-500 mb-4">{error}</div>}
 
-          <div>
-            <label htmlFor="type" className="block text-sm font-medium mb-1">Тип задания</label>
-            <select id="type" value={assignmentType} onChange={(e) => setAssignmentType(e.target.value)} className="border p-2 rounded w-full">
+          <div className="mb-4">
+            <label className="block mb-2">Тип задания</label>
+            <select
+              value={assignmentType}
+              onChange={(e) => setAssignmentType(e.target.value)}
+              className="border p-2 rounded w-full"
+            >
               <option value="text">Обычное задание</option>
               <option value="multiple_choice">Тест с вариантами</option>
             </select>
           </div>
 
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium mb-1">Название</label>
-            <Input id="title" {...register('title')} placeholder="Название задания" />
-            {errors.title && <p className="text-red-500 text-sm">{errors.title.message}</p>}
+          <div className="mb-4">
+            <label className="block mb-2">Название</label>
+            <Input {...register('title')} />
+            {errors.title && <p className="text-red-500">{errors.title.message}</p>}
           </div>
 
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium mb-1">Описание</label>
-            <textarea id="description" {...register('description')} className="border p-2 rounded w-full" rows={4} />
+          <div className="mb-4">
+            <label className="block mb-2">Описание</label>
+            <Input {...register('description')} />
           </div>
 
-          <div>
-            <label htmlFor="max_score" className="block text-sm font-medium mb-1">Максимальный балл</label>
-            <Input id="max_score" type="number" {...register('max_score', { valueAsNumber: true })} />
+          <div className="mb-4">
+            <label className="block mb-2">Максимальный балл</label>
+            <Input type="number" {...register('max_score', { valueAsNumber: true })} />
+            {errors.max_score && <p className="text-red-500">{errors.max_score.message}</p>}
           </div>
 
-          <div>
-            <label htmlFor="due_date" className="block text-sm font-medium mb-1">Срок сдачи</label>
-            <Input id="due_date" type="datetime-local" {...register('due_date')} />
+          <div className="mb-4">
+            <label className="block mb-2">Срок сдачи</label>
+            <Input type="datetime-local" {...register('due_date')} />
+            {errors.due_date && <p className="text-red-500">{errors.due_date.message}</p>}
           </div>
 
-          <div>
-            <label htmlFor="file" className="block text-sm font-medium mb-1">Файл (jpg, png, pdf)</label>
-            <input id="file" type="file" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} className="border p-2 rounded w-full" />
+          <div className="mb-4">
+            <label className="block mb-2">Файл (jpg, png, pdf)</label>
+            <input type="file" accept="image/jpeg,image/png,application/pdf" onChange={handleFileChange} />
             {preview && (
               <div className="mt-2">
                 {preview.endsWith('.pdf') ? (
-                  <a href={preview} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                  <a href={preview} target="_blank" rel="noopener noreferrer">
                     Просмотреть PDF
                   </a>
                 ) : (
-                  <Image src={preview} alt="Preview" width={300} height={300} className="rounded" />
+                  <Image src={preview} alt="Preview" width={200} height={200} />
                 )}
               </div>
             )}
           </div>
 
           {assignmentType === 'multiple_choice' && (
-            <div>
-              <h2 className="text-xl font-semibold mt-6 mb-4">Подзадания</h2>
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold">Подзадания</h3>
               {subtasks.map((subtask, idx) => (
-                <div key={idx} className="mb-4 border p-4 rounded">
-                  <label className="block text-sm font-medium mb-1">Вопрос</label>
+                <div key={idx} className="border p-4 mb-2 rounded">
+                  <label className="block mb-2">Вопрос</label>
                   <Input
                     value={subtask.question}
                     onChange={(e) => handleSubtaskChange(idx, 'question', e.target.value)}
                     className="mb-2"
                   />
-                  <label className="block text-sm font-medium mb-1">Варианты ответа</label>
+                  <label className="block mb-2">Варианты ответа</label>
                   {subtask.options.map((option, optIdx) => (
                     <Input
                       key={optIdx}
@@ -210,19 +255,28 @@ setSubtasks(newSubtasks);
                       onChange={(e) => {
                         const newOptions = [...subtask.options];
                         newOptions[optIdx] = e.target.value;
-                        handleSubtaskChange(idx, 'options', [...newOptions]);
+                        handleSubtaskChange(idx, 'options', newOptions);
                       }}
                       className="mb-1"
                     />
                   ))}
-                  <label className="block text-sm font-medium mb-1">Правильный ответ</label>
+                  <label className="block mb-2">Правильный ответ</label>
                   <Input
                     value={subtask.answer}
                     onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
                   />
+                  <Button
+                    type="button"
+                    onClick={() => handleRemoveSubtask(idx)}
+                    className="mt-2 bg-red-600 text-white"
+                  >
+                    Удалить подзадание
+                  </Button>
                 </div>
               ))}
-              <Button type="button" onClick={handleAddSubtask}>Добавить подзадание</Button>
+              <Button type="button" onClick={handleAddSubtask}>
+                Добавить подзадание
+              </Button>
             </div>
           )}
 
