@@ -559,3 +559,121 @@ func GetSubtasks(subtaskService service.SubtaskService) gin.HandlerFunc {
 		c.JSON(http.StatusOK, subtasks)
 	}
 }
+
+// CheckSubtaskAnswer проверяет ответ на подзадание
+// @Summary Проверить ответ на подзадание
+// @Description Проверяет, является ли ответ на подзадание правильным. Требуется JWT-токен. Доступно для роли: student.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID задания"
+// @Param subtask_id body int true "ID подзадания"
+// @Param answer body string true "Ответ"
+// @Success 200 {object} map[string]interface{} "isCorrect, attempts"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 403 {object} map[string]string "error"
+// @Failure 404 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /assignments/{id}/check-subtask [post]
+func CheckSubtaskAnswer(subtaskService service.SubtaskService, submissionService service.SubmissionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		assignmentID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
+			return
+		}
+
+		userID := c.GetUint("userID")
+		if userID == 0 {
+			logger.Log.Error("UserID not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var input struct {
+			SubtaskID uint   `json:"subtask_id" binding:"required"`
+			Answer    string `json:"answer" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON data: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			return
+		}
+
+		// Проверка роли
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки пользователя"})
+			return
+		}
+		if user.Role != model.Student {
+			logger.Log.Errorf("User %d (%s) attempted to check subtask without permission", userID, user.Role)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Доступ запрещён"})
+			return
+		}
+
+		// Проверка существования подзадания
+		var subtask model.Subtask
+		if err := db.DB.Where("id = ? AND assignment_id = ?", input.SubtaskID, assignmentID).First(&subtask).Error; err != nil {
+			logger.Log.Errorf("Subtask %d not found for assignment %d: %v", input.SubtaskID, assignmentID, err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Подзадание не найдено"})
+			return
+		}
+
+		// Проверка, не отправлено ли уже решение для задания
+		var existingSubmission model.Submission
+		if err := db.DB.Where("user_id = ? AND assignment_id = ?", userID, assignmentID).First(&existingSubmission).Error; err == nil {
+			logger.Log.Warnf("Submission already exists for user %d, assignment %d", userID, assignmentID)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Решение уже отправлено"})
+			return
+		}
+
+		// Проверка ответа
+		isCorrect := strings.TrimSpace(strings.ToLower(input.Answer)) == strings.TrimSpace(strings.ToLower(subtask.Answer))
+
+		// Сохраняем попытку
+		var subtaskSubmission model.SubtaskSubmission
+		err = db.DB.Where("user_id = ? AND subtask_id = ?", userID, input.SubtaskID).First(&subtaskSubmission).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Log.Errorf("Error checking subtask submission: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки попытки"})
+			return
+		}
+
+		attempts := 1
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Создаём новую запись
+			subtaskSubmission = model.SubtaskSubmission{
+				SubtaskID: input.SubtaskID,
+				UserID:    userID,
+				Answer:    input.Answer,
+				IsCorrect: isCorrect,
+				Attempts:  1,
+			}
+			if err := db.DB.Create(&subtaskSubmission).Error; err != nil {
+				logger.Log.Errorf("Failed to create subtask submission: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения попытки"})
+				return
+			}
+		} else {
+			// Обновляем существующую запись
+			attempts = subtaskSubmission.Attempts + 1
+			if err := db.DB.Model(&subtaskSubmission).Updates(map[string]interface{}{
+				"answer":     input.Answer,
+				"is_correct": isCorrect,
+				"attempts":   attempts,
+			}).Error; err != nil {
+				logger.Log.Errorf("Failed to update subtask submission: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обновления попытки"})
+				return
+			}
+		}
+
+		logger.Log.Infof("Subtask %d checked for user %d: answer=%s, isCorrect=%v, attempts=%d", input.SubtaskID, userID, input.Answer, isCorrect, attempts)
+		c.JSON(http.StatusOK, gin.H{"isCorrect": isCorrect, "attempts": attempts})
+	}
+}

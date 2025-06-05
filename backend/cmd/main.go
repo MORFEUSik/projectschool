@@ -60,7 +60,7 @@ func main() {
 	if err != nil {
 		logger.Log.Fatalf("Failed to get working directory: %v", err)
 	}
-	uploadDir := filepath.Join(wd, "uploads")
+	uploadDir := filepath.Join(wd, "Uploads")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		logger.Log.Fatalf("Failed to create uploads directory: %v", err)
 	}
@@ -148,7 +148,7 @@ func main() {
 				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
 				assignments.POST("/:id/submit-quiz", handler.RoleMiddleware(model.Student), handler.SubmitQuizAssignment(submissionService))
 				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskService))
-
+				assignments.POST("/:id/check-subtask", handler.RoleMiddleware(model.Student), handler.CheckSubtaskAnswer(subtaskService, submissionService))
 			}
 
 			submissions := protected.Group("/submissions")

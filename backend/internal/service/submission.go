@@ -302,58 +302,97 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		logger.Log.Errorf("Failed to fetch subtasks for assignment %d: %v", assignmentID, err)
 		return nil, err
 	}
+	if len(subtasks) == 0 {
+		logger.Log.Errorf("No subtasks found for assignment %d", assignmentID)
+		return nil, errors.New("подзадания не найдены")
+	}
 	subtaskMap := make(map[uint]model.Subtask)
 	for _, st := range subtasks {
 		subtaskMap[st.ID] = st
 	}
 
-	var totalPrePoints, maxPrePoints float64
+	var totalScore float64
 	responseAnswers := make([]map[string]interface{}, 0, len(answers))
+	subtaskScore := float64(assignment.MaxScore) / float64(len(subtasks)) // Балл за одно подзадание
+
 	for i, answer := range answers {
 		subtask, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
 			logger.Log.Warnf("Subtask %d not found for answer index %d", answer.SubtaskID, i)
 			continue
 		}
-		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(subtask.Answer))
-		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d",
-			answer.SubtaskID, answer.Answer, subtask.Answer, isCorrect, answer.Attempts)
 
-		pre := 0.0
+		// Проверяем наличие сохранённой попытки
+		var subtaskSubmission model.SubtaskSubmission
+		err = s.db.Where("user_id = ? AND subtask_id = ?", userID, answer.SubtaskID).First(&subtaskSubmission).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Log.Errorf("Error checking subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
+			return nil, err
+		}
+
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(subtask.Answer))
+		attempts := answer.Attempts
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			attempts = subtaskSubmission.Attempts
+		}
+
+		numOptions := len(subtask.Options)
+		if numOptions < 2 || numOptions > 6 {
+			logger.Log.Errorf("Invalid number of options for SubtaskID %d: %d", answer.SubtaskID, numOptions)
+			return nil, errors.New("некорректное количество вариантов ответа")
+		}
+
+		// Подсчёт баллов за подзадание
+		var score float64
 		if isCorrect {
-			if answer.Attempts == 1 {
-				pre = 1.0
-			} else if answer.Attempts == 2 {
-				pre = 0.8
+			if attempts == 1 {
+				score = subtaskScore // Полный балл за первую попытку
+			} else if attempts < numOptions {
+				// Вычитаем балл за каждую попытку: subtaskScore / numOptions
+				score = subtaskScore * float64(numOptions-attempts) / float64(numOptions-1)
 			} else {
-				pre = 0.5
+				score = 0 // Если исчерпаны все неправильные варианты
 			}
 		}
-		maxPrePoints += 1
-		totalPrePoints += pre
+		totalScore += score
+
+		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d, Score=%.2f",
+			answer.SubtaskID, answer.Answer, subtask.Answer, isCorrect, attempts, score)
 
 		// Формируем ответ для клиента
 		responseAnswer := map[string]interface{}{
 			"SubtaskID": answer.SubtaskID,
 			"Answer":    answer.Answer,
 			"IsCorrect": isCorrect,
-			"Attempts":  answer.Attempts,
+			"Attempts":  attempts,
+			"Score":     score,
 		}
 		if !isCorrect {
 			responseAnswer["CorrectAnswer"] = subtask.Answer
 		}
 		responseAnswers = append(responseAnswers, responseAnswer)
 
-		// Сохраняем подзадачу
-		answers[i].IsCorrect = isCorrect
-		answers[i].UserID = userID
-		if err := s.db.Create(&answers[i]).Error; err != nil {
-			logger.Log.Errorf("Failed to save subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
-			return nil, err
+		// Сохраняем или обновляем подзадачу
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			answers[i].IsCorrect = isCorrect
+			answers[i].UserID = userID
+			if err := s.db.Create(&answers[i]).Error; err != nil {
+				logger.Log.Errorf("Failed to save subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
+				return nil, err
+			}
+		} else {
+			if err := s.db.Model(&subtaskSubmission).Updates(map[string]interface{}{
+				"answer":     answer.Answer,
+				"is_correct": isCorrect,
+				"attempts":   attempts,
+			}).Error; err != nil {
+				logger.Log.Errorf("Failed to update subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
+				return nil, err
+			}
 		}
 	}
 
-	percent := totalPrePoints / maxPrePoints * 100
+	percent := totalScore / float64(assignment.MaxScore) * 100
 	var grade float64
 	switch {
 	case percent >= 80:
@@ -378,7 +417,7 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		return nil, err
 	}
 
-	points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+	points := uint(math.Round(totalScore))
 	s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
 
 	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
@@ -391,11 +430,11 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 
 	response := map[string]interface{}{
 		"grade":      grade,
-		"totalScore": totalPrePoints / maxPrePoints * float64(assignment.MaxScore),
+		"totalScore": totalScore,
 		"answers":    responseAnswers,
 	}
 
 	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f, answers=%+v",
-		userID, assignmentID, grade, response["totalScore"], responseAnswers)
+		userID, assignmentID, grade, totalScore, responseAnswers)
 	return response, nil
 }

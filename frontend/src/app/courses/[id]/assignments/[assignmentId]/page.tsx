@@ -48,6 +48,7 @@ interface QuizResult {
     IsCorrect: boolean;
     Attempts: number;
     CorrectAnswer?: string;
+    Score: number;
   }[];
 }
 
@@ -96,6 +97,17 @@ export default function AssignmentPage() {
           }));
           console.log('Normalized subtasks:', normalizedSubtasks);
           setSubtasks(normalizedSubtasks);
+
+          // Проверяем, отправлено ли решение
+          try {
+            const submissionRes = await api.get(`/assignments/${assignmentId}/submit-quiz`);
+            if (submissionRes.data) {
+              setIsSubmitted(true);
+              setQuizResult(submissionRes.data);
+            }
+          } catch (_) {
+            // Игнорируем ошибку, если решение ещё не отправлено
+          }
         }
       } catch (err: unknown) {
         const axiosErr = err as AxiosError<ErrorResponse>;
@@ -109,7 +121,6 @@ export default function AssignmentPage() {
   }, [assignmentId, courseId]);
 
   useEffect(() => {
-    // Логирование для дебаггинга
     if (quizResult) {
       console.log('QuizResult:', quizResult);
     }
@@ -146,6 +157,7 @@ export default function AssignmentPage() {
   return (
     <div className="max-w-4xl mx-auto mt-8">
       <h1 className="text-3xl font-bold mb-6">{assignment.title}</h1>
+
       <Card className="p-6 mb-6">
         <div className="prose">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
@@ -168,7 +180,7 @@ export default function AssignmentPage() {
               <>
                 <Image
                   src={assignment.file_url}
-                  alt="Файл"
+                  alt="Assignment file"
                   width={500}
                   height={500}
                   className="rounded"
@@ -179,7 +191,6 @@ export default function AssignmentPage() {
             )}
           </div>
         )}
-
         <p className="mt-4">
           <strong>Макс. балл:</strong> {assignment.max_score}
         </p>
@@ -193,21 +204,21 @@ export default function AssignmentPage() {
       </Card>
 
       {isStudent && !isDeadlinePassed && assignment.type === 'text' && (
-        <Card className="p-6">
+        <Card className="mb-6 p-6">
           <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
           <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
-              <label htmlFor="content" className="block text-sm font-medium mb-1">
+              <label htmlFor="content" className="block mb-1 text-sm font-medium">
                 Ответ
               </label>
               <textarea
                 id="content"
                 {...submissionForm.register('content')}
-                className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full rounded border p-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 rows={5}
               />
               {submissionForm.formState.errors.content && (
-                <p className="text-red-500 text-sm">
+                <p className="text-sm text-red-500">
                   {submissionForm.formState.errors.content.message}
                 </p>
               )}
@@ -220,43 +231,75 @@ export default function AssignmentPage() {
       )}
 
       {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && !isSubmitted && (
-        <Card className="p-6 mt-4">
+        <Card className="mb-6 mt-6 p-4">
           <h2 className="text-2xl font-semibold mb-4">Квиз</h2>
           <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
         </Card>
       )}
 
       {isSubmitted && quizResult && (
-        <Card title="Результаты теста">
-          <div className="space-y-2">
-            <p>Оценка: {quizResult.grade.toFixed(1)}</p>
-            <p>Баллы: {quizResult.totalScore.toFixed(1)}</p>
+        <Card title="Результаты теста" className="p-6">
+          <div className="space-y-4">
+            <p>
+              <strong>Оценка:</strong> {quizResult.grade.toFixed(1)}
+            </p>
+            <p>
+              <strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
+            </p>
             <div className="space-y-4">
               {quizResult.answers.map((answer, idx) => {
-                const subtask = subtasks.find((st) => (st.id ?? st.ID) === answer.SubtaskID);
+                const subtask = subtasks.find((s) => (s.id ?? s.ID) === answer.SubtaskID);
+                const options = subtask?.options ?? subtask?.Options ?? [];
+                const subtaskScore = assignment.max_score / subtasks.length;
                 console.log(`Answer ${idx + 1}:`, { answer, subtask });
                 return (
-                  <div key={idx} className="border p-2 rounded">
-                    <p>
-                      Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question ?? 'Вопрос не найден'} —{' '}
-                      {answer.IsCorrect ? '✅ Правильно' : '❌ Неправильно'}
+                  <div key={idx} className="border p-4 rounded">
+                    <p className="font-semibold">
+                      Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question ?? 'Вопрос отсутствует'}
                     </p>
-                    <p>Ваш ответ: {answer.Answer}</p>
-                    <p>Попыток: {answer.Attempts}</p>
+                    <p>
+                      <strong>Ваш ответ:</strong>{' '}
+                      <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
+                        {answer.Answer || 'Не отвечено'}
+                      </span>
+                    </p>
                     {!answer.IsCorrect && answer.CorrectAnswer && (
-                      <p className="text-green-600">Правильный ответ: {answer.CorrectAnswer}</p>
+                      <p>
+                        <strong>Правильный ответ:</strong> {answer.CorrectAnswer}
+                      </p>
+                    )}
+                    <p>
+                      <strong>Попытки:</strong> {answer.Attempts}
+                    </p>
+                    <p>
+                      <strong>Баллы:</strong> {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
+                    </p>
+                    {options.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium">Варианты ответа:</p>
+                        <ul className="list-disc pl-5">
+                          {options.map((option, optIdx) => (
+                            <li
+                              key={optIdx}
+                              className={
+                                option === answer.CorrectAnswer
+                                  ? 'text-green-600'
+                                  : answer.Answer === option && !answer.IsCorrect
+                                  ? 'text-red-600'
+                                  : ''
+                              }
+                            >
+                              {option}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
           </div>
-        </Card>
-      )}
-
-      {isSubmitted && !quizResult && (
-        <Card className="p-6 text-green-600 font-semibold text-center">
-          ✅ Вы успешно прошли этот тест
         </Card>
       )}
     </div>

@@ -22,7 +22,7 @@ const assignmentSchema = z.object({
     message: 'Срок сдачи должен быть в будущем',
   }),
   file: z.any().optional(),
-  type: z.string().optional(),
+  type: z.enum(['text', 'multiple_choice']),
 });
 
 type FormData = z.infer<typeof assignmentSchema>;
@@ -31,6 +31,7 @@ interface Subtask {
   question: string;
   options: string[];
   answer: string;
+  numOptions: number;
 }
 
 interface ErrorResponse {
@@ -43,7 +44,7 @@ export default function CreateAssignmentPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [assignmentType, setAssignmentType] = useState('text');
+  const [assignmentType, setAssignmentType] = useState<'text' | 'multiple_choice'>('text');
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
 
   const { register, handleSubmit, formState: { errors }, setValue } = useForm<FormData>({
@@ -58,7 +59,7 @@ export default function CreateAssignmentPage() {
   });
 
   const handleAddSubtask = () => {
-    setSubtasks([...subtasks, { question: '', options: ['', '', '', ''], answer: '' }]);
+    setSubtasks([...subtasks, { question: '', options: ['', ''], answer: '', numOptions: 2 }]);
   };
 
   const handleRemoveSubtask = (index: number) => {
@@ -66,31 +67,43 @@ export default function CreateAssignmentPage() {
   };
 
   const handleSubtaskChange = (
-    index: number,
-    field: keyof Subtask,
-    value: string | string[]
-  ) => {
-    const newSubtasks = [...subtasks];
-    if (field === 'options' && Array.isArray(value)) {
-      // Нормализуем варианты ответа
-      newSubtasks[index].options = value.map(opt => opt.trim());
-    } else if (field !== 'options' && typeof value === 'string') {
-      if (field === 'answer') {
-        // Проверка, что ответ входит в варианты
+  index: number,
+  field: keyof Subtask,
+  value: string | string[] | number
+) => {
+  const newSubtasks = [...subtasks];
+
+  if (field === 'numOptions' && typeof value === 'number') {
+    newSubtasks[index].numOptions = value;
+    newSubtasks[index].options = Array(value).fill('');
+    newSubtasks[index].answer = '';
+  } else if (field === 'options' && Array.isArray(value)) {
+    newSubtasks[index].options = value.map(opt => opt.trim());
+  } else if (typeof value === 'string') {
+    switch (field) {
+      case 'question':
+        newSubtasks[index].question = value.trim();
+        break;
+      case 'answer': {
         const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
         if (value && !normalizedOptions.includes(value.trim())) {
           toast.error('Правильный ответ должен быть одним из вариантов');
           return;
         }
-        newSubtasks[index][field] = value.trim();
-      } else {
-        newSubtasks[index][field] = value;
+        newSubtasks[index].answer = value.trim();
+        break;
       }
+      default:
+        break;
     }
-    setSubtasks(newSubtasks);
-  };
+  }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  setSubtasks(newSubtasks);
+};
+
+
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
@@ -131,7 +144,6 @@ export default function CreateAssignmentPage() {
       formData.append('type', assignmentType);
       if (data.file) formData.append('file', data.file);
       if (assignmentType === 'multiple_choice') {
-        // Валидация подзаданий
         if (subtasks.length === 0) {
           setError('Тест должен содержать хотя бы одно подзадание');
           toast.error('Тест должен содержать хотя бы одно подзадание');
@@ -143,9 +155,9 @@ export default function CreateAssignmentPage() {
             toast.error('Все вопросы должны быть заполнены');
             return;
           }
-          if (subtask.options.filter(opt => opt.trim()).length < 2) {
-            setError('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
-            toast.error('Каждое подзадание должно иметь минимум 2 непустых варианта ответа');
+          if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
+            setError('Каждое подзадание должно иметь от 2 до 6 вариантов ответа');
+            toast.error('Каждое подзадание должно иметь от 2 до 6 вариантов ответа');
             return;
           }
           if (!subtask.answer) {
@@ -157,11 +169,11 @@ export default function CreateAssignmentPage() {
 
         const normalizedSubtasks = subtasks.map((subtask, index) => ({
           Question: subtask.question,
-          Options: subtask.options.map(opt => opt.trim()), // Нормализуем варианты
-          Answer: subtask.answer.trim(), // Нормализуем правильный ответ
+          Options: subtask.options.filter(opt => opt.trim()),
+          Answer: subtask.answer,
           SortOrder: index + 1,
         }));
-        console.log('Normalized subtasks:', normalizedSubtasks); // Логирование
+        console.log('Normalized subtasks:', normalizedSubtasks);
         formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
       }
 
@@ -194,7 +206,8 @@ export default function CreateAssignmentPage() {
             <label className="block mb-2">Тип задания</label>
             <select
               value={assignmentType}
-              onChange={(e) => setAssignmentType(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignmentType(e.target.value as 'text' | 'multiple_choice')
+}
               className="border p-2 rounded w-full"
             >
               <option value="text">Обычное задание</option>
@@ -249,34 +262,55 @@ export default function CreateAssignmentPage() {
                   <label className="block mb-2">Вопрос</label>
                   <Input
                     value={subtask.question}
-                    onChange={(e) => handleSubtaskChange(idx, 'question', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      handleSubtaskChange(idx, 'question', e.target.value)
+                    }
                     className="mb-2"
                   />
+                  <label className="block mb-2">Количество вариантов ответа (2–6)</label>
+                  <select
+                    value={subtask.numOptions}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      handleSubtaskChange(idx, 'numOptions', Number(e.target.value))
+                    }
+                    className="border p-2 rounded w-full mb-2"
+                  >
+                    {[2, 3, 4, 5, 6].map((num) => (
+                      <option key={num} value={num}>
+                        {num}
+                      </option>
+                    ))}
+                  </select>
                   <label className="block mb-2">Варианты ответа</label>
                   {subtask.options.map((option, optIdx) => (
                     <Input
                       key={optIdx}
                       value={option}
-                      onChange={(e) => {
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         const newOptions = [...subtask.options];
                         newOptions[optIdx] = e.target.value;
                         handleSubtaskChange(idx, 'options', newOptions);
                       }}
                       className="mb-1"
+                      placeholder={`Вариант ${optIdx + 1}`}
                     />
                   ))}
                   <label className="block mb-2">Правильный ответ</label>
                   <select
                     value={subtask.answer}
-                    onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      handleSubtaskChange(idx, 'answer', e.target.value)
+                    }
                     className="border p-2 rounded w-full"
                   >
                     <option value="">Выберите ответ</option>
-                    {subtask.options.map((opt, i) => (
-                      <option key={i} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
+                    {subtask.options.map((opt, i) =>
+                      opt.trim() ? (
+                        <option key={i} value={opt}>
+                          {opt}
+                        </option>
+                      ) : null
+                    )}
                   </select>
                   <Button
                     type="button"
