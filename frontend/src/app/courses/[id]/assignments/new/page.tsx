@@ -32,6 +32,8 @@ interface Subtask {
   options: string[];
   answer: string;
   numOptions: number;
+  image?: File | null; // Поле для файла подзадания
+  imagePreview?: string | null; // Превью изображения
 }
 
 interface ErrorResponse {
@@ -59,49 +61,68 @@ export default function CreateAssignmentPage() {
   });
 
   const handleAddSubtask = () => {
-    setSubtasks([...subtasks, { question: '', options: ['', ''], answer: '', numOptions: 2 }]);
+    setSubtasks([...subtasks, { question: '', options: ['', ''], answer: '', numOptions: 2, image: null, imagePreview: null }]);
   };
 
   const handleRemoveSubtask = (index: number) => {
+    const subtask = subtasks[index];
+    if (subtask.imagePreview) {
+      URL.revokeObjectURL(subtask.imagePreview); // Освобождаем память
+    }
     setSubtasks(subtasks.filter((_, i) => i !== index));
   };
 
   const handleSubtaskChange = (
-  index: number,
-  field: keyof Subtask,
-  value: string | string[] | number
-) => {
-  const newSubtasks = [...subtasks];
+    index: number,
+    field: keyof Subtask,
+    value: string | string[] | number | File | null
+  ) => {
+    const newSubtasks = [...subtasks];
 
-  if (field === 'numOptions' && typeof value === 'number') {
-    newSubtasks[index].numOptions = value;
-    newSubtasks[index].options = Array(value).fill('');
-    newSubtasks[index].answer = '';
-  } else if (field === 'options' && Array.isArray(value)) {
-    newSubtasks[index].options = value.map(opt => opt.trim());
-  } else if (typeof value === 'string') {
-    switch (field) {
-      case 'question':
-        newSubtasks[index].question = value.trim();
-        break;
-      case 'answer': {
-        const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
-        if (value && !normalizedOptions.includes(value.trim())) {
-          toast.error('Правильный ответ должен быть одним из вариантов');
-          return;
-        }
-        newSubtasks[index].answer = value.trim();
-        break;
+    if (field === 'numOptions' && typeof value === 'number') {
+      newSubtasks[index].numOptions = value;
+      newSubtasks[index].options = Array(value).fill('');
+      newSubtasks[index].answer = '';
+    } else if (field === 'options' && Array.isArray(value)) {
+      newSubtasks[index].options = value.map(opt => opt.trim());
+    } else if (field === 'image' && value instanceof File) {
+      // Валидация файла
+      if (value.size > 10 * 1024 * 1024) {
+        toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
+        return;
       }
-      default:
-        break;
+      if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
+        toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
+        return;
+      }
+      // Освобождаем предыдущее превью
+      if (newSubtasks[index].imagePreview) {
+        URL.revokeObjectURL(newSubtasks[index].imagePreview);
+      }
+      // Устанавливаем новый файл и превью
+      newSubtasks[index].image = value;
+      newSubtasks[index].imagePreview = URL.createObjectURL(value);
+    } else if (typeof value === 'string') {
+      switch (field) {
+        case 'question':
+          newSubtasks[index].question = value.trim();
+          break;
+        case 'answer': {
+          const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
+          if (value && !normalizedOptions.includes(value.trim())) {
+            toast.error('Правильный ответ должен быть одним из вариантов');
+            return;
+          }
+          newSubtasks[index].answer = value.trim();
+          break;
+        }
+        default:
+          break;
+      }
     }
-  }
 
-  setSubtasks(newSubtasks);
-};
-
-
+    setSubtasks(newSubtasks);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -115,6 +136,9 @@ export default function CreateAssignmentPage() {
         setError('Неподдерживаемый тип файла (jpg, png, pdf)');
         toast.error('Неподдерживаемый тип файла (jpg, png, pdf)');
         return;
+      }
+      if (preview) {
+        URL.revokeObjectURL(preview); // Освобождаем память
       }
       const previewUrl = URL.createObjectURL(file);
       setPreview(previewUrl);
@@ -143,27 +167,31 @@ export default function CreateAssignmentPage() {
       formData.append('course_id', courseId);
       formData.append('type', assignmentType);
       if (data.file) formData.append('file', data.file);
+
       if (assignmentType === 'multiple_choice') {
         if (subtasks.length === 0) {
           setError('Тест должен содержать хотя бы одно подзадание');
           toast.error('Тест должен содержать хотя бы одно подзадание');
           return;
         }
-        for (const subtask of subtasks) {
+        for (const [index, subtask] of subtasks.entries()) {
           if (!subtask.question) {
-            setError('Все вопросы должны быть заполнены');
-            toast.error('Все вопросы должны быть заполнены');
+            setError(`Вопрос ${index + 1} должен быть заполнен`);
+            toast.error(`Вопрос ${index + 1} должен быть заполнен`);
             return;
           }
           if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
-            setError('Каждое подзадание должно иметь от 2 до 6 вариантов ответа');
-            toast.error('Каждое подзадание должно иметь от 2 до 6 вариантов ответа');
+            setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
             return;
           }
           if (!subtask.answer) {
-            setError('Все подзадания должны иметь правильный ответ');
-            toast.error('Все подзадания должны иметь правильный ответ');
+            setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
+            toast.error(`Подзадание ${index + 1} должен иметь правильный ответ`);
             return;
+          }
+          if (subtask.image) {
+            formData.append(`subtask_image_${index}`, subtask.image);
           }
         }
 
@@ -173,7 +201,6 @@ export default function CreateAssignmentPage() {
           Answer: subtask.answer,
           SortOrder: index + 1,
         }));
-        console.log('Normalized subtasks:', normalizedSubtasks);
         formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
       }
 
@@ -206,8 +233,7 @@ export default function CreateAssignmentPage() {
             <label className="block mb-2">Тип задания</label>
             <select
               value={assignmentType}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignmentType(e.target.value as 'text' | 'multiple_choice')
-}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignmentType(e.target.value as 'text' | 'multiple_choice')}
               className="border p-2 rounded w-full"
             >
               <option value="text">Обычное задание</option>
@@ -267,6 +293,26 @@ export default function CreateAssignmentPage() {
                     }
                     className="mb-2"
                   />
+                  <label className="block mb-2">Файл подзадания (jpg, png, pdf)</label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,application/pdf"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      handleSubtaskChange(idx, 'image', e.target.files?.[0] || null)
+                    }
+                    className="mb-2"
+                  />
+                  {subtask.imagePreview && (
+                    <div className="mt-2 mb-2">
+                      {subtask.image?.type === 'application/pdf' ? (
+                        <a href={subtask.imagePreview} target="_blank" rel="noopener noreferrer">
+                          Просмотреть PDF
+                        </a>
+                      ) : (
+                        <Image src={subtask.imagePreview} alt={`Subtask ${idx + 1} Preview`} width={200} height={200} />
+                      )}
+                    </div>
+                  )}
                   <label className="block mb-2">Количество вариантов ответа (2–6)</label>
                   <select
                     value={subtask.numOptions}

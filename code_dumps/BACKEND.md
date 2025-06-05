@@ -1190,7 +1190,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./Uploads"
+			uploadDir := "./uploads"
 			if err := os.MkdirAll(uploadDir, 0755); err != nil {
 				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -1540,6 +1540,124 @@ func GetSubtasks(subtaskService service.SubtaskService) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, subtasks)
+	}
+}
+
+// CheckSubtaskAnswer проверяет ответ на подзадание
+// @Summary Проверить ответ на подзадание
+// @Description Проверяет, является ли ответ на подзадание правильным. Требуется JWT-токен. Доступно для роли: student.
+// @Tags assignments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID задания"
+// @Param subtask_id body int true "ID подзадания"
+// @Param answer body string true "Ответ"
+// @Success 200 {object} map[string]interface{} "isCorrect, attempts"
+// @Failure 400 {object} map[string]string "error"
+// @Failure 401 {object} map[string]string "error"
+// @Failure 403 {object} map[string]string "error"
+// @Failure 404 {object} map[string]string "error"
+// @Failure 500 {object} map[string]string "error"
+// @Router /assignments/{id}/check-subtask [post]
+func CheckSubtaskAnswer(subtaskService service.SubtaskService, submissionService service.SubmissionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		assignmentID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid assignment ID: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID задания"})
+			return
+		}
+
+		userID := c.GetUint("userID")
+		if userID == 0 {
+			logger.Log.Error("UserID not found in context")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var input struct {
+			SubtaskID uint   `json:"subtask_id" binding:"required"`
+			Answer    string `json:"answer" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON data: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат данных"})
+			return
+		}
+
+		// Проверка роли
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки пользователя"})
+			return
+		}
+		if user.Role != model.Student {
+			logger.Log.Errorf("User %d (%s) attempted to check subtask without permission", userID, user.Role)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Доступ запрещён"})
+			return
+		}
+
+		// Проверка существования подзадания
+		var subtask model.Subtask
+		if err := db.DB.Where("id = ? AND assignment_id = ?", input.SubtaskID, assignmentID).First(&subtask).Error; err != nil {
+			logger.Log.Errorf("Subtask %d not found for assignment %d: %v", input.SubtaskID, assignmentID, err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Подзадание не найдено"})
+			return
+		}
+
+		// Проверка, не отправлено ли уже решение для задания
+		var existingSubmission model.Submission
+		if err := db.DB.Where("user_id = ? AND assignment_id = ?", userID, assignmentID).First(&existingSubmission).Error; err == nil {
+			logger.Log.Warnf("Submission already exists for user %d, assignment %d", userID, assignmentID)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Решение уже отправлено"})
+			return
+		}
+
+		// Проверка ответа
+		isCorrect := strings.TrimSpace(strings.ToLower(input.Answer)) == strings.TrimSpace(strings.ToLower(subtask.Answer))
+
+		// Сохраняем попытку
+		var subtaskSubmission model.SubtaskSubmission
+		err = db.DB.Where("user_id = ? AND subtask_id = ?", userID, input.SubtaskID).First(&subtaskSubmission).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Log.Errorf("Error checking subtask submission: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обработки попытки"})
+			return
+		}
+
+		attempts := 1
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Создаём новую запись
+			subtaskSubmission = model.SubtaskSubmission{
+				SubtaskID: input.SubtaskID,
+				UserID:    userID,
+				Answer:    input.Answer,
+				IsCorrect: isCorrect,
+				Attempts:  1,
+			}
+			if err := db.DB.Create(&subtaskSubmission).Error; err != nil {
+				logger.Log.Errorf("Failed to create subtask submission: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения попытки"})
+				return
+			}
+		} else {
+			// Обновляем существующую запись
+			attempts = subtaskSubmission.Attempts + 1
+			if err := db.DB.Model(&subtaskSubmission).Updates(map[string]interface{}{
+				"answer":     input.Answer,
+				"is_correct": isCorrect,
+				"attempts":   attempts,
+			}).Error; err != nil {
+				logger.Log.Errorf("Failed to update subtask submission: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка обновления попытки"})
+				return
+			}
+		}
+
+		logger.Log.Infof("Subtask %d checked for user %d: answer=%s, isCorrect=%v, attempts=%d", input.SubtaskID, userID, input.Answer, isCorrect, attempts)
+		c.JSON(http.StatusOK, gin.H{"isCorrect": isCorrect, "attempts": attempts})
 	}
 }
 
@@ -3599,41 +3717,97 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		logger.Log.Errorf("Failed to fetch subtasks for assignment %d: %v", assignmentID, err)
 		return nil, err
 	}
+	if len(subtasks) == 0 {
+		logger.Log.Errorf("No subtasks found for assignment %d", assignmentID)
+		return nil, errors.New("подзадания не найдены")
+	}
 	subtaskMap := make(map[uint]model.Subtask)
 	for _, st := range subtasks {
 		subtaskMap[st.ID] = st
 	}
 
-	var totalPrePoints, maxPrePoints float64
-	for _, answer := range answers {
-		sub, ok := subtaskMap[answer.SubtaskID]
+	var totalScore float64
+	responseAnswers := make([]map[string]interface{}, 0, len(answers))
+	subtaskScore := float64(assignment.MaxScore) / float64(len(subtasks)) // Балл за одно подзадание
+
+	for i, answer := range answers {
+		subtask, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
+			logger.Log.Warnf("Subtask %d not found for answer index %d", answer.SubtaskID, i)
 			continue
 		}
-		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(sub.Answer))
-		pre := 0.0
+
+		// Проверяем наличие сохранённой попытки
+		var subtaskSubmission model.SubtaskSubmission
+		err = s.db.Where("user_id = ? AND subtask_id = ?", userID, answer.SubtaskID).First(&subtaskSubmission).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Log.Errorf("Error checking subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
+			return nil, err
+		}
+
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(subtask.Answer))
+		attempts := answer.Attempts
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			attempts = subtaskSubmission.Attempts
+		}
+
+		numOptions := len(subtask.Options)
+		if numOptions < 2 || numOptions > 6 {
+			logger.Log.Errorf("Invalid number of options for SubtaskID %d: %d", answer.SubtaskID, numOptions)
+			return nil, errors.New("некорректное количество вариантов ответа")
+		}
+
+		// Подсчёт баллов за подзадание
+		var score float64
 		if isCorrect {
-			if answer.Attempts == 1 {
-				pre = 1.0
-			} else if answer.Attempts == 2 {
-				pre = 0.8
+			if attempts == 1 {
+				score = subtaskScore // Полный балл за первую попытку
+			} else if attempts < numOptions {
+				// Вычитаем балл за каждую попытку: subtaskScore / numOptions
+				score = subtaskScore * float64(numOptions-attempts) / float64(numOptions-1)
 			} else {
-				pre = 0.5
+				score = 0 // Если исчерпаны все неправильные варианты
 			}
 		}
-		maxPrePoints += 1
-		totalPrePoints += pre
+		totalScore += score
 
-		answer.IsCorrect = isCorrect
-		answer.UserID = userID
+		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d, Score=%.2f",
+			answer.SubtaskID, answer.Answer, subtask.Answer, isCorrect, attempts, score)
 
-		if err := s.db.Create(&answer).Error; err != nil {
-			logger.Log.Errorf("Failed to save subtask submission: %v", err)
-			return nil, err
+		// Формируем ответ для клиента
+		responseAnswer := map[string]interface{}{
+			"SubtaskID": answer.SubtaskID,
+			"Answer":    answer.Answer,
+			"IsCorrect": isCorrect,
+			"Attempts":  attempts,
+			"Score":     score,
+		}
+		if !isCorrect {
+			responseAnswer["CorrectAnswer"] = subtask.Answer
+		}
+		responseAnswers = append(responseAnswers, responseAnswer)
+
+		// Сохраняем или обновляем подзадачу
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			answers[i].IsCorrect = isCorrect
+			answers[i].UserID = userID
+			if err := s.db.Create(&answers[i]).Error; err != nil {
+				logger.Log.Errorf("Failed to save subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
+				return nil, err
+			}
+		} else {
+			if err := s.db.Model(&subtaskSubmission).Updates(map[string]interface{}{
+				"answer":     answer.Answer,
+				"is_correct": isCorrect,
+				"attempts":   attempts,
+			}).Error; err != nil {
+				logger.Log.Errorf("Failed to update subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
+				return nil, err
+			}
 		}
 	}
 
-	percent := totalPrePoints / maxPrePoints * 100
+	percent := totalScore / float64(assignment.MaxScore) * 100
 	var grade float64
 	switch {
 	case percent >= 80:
@@ -3658,7 +3832,7 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		return nil, err
 	}
 
-	points := uint(math.Round(grade / 5 * float64(assignment.MaxScore)))
+	points := uint(math.Round(totalScore))
 	s.db.Model(&model.User{}).Where("id = ?", userID).Update("points", gorm.Expr("points + ?", points))
 
 	msg := fmt.Sprintf("Ваше задание #%d оценено: %.1f", assignmentID, grade)
@@ -3671,11 +3845,12 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 
 	response := map[string]interface{}{
 		"grade":      grade,
-		"totalScore": totalPrePoints / maxPrePoints * float64(assignment.MaxScore),
-		"answers":    answers,
+		"totalScore": totalScore,
+		"answers":    responseAnswers,
 	}
 
-	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f", userID, assignmentID, grade, response["totalScore"])
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f, answers=%+v",
+		userID, assignmentID, grade, totalScore, responseAnswers)
 	return response, nil
 }
 
@@ -4695,7 +4870,7 @@ func main() {
 	if err != nil {
 		logger.Log.Fatalf("Failed to get working directory: %v", err)
 	}
-	uploadDir := filepath.Join(wd, "uploads")
+	uploadDir := filepath.Join(wd, "Uploads")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		logger.Log.Fatalf("Failed to create uploads directory: %v", err)
 	}
@@ -4783,7 +4958,7 @@ func main() {
 				assignments.DELETE("/:id", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteAssignment(assignmentService))
 				assignments.POST("/:id/submit-quiz", handler.RoleMiddleware(model.Student), handler.SubmitQuizAssignment(submissionService))
 				assignments.GET("/:id/subtasks", handler.GetSubtasks(subtaskService))
-
+				assignments.POST("/:id/check-subtask", handler.RoleMiddleware(model.Student), handler.CheckSubtaskAnswer(subtaskService, submissionService))
 			}
 
 			submissions := protected.Group("/submissions")

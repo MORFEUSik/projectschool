@@ -62,13 +62,15 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Produce json
 // @Security BearerAuth
 // @Param title formData string true "Название задания"
-// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/Uploads/...'>)"
+// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
 // @Param max_score formData integer true "Максимальный балл"
 // @Param due_date formData string true "Срок сдачи (ISO 8601)"
 // @Param course_id formData integer true "ID курса"
 // @Param type formData string true "Тип задания (text | multiple_choice)"
 // @Param subtasks_json formData string false "JSON подзаданий для multiple_choice"
 // @Param file formData file false "Файл (jpg, png, pdf)"
+// @Param subtask_image_0 formData file false "Файл для подзадания 0 (jpg, png, pdf)"
+// @Param subtask_image_1 formData file false "Файл для подзадания 1 (jpg, png, pdf)"
 // @Success 200 {object} map[string]interface{} "message, assignment_id"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
@@ -180,7 +182,16 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
-		// Обработка файла
+		// Обработка файлов
+		files := make(map[string]string)
+		uploadDir := "./uploads"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
+			return
+		}
+
+		// Файл для задания
 		var fileURL string
 		file, err := c.FormFile("file")
 		if err == nil { // Файл загружен
@@ -207,12 +218,6 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./Uploads"
-			if err := os.MkdirAll(uploadDir, 0755); err != nil {
-				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
-				return
-			}
 			filePath := filepath.Join(uploadDir, filename)
 			logger.Log.Infof("Saving file to %s", filePath)
 			if err := c.SaveUploadedFile(file, filePath); err != nil {
@@ -231,6 +236,56 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			logger.Log.Errorf("Failed to get file: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки файла"})
 			return
+		}
+
+		// Файлы для подзаданий
+		for i := range subtasks {
+			fileKey := fmt.Sprintf("subtask_image_%d", i)
+			file, err := c.FormFile(fileKey)
+			if err == nil { // Файл загружен
+				// Валидация типа файла
+				allowedTypes := map[string]bool{
+					"image/jpeg":      true,
+					"image/png":       true,
+					"application/pdf": true,
+				}
+				fileHeader := file.Header.Get("Content-Type")
+				if !allowedTypes[fileHeader] {
+					logger.Log.Errorf("Unsupported file type for %s: %s", fileKey, fileHeader)
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Неподдерживаемый тип файла для подзадания %d (разрешены jpg, png, pdf)", i)})
+					return
+				}
+
+				// Валидация размера (10 MB)
+				if file.Size > 10*1024*1024 {
+					logger.Log.Errorf("File too large for %s: %d bytes", fileKey, file.Size)
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Файл подзадания %d слишком большой (макс. 10 МБ)", i)})
+					return
+				}
+
+				// Сохранение файла
+				ext := filepath.Ext(file.Filename)
+				filename := fmt.Sprintf("subtask_%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
+				filePath := filepath.Join(uploadDir, filename)
+				logger.Log.Infof("Saving subtask file to %s", filePath)
+				if err := c.SaveUploadedFile(file, filePath); err != nil {
+					logger.Log.Errorf("Failed to save subtask file to %s: %v", filePath, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Ошибка сохранения файла подзадания %d", i)})
+					return
+				}
+				if _, err := os.Stat(filePath); os.IsNotExist(err) {
+					logger.Log.Errorf("Subtask file %s does not exist after saving", filePath)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Файл подзадания %d не был сохранён", i)})
+					return
+				}
+				fileURL := "http://localhost:8080/uploads/" + filename
+				files[fileKey] = fileURL
+				logger.Log.Infof("Subtask file saved successfully: %s", fileURL)
+			} else if !errors.Is(err, http.ErrMissingFile) {
+				logger.Log.Errorf("Failed to get subtask file %s: %v", fileKey, err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Ошибка обработки файла подзадания %d", i)})
+				return
+			}
 		}
 
 		// Создание модели Assignment
@@ -261,7 +316,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		}
 
 		// Сохранение через сервис
-		if err := assignmentService.Create(&assignment, subtasks); err != nil {
+		if err := assignmentService.Create(&assignment, subtasks, files); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -461,7 +516,7 @@ func UploadFile() gin.HandlerFunc {
 		// Сохранение файла
 		ext := filepath.Ext(file.Filename)
 		filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-		uploadDir := "./Uploads"
+		uploadDir := "./uploads"
 		if err := os.MkdirAll(uploadDir, 0755); err != nil {
 			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})

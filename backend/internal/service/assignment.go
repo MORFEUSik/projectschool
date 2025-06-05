@@ -13,7 +13,7 @@ import (
 )
 
 type AssignmentService interface {
-	Create(assignment *model.Assignment, subtasks []model.Subtask) error
+	Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error // Обновляем сигнатуру
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
@@ -34,7 +34,7 @@ func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo
 	}
 }
 
-func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask) error {
+func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error {
 	logger.Log.Infof("Creating assignment: %s", assignment.Title)
 	if assignment.Type == "multiple_choice" && len(subtasks) == 0 {
 		logger.Log.Errorf("Multiple choice assignment must have at least one subtask")
@@ -62,6 +62,12 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 			}
 			subtasks[i].AssignmentID = assignment.ID
 			subtasks[i].SortOrder = i + 1
+
+			// Привязываем URL файла к подзаданию
+			if fileURL, ok := files[fmt.Sprintf("subtask_image_%d", i)]; ok {
+				subtasks[i].File_url = fileURL
+			}
+
 			if err := tx.Create(&subtasks[i]).Error; err != nil {
 				logger.Log.Errorf("Failed to create subtask: %v", err)
 				return err

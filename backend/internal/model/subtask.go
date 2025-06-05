@@ -8,4 +8,6 @@ type Subtask struct {
 	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
 	Answer       string   `gorm:"not null"`                   // правильный ответ
 	SortOrder    int      `gorm:"column:sort_order"`
+	File_url     string   `json:"file_url,omitempty"` // Новое поле для URL файла
+
 }

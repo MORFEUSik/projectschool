@@ -37,6 +37,8 @@ interface Subtask {
   Options?: string[];
   sort_order: number;
   SortOrder?: number;
+  file_url?: string; // Добавляем file_url
+  File_url?: string;
 }
 
 interface QuizResult {
@@ -94,6 +96,7 @@ export default function AssignmentPage() {
             question: subtask.question ?? subtask.Question,
             options: subtask.options ?? subtask.Options ?? [],
             sort_order: subtask.sort_order ?? subtask.SortOrder,
+            file_url: subtask.file_url ?? subtask.File_url, // Нормализуем file_url
           }));
           console.log('Normalized subtasks:', normalizedSubtasks);
           setSubtasks(normalizedSubtasks);
@@ -165,32 +168,32 @@ export default function AssignmentPage() {
           </ReactMarkdown>
         </div>
 
-        {assignment.file_url && (
-          <div className="mt-4">
-            {assignment.file_url.endsWith('.pdf') ? (
-              <a
-                href={assignment.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Просмотреть PDF
-              </a>
-            ) : (
-              <>
-                <Image
-                  src={assignment.file_url}
-                  alt="Assignment file"
-                  width={500}
-                  height={500}
-                  className="rounded"
-                  onError={() => setImageError('Ошибка загрузки изображения')}
-                />
-                {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
-              </>
-            )}
-          </div>
-        )}
+        {assignment.file_url && !imageError && (
+  <div className="mt-4">
+    {assignment.file_url.endsWith('.pdf') ? (
+      <a
+        href={assignment.file_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:underline"
+      >
+        Просмотреть PDF
+      </a>
+    ) : (
+      <>
+        <Image
+          src={assignment.file_url}
+          alt="Assignment file"
+          width={500}
+          height={500}
+          className="rounded"
+          onError={() => setImageError('Ошибка загрузки изображения')}
+        />
+        {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
+      </>
+    )}
+  </div>
+)}
         <p className="mt-4">
           <strong>Макс. балл:</strong> {assignment.max_score}
         </p>
@@ -257,6 +260,30 @@ export default function AssignmentPage() {
                     <p className="font-semibold">
                       Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question ?? 'Вопрос отсутствует'}
                     </p>
+                    {subtask?.file_url && (
+                      <div className="mt-2">
+                        {subtask.file_url.endsWith('.pdf') ? (
+                          <a
+                            href={subtask.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            Просмотреть PDF
+                          </a>
+                        ) : (
+                          <Image
+                            src={subtask.file_url}
+                            alt={`Subtask ${idx + 1} image`}
+                            width={300}
+                            height={300}
+                            className="rounded"
+                            onError={() => setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)}
+                          />
+                        )}
+                        {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
+                      </div>
+                    )}
                     <p>
                       <strong>Ваш ответ:</strong>{' '}
                       <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
@@ -276,7 +303,7 @@ export default function AssignmentPage() {
                     </p>
                     {options.length > 0 && (
                       <div className="mt-2">
-                        <p className="text-sm font-medium">Варианты ответа:</p>
+                        <p className="text-sm font-medium">Варианты:</p>
                         <ul className="list-disc pl-5">
                           {options.map((option, optIdx) => (
                             <li

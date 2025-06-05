@@ -60,7 +60,7 @@ func main() {
 	if err != nil {
 		logger.Log.Fatalf("Failed to get working directory: %v", err)
 	}
-	uploadDir := filepath.Join(wd, "Uploads")
+	uploadDir := filepath.Join(wd, "uploads")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		logger.Log.Fatalf("Failed to create uploads directory: %v", err)
 	}
