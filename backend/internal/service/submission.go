@@ -308,12 +308,17 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	}
 
 	var totalPrePoints, maxPrePoints float64
-	for _, answer := range answers {
-		sub, ok := subtaskMap[answer.SubtaskID]
+	responseAnswers := make([]map[string]interface{}, 0, len(answers))
+	for i, answer := range answers {
+		subtask, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
+			logger.Log.Warnf("Subtask %d not found for answer index %d", answer.SubtaskID, i)
 			continue
 		}
-		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(sub.Answer))
+		isCorrect := strings.TrimSpace(strings.ToLower(answer.Answer)) == strings.TrimSpace(strings.ToLower(subtask.Answer))
+		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d",
+			answer.SubtaskID, answer.Answer, subtask.Answer, isCorrect, answer.Attempts)
+
 		pre := 0.0
 		if isCorrect {
 			if answer.Attempts == 1 {
@@ -327,11 +332,23 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		maxPrePoints += 1
 		totalPrePoints += pre
 
-		answer.IsCorrect = isCorrect
-		answer.UserID = userID
+		// Формируем ответ для клиента
+		responseAnswer := map[string]interface{}{
+			"SubtaskID": answer.SubtaskID,
+			"Answer":    answer.Answer,
+			"IsCorrect": isCorrect,
+			"Attempts":  answer.Attempts,
+		}
+		if !isCorrect {
+			responseAnswer["CorrectAnswer"] = subtask.Answer
+		}
+		responseAnswers = append(responseAnswers, responseAnswer)
 
-		if err := s.db.Create(&answer).Error; err != nil {
-			logger.Log.Errorf("Failed to save subtask submission: %v", err)
+		// Сохраняем подзадачу
+		answers[i].IsCorrect = isCorrect
+		answers[i].UserID = userID
+		if err := s.db.Create(&answers[i]).Error; err != nil {
+			logger.Log.Errorf("Failed to save subtask submission for SubtaskID %d: %v", answer.SubtaskID, err)
 			return nil, err
 		}
 	}
@@ -375,9 +392,10 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	response := map[string]interface{}{
 		"grade":      grade,
 		"totalScore": totalPrePoints / maxPrePoints * float64(assignment.MaxScore),
-		"answers":    answers,
+		"answers":    responseAnswers,
 	}
 
-	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f", userID, assignmentID, grade, response["totalScore"])
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f, answers=%+v",
+		userID, assignmentID, grade, response["totalScore"], responseAnswers)
 	return response, nil
 }

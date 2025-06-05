@@ -72,16 +72,20 @@ export default function CreateAssignmentPage() {
   ) => {
     const newSubtasks = [...subtasks];
     if (field === 'options' && Array.isArray(value)) {
-      newSubtasks[index].options = value;
+      // Нормализуем варианты ответа
+      newSubtasks[index].options = value.map(opt => opt.trim());
     } else if (field !== 'options' && typeof value === 'string') {
       if (field === 'answer') {
         // Проверка, что ответ входит в варианты
-        if (value && !newSubtasks[index].options.includes(value)) {
+        const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
+        if (value && !normalizedOptions.includes(value.trim())) {
           toast.error('Правильный ответ должен быть одним из вариантов');
           return;
         }
+        newSubtasks[index][field] = value.trim();
+      } else {
+        newSubtasks[index][field] = value;
       }
-      newSubtasks[index][field] = value;
     }
     setSubtasks(newSubtasks);
   };
@@ -153,10 +157,11 @@ export default function CreateAssignmentPage() {
 
         const normalizedSubtasks = subtasks.map((subtask, index) => ({
           Question: subtask.question,
-          Options: subtask.options,
-          Answer: subtask.answer,
+          Options: subtask.options.map(opt => opt.trim()), // Нормализуем варианты
+          Answer: subtask.answer.trim(), // Нормализуем правильный ответ
           SortOrder: index + 1,
         }));
+        console.log('Normalized subtasks:', normalizedSubtasks); // Логирование
         formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
       }
 
@@ -261,10 +266,18 @@ export default function CreateAssignmentPage() {
                     />
                   ))}
                   <label className="block mb-2">Правильный ответ</label>
-                  <Input
+                  <select
                     value={subtask.answer}
                     onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
-                  />
+                    className="border p-2 rounded w-full"
+                  >
+                    <option value="">Выберите ответ</option>
+                    {subtask.options.map((opt, i) => (
+                      <option key={i} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
                   <Button
                     type="button"
                     onClick={() => handleRemoveSubtask(idx)}

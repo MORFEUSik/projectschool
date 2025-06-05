@@ -19,7 +19,13 @@ interface Subtask {
 interface QuizResult {
   grade: number;
   totalScore: number;
-  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
+  answers: {
+    SubtaskID: number;
+    Answer: string;
+    IsCorrect: boolean;
+    Attempts: number;
+    CorrectAnswer?: string; // Добавляем поле для правильного ответа
+  }[];
 }
 
 interface QuizFormProps {
@@ -52,17 +58,23 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   }
 
   const handleChange = (subtaskId: number, answer: string) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [subtaskId]: {
-        answer,
-        attempts: prev[subtaskId].attempts,
-      },
-    }));
-    // Увеличиваем попытки при новом ответе
+    const normalizedAnswer = answer.trim();
+    setAnswers((prev) => {
+      const newAttempts = (prev[subtaskId]?.answer && prev[subtaskId].answer !== normalizedAnswer)
+        ? (prev[subtaskId]?.attempts || 1) + 1
+        : prev[subtaskId]?.attempts || 1;
+      return {
+        ...prev,
+        [subtaskId]: {
+          answer: normalizedAnswer,
+          attempts: newAttempts,
+        },
+      };
+    });
+    // Сохраняем попытки в localStorage
     localStorage.setItem(
       `quiz_${assignmentId}_${subtaskId}`,
-      JSON.stringify({ attempts: (answers[subtaskId]?.attempts || 1) + 1 })
+      JSON.stringify({ attempts: answers[subtaskId]?.attempts || 1 })
     );
   };
 
@@ -70,9 +82,18 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     e.preventDefault();
     const payload = subtasks.map((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
+      const answer = answers[subtaskId]?.answer || '';
+      const options = Array.isArray(subtask.options)
+        ? subtask.options
+        : Array.isArray(subtask.Options)
+        ? subtask.Options
+        : [];
+      if (answer && !options.includes(answer)) {
+        console.warn(`Invalid answer for SubtaskID ${subtaskId}: ${answer}`);
+      }
       return {
         SubtaskID: subtaskId,
-        Answer: answers[subtaskId]?.answer || '',
+        Answer: answer,
         Attempts: answers[subtaskId]?.attempts || 1,
       };
     });
@@ -82,9 +103,12 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
       return;
     }
 
+    console.log('Submitting quiz payload:', { answers: payload });
+
     setIsSubmitting(true);
     try {
       const response = await api.post(`/assignments/${assignmentId}/submit-quiz`, { answers: payload });
+      console.log('Quiz response:', response.data);
       toast.success('Ответы отправлены!');
       onSubmit(response.data);
       // Очищаем localStorage после успешной отправки
@@ -113,13 +137,13 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
         const subtaskId = subtask.id ?? subtask.ID ?? 0;
 
         if (!options.length) {
-  console.error(`Subtask ${subtaskId} has invalid options:`, subtask);
-  return (
-    <div key={subtaskId} className="text-red-500">
-      Ошибка: некорректные варианты ответа для вопроса &apos;{question}&apos;
-    </div>
-  );
-}
+          console.error(`Subtask ${subtaskId} has invalid options:`, subtask);
+          return (
+            <div key={subtaskId} className="text-red-500">
+              Ошибка: некорректные варианты ответа для вопроса `{question}`
+            </div>
+          );
+        }
 
         return (
           <div key={subtaskId}>

@@ -897,10 +897,13 @@ interface Assignment {
 
 interface Subtask {
   id: number;
+  ID?: number;
   question: string;
-  options: string[];
+  Question?: string;
+  options: string[] | undefined;
+  Options?: string[];
   sort_order: number;
-  answer: string; // индекс (например, '2')
+  SortOrder?: number;
 }
 
 interface QuizResult {
@@ -944,7 +947,16 @@ export default function AssignmentPage() {
 
         if (assignmentRes.data.type === 'multiple_choice') {
           const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
-          setSubtasks(subtasksRes.data);
+          console.log('API subtasks response:', subtasksRes.data);
+
+          const normalizedSubtasks = subtasksRes.data.map((subtask) => ({
+            id: subtask.id ?? subtask.ID,
+            question: subtask.question ?? subtask.Question,
+            options: subtask.options ?? subtask.Options ?? [],
+            sort_order: subtask.sort_order ?? subtask.SortOrder,
+          }));
+          console.log('Normalized subtasks:', normalizedSubtasks);
+          setSubtasks(normalizedSubtasks);
         }
       } catch (err: unknown) {
         const axiosErr = err as AxiosError<ErrorResponse>;
@@ -995,7 +1007,12 @@ export default function AssignmentPage() {
         {assignment.file_url && (
           <div className="mt-4">
             {assignment.file_url.endsWith('.pdf') ? (
-              <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a
+                href={assignment.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
                 Просмотреть PDF
               </a>
             ) : (
@@ -1031,15 +1048,19 @@ export default function AssignmentPage() {
           <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
           <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
-              <label htmlFor="content" className="block text-sm font-medium mb-1">Ответ</label>
+              <label htmlFor="content" className="block text-sm font-medium mb-1">
+                Ответ
+              </label>
               <textarea
                 id="content"
                 {...submissionForm.register('content')}
-                className="border p-2 rounded w-full"
+                className="border p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-600"
                 rows={5}
               />
               {submissionForm.formState.errors.content && (
-                <p className="text-red-500 text-sm">{submissionForm.formState.errors.content.message}</p>
+                <p className="text-red-500 text-sm">
+                  {submissionForm.formState.errors.content.message}
+                </p>
               )}
             </div>
             <Button type="submit" disabled={submissionForm.formState.isSubmitting}>
@@ -1059,40 +1080,37 @@ export default function AssignmentPage() {
       {isSubmitted && quizResult && (
         <Card className="p-6 mt-4">
           <h2 className="text-2xl font-semibold mb-4">Результаты теста</h2>
-          <p><strong>Оценка:</strong> {quizResult.grade.toFixed(1)}</p>
-          <p><strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)}</p>
-          <div className="mt-4 space-y-4">
+          <p>
+            <strong>Оценка:</strong> {quizResult.grade.toFixed(1)}
+          </p>
+          <p>
+            <strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)}
+          </p>
+          <div className="mt-4">
             {quizResult.answers.map((answer, idx) => {
-              const subtask = subtasks.find((st) => st.id === answer.SubtaskID);
-              if (!subtask || !subtask.options.length) return null;
-
-              const correctIndex = parseInt(subtask.answer, 10) - 1;
-              const correctOption = subtask.options[correctIndex] ?? '(неизвестно)';
-              const userIndex = subtask.options.findIndex(
-                (opt) => opt.trim().toLowerCase() === answer.Answer.trim().toLowerCase()
-              );
-              const isCorrect = userIndex === correctIndex;
-
+              const subtask = subtasks.find((st) => (st.id ?? st.ID) === answer.SubtaskID);
               return (
-                <div key={idx} className="border rounded p-3">
-                  <p className="mb-1 font-semibold">Вопрос {idx + 1}: {subtask.question}</p>
+                <div key={idx} className="mb-2">
                   <p>
-                    Результат: <span className={isCorrect ? 'text-green-600' : 'text-red-600'}>
-                      {isCorrect ? '✅ Правильно' : '❌ Неправильно'}
-                    </span>
+                    Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question} —{' '}
+                    {answer.IsCorrect ? '✅ Правильно' : '❌ Неправильно'}
                   </p>
-                  <p>Ваш ответ: <strong>{answer.Answer}</strong></p>
-                  {!isCorrect && <p>Правильный ответ: <strong>{correctOption}</strong></p>}
+                  <p>Ваш ответ: {answer.Answer}</p>
                 </div>
               );
             })}
           </div>
         </Card>
       )}
+
+      {isSubmitted && !quizResult && (
+        <Card className="p-6 text-green-600 font-semibold text-center">
+          ✅ Вы успешно прошли этот тест
+        </Card>
+      )}
     </div>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1362,19 +1380,10 @@ export default function CreateAssignmentPage() {
                     />
                   ))}
                   <label className="block mb-2">Правильный ответ</label>
-                  <select
-  value={subtask.answer}
-  onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
-  className="border p-2 rounded w-full"
->
-  <option value="">Выберите номер правильного варианта</option>
-  {subtask.options.map((_, i) => (
-    <option key={i} value={(i + 1).toString()}>
-      Вариант {i + 1}
-    </option>
-  ))}
-</select>
-
+                  <Input
+                    value={subtask.answer}
+                    onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
+                  />
                   <Button
                     type="button"
                     onClick={() => handleRemoveSubtask(idx)}
@@ -2529,10 +2538,13 @@ import { AxiosError } from 'axios';
 
 interface Subtask {
   id: number;
+  ID?: number;
   question: string;
-  options: string[];
+  Question?: string;
+  options: string[] | undefined;
+  Options?: string[];
   sort_order: number;
-  answer: string;
+  SortOrder?: number;
 }
 
 interface QuizResult {
@@ -2551,10 +2563,13 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const [answers, setAnswers] = useState<Record<number, { answer: string; attempts: number }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  console.log('QuizForm props:', { assignmentId, subtasks });
+
+  // Инициализация попыток из localStorage
   useEffect(() => {
     const initialAnswers: Record<number, { answer: string; attempts: number }> = {};
     subtasks.forEach((subtask) => {
-      const subtaskId = subtask.id;
+      const subtaskId = subtask.id ?? subtask.ID ?? 0;
       const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
       const attempts = stored ? JSON.parse(stored).attempts || 1 : 1;
       initialAnswers[subtaskId] = { answer: '', attempts };
@@ -2562,14 +2577,20 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     setAnswers(initialAnswers);
   }, [assignmentId, subtasks]);
 
+  if (!Array.isArray(subtasks) || subtasks.length === 0) {
+    console.warn('QuizForm: subtasks is empty or not an array');
+    return <div>Нет вопросов для квиза</div>;
+  }
+
   const handleChange = (subtaskId: number, answer: string) => {
     setAnswers((prev) => ({
       ...prev,
       [subtaskId]: {
         answer,
-        attempts: prev[subtaskId]?.attempts ?? 1,
+        attempts: prev[subtaskId].attempts,
       },
     }));
+    // Увеличиваем попытки при новом ответе
     localStorage.setItem(
       `quiz_${assignmentId}_${subtaskId}`,
       JSON.stringify({ attempts: (answers[subtaskId]?.attempts || 1) + 1 })
@@ -2578,15 +2599,11 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const payload = subtasks.map((subtask) => {
-      const subtaskId = subtask.id;
-      const selectedAnswer = answers[subtaskId]?.answer || '';
-      const selectedIndex = subtask.options.findIndex((opt) => opt === selectedAnswer);
-
+      const subtaskId = subtask.id ?? subtask.ID ?? 0;
       return {
         SubtaskID: subtaskId,
-        Answer: selectedIndex >= 0 ? String(selectedIndex + 1) : '',
+        Answer: answers[subtaskId]?.answer || '',
         Attempts: answers[subtaskId]?.attempts || 1,
       };
     });
@@ -2601,54 +2618,72 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
       const response = await api.post(`/assignments/${assignmentId}/submit-quiz`, { answers: payload });
       toast.success('Ответы отправлены!');
       onSubmit(response.data);
-
-      // Очистка localStorage
+      // Очищаем localStorage после успешной отправки
       subtasks.forEach((subtask) => {
-        localStorage.removeItem(`quiz_${assignmentId}_${subtask.id}`);
+        const subtaskId = subtask.id ?? subtask.ID ?? 0;
+        localStorage.removeItem(`quiz_${assignmentId}_${subtaskId}`);
       });
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<{ error?: string }>;
       toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
+      console.error('Submission error:', err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-  <form onSubmit={handleSubmit} className="space-y-6">
-    {Array.isArray(subtasks) && subtasks.map((subtask, idx) => (
-      <div key={subtask.id}>
-        <p className="font-medium mb-2">{idx + 1}. {subtask.question}</p>
-        <div className="space-y-1">
-          {subtask.options.map((option, i) => (
-            <label key={i} className="flex items-center space-x-2">
-              <input
-                type="radio"
-                name={`subtask-${subtask.id}`}
-                value={option}
-                checked={answers[subtask.id]?.answer === option}
-                onChange={() => handleChange(subtask.id, option)}
-                className="accent-blue-600"
-              />
-              <span>{option}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-    ))}
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {subtasks.map((subtask, idx) => {
+        const options = Array.isArray(subtask.options)
+          ? subtask.options
+          : Array.isArray(subtask.Options)
+          ? subtask.Options
+          : [];
+        const question = subtask.question ?? subtask.Question ?? 'Вопрос отсутствует';
+        const subtaskId = subtask.id ?? subtask.ID ?? 0;
 
-    <button
-      type="submit"
-      disabled={isSubmitting}
-      className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"
-    >
-      {isSubmitting ? 'Отправка...' : 'Отправить тест'}
-    </button>
-  </form>
-);
-
+        if (!options.length) {
+  console.error(`Subtask ${subtaskId} has invalid options:`, subtask);
+  return (
+    <div key={subtaskId} className="text-red-500">
+      Ошибка: некорректные варианты ответа для вопроса &apos;{question}&apos;
+    </div>
+  );
 }
 
+        return (
+          <div key={subtaskId}>
+            <p className="font-medium mb-2">{idx + 1}. {question}</p>
+            <div className="space-y-1">
+              {options.map((option, i) => (
+                <label key={i} className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name={`subtask-${subtaskId}`}
+                    value={option}
+                    checked={answers[subtaskId]?.answer === option}
+                    onChange={() => handleChange(subtaskId, option)}
+                    className="accent-blue-600"
+                  />
+                  <span>{option}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"
+      >
+        {isSubmitting ? 'Отправка...' : 'Отправить тест'}
+      </button>
+    </form>
+  );
+}
 
 
 ════════════════════════════════════════════════════════════════════════════════

@@ -42,7 +42,13 @@ interface Subtask {
 interface QuizResult {
   grade: number;
   totalScore: number;
-  answers: { SubtaskID: number; Answer: string; IsCorrect: boolean }[];
+  answers: {
+    SubtaskID: number;
+    Answer: string;
+    IsCorrect: boolean;
+    Attempts: number;
+    CorrectAnswer?: string;
+  }[];
 }
 
 interface ErrorResponse {
@@ -101,6 +107,16 @@ export default function AssignmentPage() {
 
     fetchData();
   }, [assignmentId, courseId]);
+
+  useEffect(() => {
+    // Логирование для дебаггинга
+    if (quizResult) {
+      console.log('QuizResult:', quizResult);
+    }
+    if (subtasks.length > 0) {
+      console.log('Subtasks:', subtasks);
+    }
+  }, [quizResult, subtasks]);
 
   const isStudent = user?.role === 'student';
   const isDeadlinePassed = assignment ? new Date(assignment.due_date) < new Date() : false;
@@ -211,27 +227,29 @@ export default function AssignmentPage() {
       )}
 
       {isSubmitted && quizResult && (
-        <Card className="p-6 mt-4">
-          <h2 className="text-2xl font-semibold mb-4">Результаты теста</h2>
-          <p>
-            <strong>Оценка:</strong> {quizResult.grade.toFixed(1)}
-          </p>
-          <p>
-            <strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)}
-          </p>
-          <div className="mt-4">
-            {quizResult.answers.map((answer, idx) => {
-              const subtask = subtasks.find((st) => (st.id ?? st.ID) === answer.SubtaskID);
-              return (
-                <div key={idx} className="mb-2">
-                  <p>
-                    Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question} —{' '}
-                    {answer.IsCorrect ? '✅ Правильно' : '❌ Неправильно'}
-                  </p>
-                  <p>Ваш ответ: {answer.Answer}</p>
-                </div>
-              );
-            })}
+        <Card title="Результаты теста">
+          <div className="space-y-2">
+            <p>Оценка: {quizResult.grade.toFixed(1)}</p>
+            <p>Баллы: {quizResult.totalScore.toFixed(1)}</p>
+            <div className="space-y-4">
+              {quizResult.answers.map((answer, idx) => {
+                const subtask = subtasks.find((st) => (st.id ?? st.ID) === answer.SubtaskID);
+                console.log(`Answer ${idx + 1}:`, { answer, subtask });
+                return (
+                  <div key={idx} className="border p-2 rounded">
+                    <p>
+                      Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question ?? 'Вопрос не найден'} —{' '}
+                      {answer.IsCorrect ? '✅ Правильно' : '❌ Неправильно'}
+                    </p>
+                    <p>Ваш ответ: {answer.Answer}</p>
+                    <p>Попыток: {answer.Attempts}</p>
+                    {!answer.IsCorrect && answer.CorrectAnswer && (
+                      <p className="text-green-600">Правильный ответ: {answer.CorrectAnswer}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </Card>
       )}
