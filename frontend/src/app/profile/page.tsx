@@ -31,7 +31,7 @@ export default function ProfilePage() {
     setEditError('');
     try {
       await api.put('/users/me', { username, email });
-      await refetch(); // ✅ без reload
+      await refetch();
       setIsEditing(false);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
@@ -44,12 +44,14 @@ export default function ProfilePage() {
   if (!user) return <div className="text-center mt-8">Пользователь не найден</div>;
 
   return (
-    <div className="max-w-2xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Профиль</h1>
-      <Card className="p-6">
+    <div className="max-w-2xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-center mb-8 text-blue-600">Профиль</h1>
+
+      <Card>
         {isEditing ? (
           <form onSubmit={handleEdit} className="space-y-4">
             {editError && <p className="text-red-500 text-sm">{editError}</p>}
+
             <div>
               <label htmlFor="username" className="block text-sm font-medium mb-1">
                 Имя
@@ -57,10 +59,11 @@ export default function ProfilePage() {
               <Input
                 id="username"
                 value={username}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">
                 Email
@@ -69,49 +72,35 @@ export default function ProfilePage() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
-            <div className="flex space-x-2">
+
+            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
               <Button type="submit">Сохранить</Button>
-              <Button
-                onClick={() => setIsEditing(false)}
-                className="bg-gray-600 hover:bg-gray-700"
-              >
+              <Button type="button" onClick={() => setIsEditing(false)} variant="outline">
                 Отмена
               </Button>
             </div>
           </form>
         ) : (
-          <>
-            <p className="mb-2">
-              <strong>Имя:</strong> {user.username}
-            </p>
-            <p className="mb-2">
-              <strong>Email:</strong> {user.email}
-            </p>
-            <p className="mb-2">
-              <strong>Роль:</strong> {user.role}
-            </p>
-            {user.role === 'student' && (
-              <p className="mb-2">
-                <strong>Класс:</strong> {user.class_number}
-              </p>
-            )}
-            <p className="mb-4">
-              <strong>Баллы:</strong> {user.points}
-            </p>
-            <Button onClick={() => setIsEditing(true)}>Редактировать профиль</Button>
-          </>
+          <div className="space-y-2 text-gray-800 dark:text-gray-100">
+            <p><strong>Имя:</strong> {user.username}</p>
+            <p><strong>Email:</strong> {user.email}</p>
+            <p><strong>Роль:</strong> {user.role}</p>
+            {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}
+            <p><strong>Баллы:</strong> {user.points}</p>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-end">
+              <Button onClick={() => setIsEditing(true)}>Редактировать профиль</Button>
+              <Link href="/achievements">
+                <Button variant="outline">Мои достижения 🏆</Button>
+              </Link>
+            </div>
+          </div>
         )}
       </Card>
-		<div className="mt-6">
-  <Link href="/achievements">
-    <Button>Мои достижения 🏆</Button>
-  </Link>
-</div>
-
     </div>
   );
 }

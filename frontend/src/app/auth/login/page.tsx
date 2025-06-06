@@ -5,11 +5,11 @@ import { Card } from '@/shared/ui/Card';
 
 export default function LoginPage() {
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Вход</h1>
-      <Card className="p-6">
-        <LoginForm />
-      </Card>
-    </div>
+    <div className="max-w-md mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Вход</h1>
+  <Card className="p-6">
+    <LoginForm />
+  </Card>
+</div>
   );
 }

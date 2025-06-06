@@ -20,12 +20,12 @@ import { AxiosError } from 'axios';
 interface Assignment {
   id: number;
   title: string;
-  description: string;
+  description?: string;
   max_score: number;
   due_date: string;
   course_id: number;
   file_url?: string;
-  type: string;
+  type: 'text' | 'multiple_choice';
 }
 
 interface Subtask {
@@ -33,11 +33,13 @@ interface Subtask {
   ID?: number;
   question: string;
   Question?: string;
-  options: string[] | undefined;
+  options: string[];
   Options?: string[];
   sort_order: number;
   SortOrder?: number;
-  file_url?: string; // Добавляем file_url
+  input_type: 'multiple_choice' | 'text_input';
+  Type?: 'multiple_choice' | 'text_input';
+  file_url?: string;
   File_url?: string;
 }
 
@@ -84,21 +86,23 @@ export default function AssignmentPage() {
     async function fetchData() {
       setIsLoading(true);
       try {
-        const assignmentRes = await api.get<Assignment>(`/courses/${courseId}/assignments/${assignmentId}`);
+        const assignmentRes = await api.get(`/courses/${courseId}/assignments/${assignmentId}`);
         setAssignment(assignmentRes.data);
 
         if (assignmentRes.data.type === 'multiple_choice') {
-          const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
-          console.log('API subtasks response:', subtasksRes.data);
-
-          const normalizedSubtasks = subtasksRes.data.map((subtask) => ({
-            id: subtask.id ?? subtask.ID,
-            question: subtask.question ?? subtask.Question,
-            options: subtask.options ?? subtask.Options ?? [],
-            sort_order: subtask.sort_order ?? subtask.SortOrder,
-            file_url: subtask.file_url ?? subtask.File_url, // Нормализуем file_url
+          const subtasksRes = await api.get(`/assignments/${assignmentId}/subtasks`);
+          const normalizedSubtasks = subtasksRes.data.map((subtask: any) => ({
+            id: subtask.ID || subtask.id,
+            question: subtask.Question || subtask.question || '',
+            options: Array.isArray(subtask.Options)
+              ? subtask.Options
+              : Array.isArray(subtask.options)
+              ? subtask.options
+              : [],
+            sort_order: subtask.SortOrder || subtask.sort_order || 0,
+            input_type: subtask.Type || subtask.input_type || 'text_input',
+            file_url: subtask.File_url || subtask.file_url,
           }));
-          console.log('Normalized subtasks:', normalizedSubtasks);
           setSubtasks(normalizedSubtasks);
 
           // Проверяем, отправлено ли решение
@@ -120,17 +124,10 @@ export default function AssignmentPage() {
       }
     }
 
-    fetchData();
-  }, [assignmentId, courseId]);
-
-  useEffect(() => {
-    if (quizResult) {
-      console.log('QuizResult:', quizResult);
+    if (user) {
+      fetchData();
     }
-    if (subtasks.length > 0) {
-      console.log('Subtasks:', subtasks);
-    }
-  }, [quizResult, subtasks]);
+  }, [assignmentId, courseId, user]);
 
   const isStudent = user?.role === 'student';
   const isDeadlinePassed = assignment ? new Date(assignment.due_date) < new Date() : false;
@@ -142,6 +139,7 @@ export default function AssignmentPage() {
       await api.post(`/assignments/${assignmentId}/submit`, data);
       submissionForm.reset();
       toast.success('Решение отправлено!');
+      setIsSubmitted(true);
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<ErrorResponse>;
       toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
@@ -152,6 +150,10 @@ export default function AssignmentPage() {
     setQuizResult(result);
     setIsSubmitted(true);
   };
+
+  if (!user) {
+    return <div className="text-center mt-8">Пожалуйста, войдите в систему</div>;
+  }
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error && !assignment) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
@@ -164,36 +166,36 @@ export default function AssignmentPage() {
       <Card className="p-6 mb-6">
         <div className="prose">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-            {assignment.description}
+            {assignment.description || 'Описание отсутствует'}
           </ReactMarkdown>
         </div>
 
         {assignment.file_url && !imageError && (
-  <div className="mt-4">
-    {assignment.file_url.endsWith('.pdf') ? (
-      <a
-        href={assignment.file_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-600 hover:underline"
-      >
-        Просмотреть PDF
-      </a>
-    ) : (
-      <>
-        <Image
-          src={assignment.file_url}
-          alt="Assignment file"
-          width={500}
-          height={500}
-          className="rounded"
-          onError={() => setImageError('Ошибка загрузки изображения')}
-        />
-        {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
-      </>
-    )}
-  </div>
-)}
+          <div className="mt-4">
+            {assignment.file_url.endsWith('.pdf') ? (
+              <a
+                href={assignment.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Просмотреть PDF
+              </a>
+            ) : (
+              <>
+                <Image
+                  src={assignment.file_url}
+                  alt="Assignment file"
+                  width={500}
+                  height={500}
+                  className="rounded"
+                  onError={() => setImageError('Ошибка загрузки изображения')}
+                />
+                {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
+              </>
+            )}
+          </div>
+        )}
         <p className="mt-4">
           <strong>Макс. балл:</strong> {assignment.max_score}
         </p>
@@ -206,9 +208,9 @@ export default function AssignmentPage() {
         </p>
       </Card>
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'text' && (
+      {isStudent && !isDeadlinePassed && assignment.type === 'text' && !isSubmitted && (
         <Card className="mb-6 p-6">
-          <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
+          <h3 className="text-xl font-semibold mb-4">Отправить решение</h3>
           <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
               <label htmlFor="content" className="block mb-1 text-sm font-medium">
@@ -219,6 +221,7 @@ export default function AssignmentPage() {
                 {...submissionForm.register('content')}
                 className="w-full rounded border p-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 rows={5}
+                placeholder="Введите ваш ответ"
               />
               {submissionForm.formState.errors.content && (
                 <p className="text-sm text-red-500">
@@ -233,86 +236,121 @@ export default function AssignmentPage() {
         </Card>
       )}
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && !isSubmitted && (
-        <Card className="mb-6 mt-6 p-4">
-          <h2 className="text-2xl font-semibold mb-4">Квиз</h2>
-          <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+      {assignment.type === 'multiple_choice' && subtasks.length > 0 && (
+        <Card className="mb-6 p-6">
+          <h3 className="text-xl font-semibold mb-4">Подзадания</h3>
+          {isStudent && !isDeadlinePassed && !isSubmitted ? (
+            <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+          ) : (
+            <div className="space-y-4">
+              {subtasks.map((subtask) => (
+                <div key={subtask.id} className="border p-4 rounded">
+                  <p className="font-semibold">{subtask.question}</p>
+                  {subtask.file_url && (
+                    <div className="mt-2">
+                      {subtask.file_url.endsWith('.pdf') ? (
+                        <a
+                          href={subtask.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          Просмотреть PDF
+                        </a>
+                      ) : (
+                        <Image
+                          src={subtask.file_url}
+                          alt={`Subtask ${subtask.id} image`}
+                          width={300}
+                          height={300}
+                          className="rounded"
+                          onError={() => setImageError(`Ошибка загрузки изображения для вопроса ${subtask.id}`)}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {subtask.input_type === 'multiple_choice' && subtask.options.length > 0 && (
+                    <ul className="list-disc pl-5 mt-2">
+                      {subtask.options.map((option, idx) => (
+                        <li key={idx}>{option}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {subtask.input_type === 'text_input' && (
+                    <p className="text-sm text-gray-600 mt-2">Текстовый ответ</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
       {isSubmitted && quizResult && (
-        <Card title="Результаты теста" className="p-6">
-          <div className="space-y-4">
-            <p>
-              <strong>Оценка:</strong> {quizResult.grade.toFixed(1)}
+        <Card className="mt-4">
+          <div>
+            <p className="font-semibold">Оценка: {quizResult.grade.toFixed(1)}</p>
+            <p className="font-semibold">
+              Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
             </p>
-            <p>
-              <strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
-            </p>
-            <div className="space-y-4">
+            <div className="mt-2">
               {quizResult.answers.map((answer, idx) => {
-                const subtask = subtasks.find((s) => (s.id ?? s.ID) === answer.SubtaskID);
-                const options = subtask?.options ?? subtask?.Options ?? [];
+                const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
                 const subtaskScore = assignment.max_score / subtasks.length;
-                console.log(`Answer ${idx + 1}:`, { answer, subtask });
                 return (
-                  <div key={idx} className="border p-4 rounded">
-                    <p className="font-semibold">
-                      Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question ?? 'Вопрос отсутствует'}
+                  <div key={answer.SubtaskID} className="mb-4 border-b pb-2">
+                    <p className="font-medium">
+                      Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
                     </p>
                     {subtask?.file_url && (
-                      <div className="mt-2">
+                      <div className="my-2">
                         {subtask.file_url.endsWith('.pdf') ? (
                           <a
                             href={subtask.file_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
+                            className="text-blue-600 underline"
                           >
                             Просмотреть PDF
                           </a>
                         ) : (
                           <Image
                             src={subtask.file_url}
-                            alt={`Subtask ${idx + 1} image`}
+                            alt={`Вопрос ${idx + 1}`}
                             width={300}
-                            height={300}
-                            className="rounded"
-                            onError={() => setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)}
+                            height={200}
+                            onError={() =>
+                              setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
+                            }
                           />
                         )}
-                        {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
                       </div>
                     )}
                     <p>
-                      <strong>Ваш ответ:</strong>{' '}
+                      Ваш ответ:{' '}
                       <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
                         {answer.Answer || 'Не отвечено'}
                       </span>
                     </p>
                     {!answer.IsCorrect && answer.CorrectAnswer && (
-                      <p>
-                        <strong>Правильный ответ:</strong> {answer.CorrectAnswer}
-                      </p>
+                      <p>Правильный ответ: {answer.CorrectAnswer}</p>
                     )}
+                    <p>Попытки: {answer.Attempts}</p>
                     <p>
-                      <strong>Попытки:</strong> {answer.Attempts}
+                      Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
                     </p>
-                    <p>
-                      <strong>Баллы:</strong> {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
-                    </p>
-                    {options.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-sm font-medium">Варианты:</p>
-                        <ul className="list-disc pl-5">
-                          {options.map((option, optIdx) => (
+                    {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
+                      <div>
+                        <p>Варианты:</p>
+                        <ul className="list-disc ml-5">
+                          {subtask.options.map((option, optIdx) => (
                             <li
                               key={optIdx}
                               className={
-                                option === answer.CorrectAnswer
-                                  ? 'text-green-600'
-                                  : answer.Answer === option && !answer.IsCorrect
-                                  ? 'text-red-600'
+                                option === answer.Answer
+                                  ? answer.IsCorrect
+                                    ? 'text-green-600'
+                                    : 'text-red-600'
                                   : ''
                               }
                             >

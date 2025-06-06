@@ -1,4 +1,3 @@
-// model/subtask.go
 package model
 
 type Subtask struct {
@@ -8,6 +7,6 @@ type Subtask struct {
 	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
 	Answer       string   `gorm:"not null"`                   // правильный ответ
 	SortOrder    int      `gorm:"column:sort_order"`
-	File_url     string   `json:"file_url,omitempty"` // Новое поле для URL файла
-
+	File_url     string   `json:"file_url,omitempty"`
+	InputType    string   `gorm:"type:varchar(20);default:'multiple_choice'" json:"Type"` // ← исправлено
 }

@@ -77,6 +77,7 @@ frontend/
 │           ├── Card.tsx
 │           ├── Input.tsx
 │           └── QuizForm.tsx
+├── tailwind.config.js
 └── tsconfig.json
 
 ================================================================================
@@ -201,7 +202,7 @@ import './globals.css';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
-      <body className="flex flex-col min-h-screen">
+      <body className="flex flex-col min-h-screen bg-[var(--background)] text-[var(--foreground)] font-sans transition-colors duration-300">
         <AuthProvider>
           <LayoutContent>{children}</LayoutContent>
         </AuthProvider>
@@ -215,40 +216,60 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header>
-        <nav className="flex justify-between items-center p-4 bg-blue-600 text-white shadow-md">
-          <Link href="/" className="text-xl font-bold">ProjectSchool</Link>
-          <div className="space-x-4">
-            <Link href="/courses" className="hover:underline">Курсы</Link>
-            <Link href="/leaderboard" className="hover:underline">Лидерборд</Link>
-            <Link href="/submissions" className="hover:underline">Мои решения</Link>
-            <Link href="/profile" className="hover:underline">Профиль</Link>
-            <Link href="/admin" className="hover:underline">Админка</Link>
+      <header className="shadow sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-gray-200 dark:bg-gray-900/80 dark:border-gray-700">
+        <nav className="flex justify-between items-center max-w-6xl mx-auto px-4 py-3">
+          <Link href="/" className="text-2xl font-bold text-blue-600 hover:text-blue-700 transition">
+            ProjectSchool
+          </Link>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <NavLink href="/courses" label="Курсы" />
+            <NavLink href="/leaderboard" label="Лидерборд" />
+            <NavLink href="/submissions" label="Мои решения" />
+            <NavLink href="/profile" label="Профиль" />
+            <NavLink href="/admin" label="Админка" />
             {token ? (
-              <button onClick={logout} className="hover:underline">Выйти</button>
+              <button
+                onClick={logout}
+                className="text-red-600 hover:text-red-700 transition font-medium"
+              >
+                Выйти
+              </button>
             ) : (
               <>
-                <Link href="/auth/login" className="hover:underline">Войти</Link>
-                <Link href="/auth/register" className="hover:underline">Регистрация</Link>
+                <NavLink href="/auth/login" label="Войти" />
+                <NavLink href="/auth/register" label="Регистрация" />
               </>
             )}
           </div>
         </nav>
       </header>
-      <main className="flex-grow p-4">{children}</main>
-      <footer className="p-4 bg-gray-800 text-white text-center">
-        © 2025 ProjectSchool
+
+      <main className="flex-grow px-4 py-8">{children}</main>
+
+      <footer className="bg-gray-900 text-white text-center py-6 mt-auto text-sm">
+        © 2025 ProjectSchool. Все права защищены.
       </footer>
     </>
   );
 }
+
+function NavLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 transition font-medium"
+    >
+      {label}
+    </Link>
+  );
+}
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
 ║ frontend/src/app/page.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// src/app/page.tsx
 'use client';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
@@ -256,17 +277,25 @@ import Link from 'next/link';
 
 export default function Home() {
   return (
-    <div className="text-center max-w-4xl mx-auto mt-8">
-      <h1 className="text-4xl font-bold mb-6">Добро пожаловать в ProjectSchool!</h1>
-      <Card className="p-6">
-        <p className="mb-4">Обучайтесь, выполняйте задания и соревнуйтесь в таблице лидеров!</p>
+    <div className="max-w-4xl mx-auto text-center mt-20 animate-fade-in-up">
+      <h1 className="text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-cyan-400 text-transparent bg-clip-text mb-6">
+        Добро пожаловать в ProjectSchool!
+      </h1>
+
+      <Card className="p-8 shadow-lg rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/60 backdrop-blur">
+        <p className="mb-6 text-lg text-gray-700 dark:text-gray-300">
+          Обучайтесь, выполняйте задания и соревнуйтесь в таблице лидеров!
+        </p>
         <Link href="/courses">
-          <Button>Перейти к курсам</Button>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full shadow transition duration-200">
+            Перейти к курсам
+          </Button>
         </Link>
       </Card>
     </div>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -312,59 +341,56 @@ export default function LeaderboardPage() {
   };
 
   useEffect(() => {
-	const load = async () => {
-	  setIsLoading(true);
-	  setError('');
-	  try {
-		 const response = await api.get<LeaderboardUser[]>(`/leaderboard${courseId ? `?course_id=${courseId}` : ''}`);
-		 setUsers(response.data);
-	  } catch (err: unknown) {
-		 const axiosError = err as AxiosError<ErrorResponse>;
-		 setError(axiosError.response?.data?.error || 'Не удалось загрузить таблицу лидеров');
-	  } finally {
-		 setIsLoading(false);
-	  }
-	};
- 
-	load();
- }, [courseId]); // ✅ или [] если грузим один раз
- 
+    fetchLeaderboard();
+  }, [courseId]);
 
   return (
-    <div className="max-w-2xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Таблица лидеров</h1>
-      <Card className="p-6 mb-6">
-        <div className="flex space-x-4">
+    <div className="max-w-3xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">🏆 Таблица лидеров</h1>
+
+      <Card className="mb-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            fetchLeaderboard();
+          }}
+          className="flex flex-col sm:flex-row gap-4 items-center"
+        >
           <Input
             type="number"
             placeholder="ID курса (опционально)"
             value={courseId}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCourseId(e.target.value)}
-            className="flex-grow"
+            onChange={(e) => setCourseId(e.target.value)}
+            className="w-full sm:flex-1"
           />
-          <Button onClick={fetchLeaderboard}>Показать</Button>
-        </div>
+          <Button type="submit">Показать</Button>
+        </form>
       </Card>
-      {isLoading && <div className="text-center">Загрузка...</div>}
-      {error && <div className="text-red-500 text-center mb-4">{error}</div>}
-      <Card className="p-6">
+
+      {isLoading && <p className="text-center text-gray-500">Загрузка...</p>}
+      {error && <p className="text-center text-red-500 mb-4">{error}</p>}
+
+      <Card>
         {users.length === 0 && !isLoading ? (
-          <p className="text-center">Нет данных</p>
+          <p className="text-center text-gray-500">Нет данных</p>
         ) : (
-          <table className="w-full">
+          <table className="w-full table-auto text-sm">
             <thead>
-              <tr className="border-b">
-                <th className="text-left p-2">#</th>
-                <th className="text-left p-2">Пользователь</th>
-                <th className="text-left p-2">Баллы</th>
+              <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
+                <th className="py-2 px-3">#</th>
+                <th className="py-2 px-3">Пользователь</th>
+                <th className="py-2 px-3">Баллы</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user, index) => (
-                <tr key={user.id} className="border-b">
-                  <td className="p-2">{index + 1}</td>
-                  <td className="p-2">{user.username}</td>
-                  <td className="p-2">{user.points}</td>
+                <tr
+                  key={user.id}
+                  className="border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                >
+                  <td className="py-2 px-3 font-medium">{index + 1}</td>
+                  <td className="py-2 px-3">{user.username}</td>
+                  <td className="py-2 px-3 font-semibold text-blue-600 dark:text-blue-400">{user.points}</td>
                 </tr>
               ))}
             </tbody>
@@ -374,6 +400,7 @@ export default function LeaderboardPage() {
     </div>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -451,91 +478,84 @@ export default function CoursesPage() {
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Курсы</h1>
-      {(user?.role === 'teacher' || user?.role === 'admin') && (
-        <Button onClick={() => setShowCreateForm(!showCreateForm)} className="mb-4">
-          {showCreateForm ? 'Отменить' : 'Создать курс'}
-        </Button>
-      )}
-      {showCreateForm && (
-        <Card className="p-6 mb-6">
-          <form onSubmit={handleCreateCourse} className="space-y-4">
-            {formError && <p className="text-red-500 text-sm">{formError}</p>}
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium mb-1">
-                Название курса
-              </label>
-              <Input
-                id="title"
-                placeholder="Название курса"
-                value={title}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium mb-1">
-                Описание
-              </label>
-              <Input
-                id="description"
-                placeholder="Описание"
-                value={description}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)}
-              />
-            </div>
-            <Button type="submit">Создать</Button>
-          </form>
-        </Card>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {courses.map((course: Course) => (
-          <Card key={course.id} className="p-6">
+    <div className="max-w-5xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📚 Курсы</h1>
+
+  {(user?.role === 'teacher' || user?.role === 'admin') && (
+    <div className="text-center mb-6">
+      <Button onClick={() => setShowCreateForm(!showCreateForm)}>
+        {showCreateForm ? 'Отменить' : 'Создать курс'}
+      </Button>
+    </div>
+  )}
+
+  {showCreateForm && (
+    <Card className="mb-8">
+      <form onSubmit={handleCreateCourse} className="space-y-4">
+        {formError && <p className="text-red-500 text-sm text-center">{formError}</p>}
+        <div>
+          <label htmlFor="title" className="block text-sm font-medium mb-1">Название курса</label>
+          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Введите название курса" />
+        </div>
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium mb-1">Описание</label>
+          <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Введите описание" />
+        </div>
+        <Button type="submit" className="w-full">Создать курс</Button>
+      </form>
+    </Card>
+  )}
+
+  {isLoading ? (
+    <p className="text-center text-gray-500">Загрузка...</p>
+  ) : error ? (
+    <p className="text-center text-red-500">Ошибка: {error}</p>
+  ) : (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      {courses.map((course: Course) => (
+        <Card key={course.id} className="p-6 flex flex-col justify-between">
+          <div>
             <Link href={`/courses/${course.id}`}>
-              <h2 className="text-xl font-semibold hover:underline">{course.title}</h2>
+              <h2 className="text-xl font-bold text-blue-700 hover:underline mb-2">{course.title}</h2>
             </Link>
-            <p className="mt-2">{course.description}</p>
-            <p className="mt-2">
+            <p className="text-sm text-gray-600 mb-2">{course.description}</p>
+            <p className="text-sm text-gray-400">
               <strong>Преподаватель:</strong> {course.teacher.username}
             </p>
-            <div className="mt-4 flex space-x-2">
-              <EnrollButton courseId={course.id} />
-              {user?.role === 'student' && (
-                <Button
-                  onClick={() => handleUnenroll(course.id)}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Отменить запись
-                </Button>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-      {/* Пагинация */}
-      {total && total > limit && (
-        <div className="mt-4 flex justify-center space-x-2">
-          <Button
-            onClick={() => handlePageChange(page - 1)}
-            disabled={page === 1}
-            className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200"
-          >
-            Предыдущая
-          </Button>
-          <span className="text-sm mt-2">
-            Страница {page} из {totalPages}
-          </span>
-          <Button
-            onClick={() => handlePageChange(page + 1)}
-            disabled={page === totalPages}
-            className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200"
-          >
-            Следующая
-          </Button>
-        </div>
-      )}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <EnrollButton courseId={course.id} />
+            {user?.role === 'student' && (
+              <Button onClick={() => handleUnenroll(course.id)} variant="destructive">
+                Отменить запись
+              </Button>
+            )}
+          </div>
+        </Card>
+      ))}
     </div>
+  )}
+
+  {total && total > limit && (
+    <div className="mt-8 flex justify-center items-center gap-4 text-sm">
+      <Button
+        onClick={() => handlePageChange(page - 1)}
+        disabled={page === 1}
+        className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+      >
+        ⬅ Предыдущая
+      </Button>
+      <span className="text-gray-600">Страница {page} из {totalPages}</span>
+      <Button
+        onClick={() => handlePageChange(page + 1)}
+        disabled={page === totalPages}
+        className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+      >
+        Следующая ➡
+      </Button>
+    </div>
+  )}
+</div>
   );
 }
 
@@ -697,159 +717,138 @@ const [statsError, setStatsError] = useState('');
   };
 
   return (
-  <div className="max-w-4xl mx-auto mt-8">
-    <h1 className="text-3xl font-bold mb-6">{course.title}</h1>
+  <div className="max-w-5xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📘 {course.title}</h1>
 
-    <Card className="p-6 mb-6">
-      <p className="mb-2">{course.description}</p>
-      <p>
-        <strong>Преподаватель:</strong> {course.teacher.username}
-      </p>
-    </Card>
+  <Card className="mb-6">
+    <p className="text-gray-700 mb-2">{course.description}</p>
+    <p className="text-sm text-gray-500">
+      <strong>Преподаватель:</strong> {course.teacher.username}
+    </p>
+  </Card>
 
-    {/* Статистика (для teacher и admin) */}
-    {['teacher', 'admin'].includes(user?.role || '') && (
-      <Card className="p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
-        {statsLoading ? (
-          <div className="text-gray-500">Загрузка статистики...</div>
-        ) : statsError ? (
-          <div className="text-red-500">{statsError}</div>
-        ) : stats ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Студентов на курсе</p>
-              <p className="text-xl font-bold">{stats.students_count}</p>
-            </div>
-            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Средний балл</p>
-              <p className="text-xl font-bold">{stats.average_grade.toFixed(2)}</p>
-            </div>
-            <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Завершено заданий</p>
-              <p className="text-xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
-            </div>
+  {/* Статистика */}
+  {['teacher', 'admin'].includes(user?.role || '') && (
+    <Card className="mb-6">
+      <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
+      {statsLoading ? (
+        <p className="text-gray-500">Загрузка...</p>
+      ) : statsError ? (
+        <p className="text-red-500">{statsError}</p>
+      ) : stats ? (
+        <div className="grid sm:grid-cols-3 gap-4 text-center">
+          <div className="bg-gray-100 rounded-lg p-4">
+            <p className="text-sm text-gray-600">Студентов на курсе</p>
+            <p className="text-2xl font-bold">{stats.students_count}</p>
           </div>
-        ) : (
-          <div className="text-gray-500">Нет данных о статистике</div>
-        )}
-      </Card>
-    )}
-
-    {/* Прогресс (для student) */}
-    {user?.role === 'student' && (
-      <Card className="p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">📊 Прогресс по курсу</h2>
-
-        {progressLoading ? (
-          <div className="text-gray-500">Загрузка прогресса...</div>
-        ) : progressError ? (
-          <div className="text-red-500">{progressError}</div>
-        ) : progress ? (
-          progress.total_assignments === 0 ? (
-            <div className="text-gray-500">Заданий в курсе пока нет</div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 text-center">
-                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-                  <p className="text-sm text-gray-600">Сдано заданий</p>
-                  <p className="text-xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
-                </div>
-                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-                  <p className="text-sm text-gray-600">Процент завершения</p>
-                  <p className="text-xl font-bold">{completionRate.toFixed(1)}%</p>
-                </div>
-                <div className="bg-gray-100 rounded-xl p-4 shadow-sm">
-                  <p className="text-sm text-gray-600">Набрано баллов</p>
-                  <p className="text-xl font-bold">{totalPoints.toFixed(1)}</p>
-                </div>
-              </div>
-
-              <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4">
-                <div
-                  className="bg-blue-500 h-4 transition-all duration-500 ease-in-out"
-                  style={{ width: `${completionRate}%` }}
-                />
-              </div>
-
-              {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
-                <div className="mt-6">
-                  <Line
-                    data={chartData}
-                    options={{
-                      responsive: true,
-                      plugins: {
-                        legend: { position: 'top' },
-                        title: { display: true, text: 'Динамика выполнения заданий' },
-                      },
-                      scales: {
-                        y: { beginAtZero: true, title: { display: true, text: 'Сдано заданий' } },
-                        x: { title: { display: true, text: 'Дата' } },
-                      },
-                    }}
-                  />
-                </div>
-              )}
-            </>
-          )
-        ) : (
-          <div className="text-gray-500">Нет данных о прогрессе</div>
-        )}
-      </Card>
-    )}
-
-    {/* Список заданий */}
-    <div className="flex justify-between items-center mb-4">
-      <h2 className="text-2xl font-semibold">Задания</h2>
-      {(user?.role === 'teacher' || user?.role === 'admin') && (
-        <Link href={`/courses/${courseId}/assignments/new`}>
-          <Button>Создать задание</Button>
-        </Link>
+          <div className="bg-gray-100 rounded-lg p-4">
+            <p className="text-sm text-gray-600">Средний балл</p>
+            <p className="text-2xl font-bold">{stats.average_grade.toFixed(2)}</p>
+          </div>
+          <div className="bg-gray-100 rounded-lg p-4">
+            <p className="text-sm text-gray-600">Завершено заданий</p>
+            <p className="text-2xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-gray-500">Нет данных</p>
       )}
-    </div>
+    </Card>
+  )}
 
-    <div className="space-y-4">
-      {assignments.map((assignment) => (
-        <Card key={assignment.id} className="p-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xl font-semibold">{assignment.title}</h3>
-            <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
-              <Button variant="outline">Открыть</Button>
-            </Link>
-          </div>
-          <p className="mt-2">{assignment.description}</p>
-          <p className="mt-2">
-            <strong>Максимальный балл:</strong> {assignment.max_score}
-          </p>
-          <p className="mt-2">
-            <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
-          </p>
-        </Card>
-      ))}
-    </div>
+  {/* Прогресс */}
+  {user?.role === 'student' && (
+    <Card className="mb-6">
+      <h2 className="text-xl font-semibold mb-4">📊 Прогресс</h2>
+      {progressLoading ? (
+        <p className="text-gray-500">Загрузка прогресса...</p>
+      ) : progressError ? (
+        <p className="text-red-500">{progressError}</p>
+      ) : progress ? (
+        progress.total_assignments === 0 ? (
+          <p className="text-gray-500">Заданий нет</p>
+        ) : (
+          <>
+            <div className="grid sm:grid-cols-3 gap-4 mb-4 text-center">
+              <div className="bg-gray-100 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Сдано заданий</p>
+                <p className="text-2xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
+              </div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Процент</p>
+                <p className="text-2xl font-bold">{completionRate.toFixed(1)}%</p>
+              </div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Баллы</p>
+                <p className="text-2xl font-bold">{totalPoints.toFixed(1)}</p>
+              </div>
+            </div>
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+              <div className="bg-blue-500 h-full" style={{ width: `${completionRate}%` }} />
+            </div>
+            {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
+              <div className="mt-6">
+                <Line data={chartData} options={{ responsive: true, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Динамика выполнения заданий' } }, scales: { y: { beginAtZero: true }, x: { title: { display: true, text: 'Дата' } } } }} />
+              </div>
+            )}
+          </>
+        )
+      ) : (
+        <p className="text-gray-500">Нет данных</p>
+      )}
+    </Card>
+  )}
 
-    {/* Удаление курса (admin) */}
-    {user?.role === 'admin' && (
-      <Button
-        variant="destructive"
-        className="mt-4"
-        onClick={async () => {
-          if (confirm('Вы уверены, что хотите удалить этот курс?')) {
-            try {
-              await api.delete(`/courses/${courseId}`);
-              toast.success('Курс успешно удалён');
-              window.location.href = '/courses';
-            } catch (err) {
-              console.error('Ошибка при удалении курса:', err);
-              toast.error('Ошибка при удалении курса');
-            }
-          }
-        }}
-      >
-        Удалить курс
-      </Button>
+  {/* Задания */}
+  <div className="flex justify-between items-center mb-4">
+    <h2 className="text-2xl font-semibold">📝 Задания</h2>
+    {(user?.role === 'teacher' || user?.role === 'admin') && (
+      <Link href={`/courses/${courseId}/assignments/new`}>
+        <Button>Создать</Button>
+      </Link>
     )}
   </div>
+
+  <div className="space-y-4">
+    {assignments.map((assignment) => (
+      <Card key={assignment.id} className="p-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold">{assignment.title}</h3>
+          <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+            <Button variant="outline">Открыть</Button>
+          </Link>
+        </div>
+        <p className="mt-2 text-sm text-gray-700">{assignment.description}</p>
+        <p className="mt-2 text-sm text-gray-500">
+          <strong>Макс. балл:</strong> {assignment.max_score}
+        </p>
+        <p className="text-sm text-gray-500">
+          <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
+        </p>
+      </Card>
+    ))}
+  </div>
+
+  {user?.role === 'admin' && (
+    <Button
+      variant="destructive"
+      className="mt-6"
+      onClick={async () => {
+        if (confirm('Удалить курс?')) {
+          try {
+            await api.delete(`/courses/${courseId}`);
+            toast.success('Курс удалён');
+            window.location.href = '/courses';
+          } catch {
+            toast.error('Ошибка при удалении');
+          }
+        }
+      }}
+    >
+      Удалить курс
+    </Button>
+  )}
+</div>
 );
 
 }
@@ -867,6 +866,7 @@ import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -881,23 +881,21 @@ import { AxiosError } from 'axios';
 interface Assignment {
   id: number;
   title: string;
-  description: string;
+  description?: string;
   max_score: number;
   due_date: string;
   course_id: number;
   file_url?: string;
-  type: string;
+  type: 'text' | 'multiple_choice';
 }
 
 interface Subtask {
   id: number;
-  ID?: number;
   question: string;
-  Question?: string;
-  options: string[] | undefined;
-  Options?: string[];
+  options: string[];
   sort_order: number;
-  SortOrder?: number;
+  input_type: 'multiple_choice' | 'text_input';
+  file_url?: string;
 }
 
 interface QuizResult {
@@ -943,20 +941,19 @@ export default function AssignmentPage() {
     async function fetchData() {
       setIsLoading(true);
       try {
-        const assignmentRes = await api.get<Assignment>(`/courses/${courseId}/assignments/${assignmentId}`);
+        const assignmentRes = await api.get(`/courses/${courseId}/assignments/${assignmentId}`);
         setAssignment(assignmentRes.data);
 
         if (assignmentRes.data.type === 'multiple_choice') {
           const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
-          console.log('API subtasks response:', subtasksRes.data);
-
           const normalizedSubtasks = subtasksRes.data.map((subtask) => ({
-            id: subtask.id ?? subtask.ID,
-            question: subtask.question ?? subtask.Question,
-            options: subtask.options ?? subtask.Options ?? [],
-            sort_order: subtask.sort_order ?? subtask.SortOrder,
+            id: subtask.id,
+            question: subtask.question,
+            options: subtask.options || [],
+            sort_order: subtask.sort_order,
+            input_type: subtask.input_type || 'multiple_choice',
+            file_url: subtask.file_url,
           }));
-          console.log('Normalized subtasks:', normalizedSubtasks);
           setSubtasks(normalizedSubtasks);
 
           // Проверяем, отправлено ли решение
@@ -978,17 +975,10 @@ export default function AssignmentPage() {
       }
     }
 
-    fetchData();
-  }, [assignmentId, courseId]);
-
-  useEffect(() => {
-    if (quizResult) {
-      console.log('QuizResult:', quizResult);
+    if (user) {
+      fetchData();
     }
-    if (subtasks.length > 0) {
-      console.log('Subtasks:', subtasks);
-    }
-  }, [quizResult, subtasks]);
+  }, [assignmentId, courseId, user]);
 
   const isStudent = user?.role === 'student';
   const isDeadlinePassed = assignment ? new Date(assignment.due_date) < new Date() : false;
@@ -1000,6 +990,7 @@ export default function AssignmentPage() {
       await api.post(`/assignments/${assignmentId}/submit`, data);
       submissionForm.reset();
       toast.success('Решение отправлено!');
+      setIsSubmitted(true);
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<ErrorResponse>;
       toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
@@ -1010,6 +1001,10 @@ export default function AssignmentPage() {
     setQuizResult(result);
     setIsSubmitted(true);
   };
+
+  if (!user) {
+    return <div className="text-center mt-8">Пожалуйста, войдите в систему</div>;
+  }
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error && !assignment) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
@@ -1022,11 +1017,11 @@ export default function AssignmentPage() {
       <Card className="p-6 mb-6">
         <div className="prose">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-            {assignment.description}
+            {assignment.description || 'Описание отсутствует'}
           </ReactMarkdown>
         </div>
 
-        {assignment.file_url && (
+        {assignment.file_url && !imageError && (
           <div className="mt-4">
             {assignment.file_url.endsWith('.pdf') ? (
               <a
@@ -1064,9 +1059,9 @@ export default function AssignmentPage() {
         </p>
       </Card>
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'text' && (
+      {isStudent && !isDeadlinePassed && assignment.type === 'text' && !isSubmitted && (
         <Card className="mb-6 p-6">
-          <h2 className="text-xl font-semibold mb-4">Отправить решение</h2>
+          <h3 className="text-xl font-semibold mb-4">Отправить решение</h3>
           <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
             <div>
               <label htmlFor="content" className="block mb-1 text-sm font-medium">
@@ -1077,6 +1072,7 @@ export default function AssignmentPage() {
                 {...submissionForm.register('content')}
                 className="w-full rounded border p-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 rows={5}
+                placeholder="Введите ваш ответ"
               />
               {submissionForm.formState.errors.content && (
                 <p className="text-sm text-red-500">
@@ -1091,78 +1087,143 @@ export default function AssignmentPage() {
         </Card>
       )}
 
-      {isStudent && !isDeadlinePassed && assignment.type === 'multiple_choice' && subtasks.length > 0 && !isSubmitted && (
-        <Card className="mb-6 mt-6 p-4">
-          <h2 className="text-2xl font-semibold mb-4">Квиз</h2>
-          <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+      {assignment.type === 'multiple_choice' && subtasks.length > 0 && (
+        <Card className="mb-6 p-6">
+          <h3 className="text-xl font-semibold mb-4">Подзадания</h3>
+          {isStudent && !isDeadlinePassed && !isSubmitted ? (
+            <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
+          ) : (
+            <div className="space-y-4">
+              {subtasks.map((subtask) => (
+                <div key={subtask.id} className="border p-4 rounded">
+                  <p className="font-semibold">{subtask.question}</p>
+                  {subtask.file_url && (
+                    <div className="mt-2">
+                      {subtask.file_url.endsWith('.pdf') ? (
+                        <a
+                          href={subtask.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          Просмотреть PDF
+                        </a>
+                      ) : (
+                        <Image
+                          src={subtask.file_url}
+                          alt={`Subtask ${subtask.id} image`}
+                          width={300}
+                          height={300}
+                          className="rounded"
+                          onError={() => setImageError(`Ошибка загрузки изображения для вопроса ${subtask.id}`)}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {subtask.input_type === 'multiple_choice' && subtask.options.length > 0 && (
+                    <ul className="list-disc pl-5 mt-2">
+                      {subtask.options.map((option, idx) => (
+                        <li key={idx}>{option}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {subtask.input_type === 'text_input' && (
+                    <p className="text-sm text-gray-600 mt-2">Текстовый ответ</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
       {isSubmitted && quizResult && (
-        <Card title="Результаты теста" className="p-6">
-          <div className="space-y-4">
-            <p>
-              <strong>Оценка:</strong> {quizResult.grade.toFixed(1)}
-            </p>
-            <p>
-              <strong>Баллы:</strong> {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
-            </p>
-            <div className="space-y-4">
-              {quizResult.answers.map((answer, idx) => {
-                const subtask = subtasks.find((s) => (s.id ?? s.ID) === answer.SubtaskID);
-                const options = subtask?.options ?? subtask?.Options ?? [];
-                const subtaskScore = assignment.max_score / subtasks.length;
-                console.log(`Answer ${idx + 1}:`, { answer, subtask });
-                return (
-                  <div key={idx} className="border p-4 rounded">
-                    <p className="font-semibold">
-                      Вопрос {idx + 1}: {subtask?.question ?? subtask?.Question ?? 'Вопрос отсутствует'}
-                    </p>
-                    <p>
-                      <strong>Ваш ответ:</strong>{' '}
-                      <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
-                        {answer.Answer || 'Не отвечено'}
-                      </span>
-                    </p>
-                    {!answer.IsCorrect && answer.CorrectAnswer && (
-                      <p>
-                        <strong>Правильный ответ:</strong> {answer.CorrectAnswer}
-                      </p>
-                    )}
-                    <p>
-                      <strong>Попытки:</strong> {answer.Attempts}
-                    </p>
-                    <p>
-                      <strong>Баллы:</strong> {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
-                    </p>
-                    {options.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-sm font-medium">Варианты ответа:</p>
-                        <ul className="list-disc pl-5">
-                          {options.map((option, optIdx) => (
-                            <li
-                              key={optIdx}
-                              className={
-                                option === answer.CorrectAnswer
-                                  ? 'text-green-600'
-                                  : answer.Answer === option && !answer.IsCorrect
-                                  ? 'text-red-600'
-                                  : ''
-                              }
-                            >
-                              {option}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+  <Card className="mt-4">
+    <div>
+      <p className="font-semibold">
+        Оценка: {quizResult.grade.toFixed(1)}
+      </p>
+      <p className="font-semibold">
+        Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
+      </p>
+      <div className="mt-2">
+        {quizResult.answers.map((answer, idx) => {
+          const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
+          const subtaskScore = assignment.max_score / subtasks.length;
+          return (
+            <div key={answer.SubtaskID} className="mb-4 border-b pb-2"> {/* Добавляем key */}
+              <p className="font-medium">
+                Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
+              </p>
+              {subtask?.file_url && (
+                <div className="my-2">
+                  {subtask.file_url.endsWith('.pdf') ? (
+                    <a
+                      href={subtask.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      Просмотреть PDF
+                    </a>
+                  ) : (
+                    <Image
+                      src={subtask.file_url}
+                      alt={`Вопрос ${idx + 1}`}
+                      width={300}
+                      height={200}
+                      onError={() =>
+                        setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
+                      }
+                    />
+                  )}
+                </div>
+              )}
+              <p>
+                Ваш ответ:{' '}
+                <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
+                  {answer.Answer || 'Не отвечено'}
+                </span>
+              </p>
+              {!answer.IsCorrect && answer.CorrectAnswer && (
+                <p>
+                  Правильный ответ: {answer.CorrectAnswer}
+                </p>
+              )}
+              <p>
+                Попытки: {answer.Attempts}
+              </p>
+              <p>
+                Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
+              </p>
+              {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
+                <div>
+                  <p>Варианты:</p>
+                  <ul className="list-disc ml-5">
+                    {subtask.options.map((option, optIdx) => (
+                      <li
+                        key={optIdx} // Добавляем key для вариантов ответа
+                        className={
+                          option === answer.Answer
+                            ? answer.IsCorrect
+                              ? 'text-green-600'
+                              : 'text-red-600'
+                            : ''
+                        }
+                      >
+                        {option}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-          </div>
-        </Card>
-      )}
+          );
+        })}
+      </div>
+    </div>
+  </Card>
+)}
     </div>
   );
 }
@@ -1206,6 +1267,9 @@ interface Subtask {
   options: string[];
   answer: string;
   numOptions: number;
+  inputType?: 'multiple_choice' | 'text_input';
+  image?: File | null;
+  imagePreview?: string | null;
 }
 
 interface ErrorResponse {
@@ -1233,49 +1297,89 @@ export default function CreateAssignmentPage() {
   });
 
   const handleAddSubtask = () => {
-    setSubtasks([...subtasks, { question: '', options: ['', ''], answer: '', numOptions: 2 }]);
+    setSubtasks([
+      ...subtasks,
+      {
+        question: '',
+        options: ['', ''],
+        answer: '',
+        numOptions: 2,
+        inputType: 'multiple_choice',
+        image: null,
+        imagePreview: null,
+      },
+    ]);
   };
 
   const handleRemoveSubtask = (index: number) => {
+    const subtask = subtasks[index];
+    if (subtask.imagePreview) {
+      URL.revokeObjectURL(subtask.imagePreview);
+    }
     setSubtasks(subtasks.filter((_, i) => i !== index));
   };
 
   const handleSubtaskChange = (
-  index: number,
-  field: keyof Subtask,
-  value: string | string[] | number
-) => {
-  const newSubtasks = [...subtasks];
+    index: number,
+    field: keyof Subtask,
+    value: string | string[] | number | File | null
+  ) => {
+    const newSubtasks = [...subtasks];
 
-  if (field === 'numOptions' && typeof value === 'number') {
-    newSubtasks[index].numOptions = value;
-    newSubtasks[index].options = Array(value).fill('');
-    newSubtasks[index].answer = '';
-  } else if (field === 'options' && Array.isArray(value)) {
-    newSubtasks[index].options = value.map(opt => opt.trim());
-  } else if (typeof value === 'string') {
-    switch (field) {
-      case 'question':
-        newSubtasks[index].question = value.trim();
-        break;
-      case 'answer': {
-        const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
-        if (value && !normalizedOptions.includes(value.trim())) {
-          toast.error('Правильный ответ должен быть одним из вариантов');
-          return;
-        }
-        newSubtasks[index].answer = value.trim();
-        break;
+    if (field === 'numOptions' && typeof value === 'number') {
+      newSubtasks[index].numOptions = value;
+      newSubtasks[index].options = Array(value).fill('');
+      newSubtasks[index].answer = '';
+    } else if (field === 'options' && Array.isArray(value)) {
+      newSubtasks[index].options = value.map(opt => opt.trim());
+    } else if (field === 'image' && value instanceof File) {
+      if (value.size > 10 * 1024 * 1024) {
+        toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
+        return;
       }
-      default:
-        break;
+      if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
+        toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
+        return;
+      }
+      if (newSubtasks[index].imagePreview) {
+        URL.revokeObjectURL(newSubtasks[index].imagePreview);
+      }
+      newSubtasks[index].image = value;
+      newSubtasks[index].imagePreview = URL.createObjectURL(value);
+    } else if (field === 'inputType' && typeof value === 'string') {
+      newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
+      if (value === 'text_input') {
+        newSubtasks[index].options = [];
+        newSubtasks[index].answer = '';
+        console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
+      } else {
+        newSubtasks[index].options = ['', ''];
+        newSubtasks[index].answer = '';
+        newSubtasks[index].numOptions = 2;
+        console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
+      }
+    } else if (typeof value === 'string') {
+      switch (field) {
+        case 'question':
+          newSubtasks[index].question = value.trim();
+          break;
+        case 'answer':
+          if (newSubtasks[index].inputType === 'multiple_choice') {
+            const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
+            if (value && !normalizedOptions.includes(value.trim())) {
+              toast.error('Правильный ответ должен быть одним из вариантов');
+              return;
+            }
+          }
+          newSubtasks[index].answer = value.trim();
+          break;
+        default:
+          break;
+      }
     }
-  }
 
-  setSubtasks(newSubtasks);
-};
-
-
+    setSubtasks(newSubtasks);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1289,6 +1393,9 @@ export default function CreateAssignmentPage() {
         setError('Неподдерживаемый тип файла (jpg, png, pdf)');
         toast.error('Неподдерживаемый тип файла (jpg, png, pdf)');
         return;
+      }
+      if (preview) {
+        URL.revokeObjectURL(preview);
       }
       const previewUrl = URL.createObjectURL(file);
       setPreview(previewUrl);
@@ -1317,37 +1424,49 @@ export default function CreateAssignmentPage() {
       formData.append('course_id', courseId);
       formData.append('type', assignmentType);
       if (data.file) formData.append('file', data.file);
+
       if (assignmentType === 'multiple_choice') {
         if (subtasks.length === 0) {
           setError('Тест должен содержать хотя бы одно подзадание');
           toast.error('Тест должен содержать хотя бы одно подзадание');
           return;
         }
-        for (const subtask of subtasks) {
+        for (const [index, subtask] of subtasks.entries()) {
           if (!subtask.question) {
-            setError('Все вопросы должны быть заполнены');
-            toast.error('Все вопросы должны быть заполнены');
+            setError(`Вопрос ${index + 1} должен быть заполнен`);
+            toast.error(`Вопрос ${index + 1} должен быть заполнен`);
             return;
           }
-          if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
-            setError('Каждое подзадание должно иметь от 2 до 6 вариантов ответа');
-            toast.error('Каждое подзадание должно иметь от 2 до 6 вариантов ответа');
-            return;
+          if (subtask.inputType === 'multiple_choice') {
+            if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
+              setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+              toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+              return;
+            }
+          } else if (subtask.inputType === 'text_input') {
+            if (subtask.options.length > 0) {
+              setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+              toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+              return;
+            }
           }
           if (!subtask.answer) {
-            setError('Все подзадания должны иметь правильный ответ');
-            toast.error('Все подзадания должны иметь правильный ответ');
+            setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
+            toast.error(`Подзадание ${index + 1} должно иметь правильный ответ`);
             return;
+          }
+          if (subtask.image) {
+            formData.append(`subtask_image_${index}`, subtask.image);
           }
         }
 
         const normalizedSubtasks = subtasks.map((subtask, index) => ({
           Question: subtask.question,
-          Options: subtask.options.filter(opt => opt.trim()),
+          Options: subtask.inputType === 'multiple_choice' ? subtask.options.filter(opt => opt.trim()) : [],
           Answer: subtask.answer,
           SortOrder: index + 1,
+          Type: subtask.inputType || 'multiple_choice',
         }));
-        console.log('Normalized subtasks:', normalizedSubtasks);
         formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
       }
 
@@ -1358,7 +1477,7 @@ export default function CreateAssignmentPage() {
       window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка создания задания';
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -1380,8 +1499,7 @@ export default function CreateAssignmentPage() {
             <label className="block mb-2">Тип задания</label>
             <select
               value={assignmentType}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignmentType(e.target.value as 'text' | 'multiple_choice')
-}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignmentType(e.target.value as 'text' | 'multiple_choice')}
               className="border p-2 rounded w-full"
             >
               <option value="text">Обычное задание</option>
@@ -1441,51 +1559,98 @@ export default function CreateAssignmentPage() {
                     }
                     className="mb-2"
                   />
-                  <label className="block mb-2">Количество вариантов ответа (2–6)</label>
+                  <label className="block mb-2">Тип подзадания</label>
                   <select
-                    value={subtask.numOptions}
+                    value={subtask.inputType || 'multiple_choice'}
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                      handleSubtaskChange(idx, 'numOptions', Number(e.target.value))
+                      handleSubtaskChange(idx, 'inputType', e.target.value)
                     }
                     className="border p-2 rounded w-full mb-2"
                   >
-                    {[2, 3, 4, 5, 6].map((num) => (
-                      <option key={num} value={num}>
-                        {num}
-                      </option>
-                    ))}
+                    <option value="multiple_choice">С выбором ответа</option>
+                    <option value="text_input">С вводом ответа</option>
                   </select>
-                  <label className="block mb-2">Варианты ответа</label>
-                  {subtask.options.map((option, optIdx) => (
-                    <Input
-                      key={optIdx}
-                      value={option}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const newOptions = [...subtask.options];
-                        newOptions[optIdx] = e.target.value;
-                        handleSubtaskChange(idx, 'options', newOptions);
-                      }}
-                      className="mb-1"
-                      placeholder={`Вариант ${optIdx + 1}`}
-                    />
-                  ))}
-                  <label className="block mb-2">Правильный ответ</label>
-                  <select
-                    value={subtask.answer}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                      handleSubtaskChange(idx, 'answer', e.target.value)
+
+                  <label className="block mb-2">Файл подзадания (jpg, png, pdf)</label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,application/pdf"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      handleSubtaskChange(idx, 'image', e.target.files?.[0] || null)
                     }
-                    className="border p-2 rounded w-full"
-                  >
-                    <option value="">Выберите ответ</option>
-                    {subtask.options.map((opt, i) =>
-                      opt.trim() ? (
-                        <option key={i} value={opt}>
-                          {opt}
-                        </option>
-                      ) : null
-                    )}
-                  </select>
+                    className="mb-2"
+                  />
+                  {subtask.imagePreview && (
+                    <div className="mt-2 mb-2">
+                      {subtask.image?.type === 'application/pdf' ? (
+                        <a href={subtask.imagePreview} target="_blank" rel="noopener noreferrer">
+                          Просмотреть PDF
+                        </a>
+                      ) : (
+                        <Image src={subtask.imagePreview} alt={`Subtask ${idx + 1} Preview`} width={200} height={200} />
+                      )}
+                    </div>
+                  )}
+                  {subtask.inputType !== 'text_input' && (
+                    <>
+                      <label className="block mb-2">Количество вариантов ответа (2–6)</label>
+                      <select
+                        value={subtask.numOptions}
+                        onChange={(e) =>
+                          handleSubtaskChange(idx, 'numOptions', Number(e.target.value))
+                        }
+                        className="border p-2 rounded w-full mb-2"
+                      >
+                        {[2, 3, 4, 5, 6].map((num) => (
+                          <option key={num} value={num}>
+                            {num}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="block mb-2">Варианты ответа</label>
+                      {subtask.options.map((option, optIdx) => (
+                        <Input
+                          key={optIdx}
+                          value={option}
+                          onChange={(e) => {
+                            const newOptions = [...subtask.options];
+                            newOptions[optIdx] = e.target.value;
+                            handleSubtaskChange(idx, 'options', newOptions);
+                          }}
+                          className="mb-1"
+                          placeholder={`Вариант ${optIdx + 1}`}
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  <label className="block mb-2">Правильный ответ</label>
+                  {subtask.inputType === 'text_input' ? (
+                    <Input
+                      value={subtask.answer}
+                      onChange={(e) =>
+                        handleSubtaskChange(idx, 'answer', e.target.value)
+                      }
+                      className="mb-2"
+                      placeholder="Введите правильный ответ"
+                    />
+                  ) : (
+                    <select
+                      value={subtask.answer}
+                      onChange={(e) => handleSubtaskChange(idx, 'answer', e.target.value)}
+                      className="border p-2 rounded w-full"
+                    >
+                      <option value="">Выберите ответ</option>
+                      {subtask.options.map((opt, i) =>
+                        opt.trim() ? (
+                          <option key={i} value={opt}>
+                            {opt}
+                          </option>
+                        ) : null
+                      )}
+                    </select>
+                  )}
+
                   <Button
                     type="button"
                     onClick={() => handleRemoveSubtask(idx)}
@@ -1509,7 +1674,6 @@ export default function CreateAssignmentPage() {
     </div>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1581,37 +1745,53 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Уведомления</h1>
-      <div className="space-y-4">
-        {notifications.length === 0 ? (
-          <Card className="p-6">
-            <p className="text-center">Нет уведомлений</p>
-          </Card>
-        ) : (
-          notifications.map((notification) => (
-            <Card key={notification.id} className="p-6 flex justify-between items-center">
-              <div>
-                <p className={notification.is_read ? 'text-gray-500' : 'font-semibold'}>
-                  {notification.message}
-                </p>
-                <p className="text-sm text-gray-500 mt-2">
-                  {new Date(notification.created_at).toLocaleString()}
-                </p>
-              </div>
-              {!notification.is_read && (
-                <Button
-                  onClick={() => markAsRead(notification.id)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Пометить как прочитанное
-                </Button>
-              )}
-            </Card>
-          ))
-        )}
-      </div>
-    </div>
+    <div className="max-w-4xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🔔 Уведомления</h1>
+
+  {isLoading && !notifications.length && (
+    <p className="text-center text-gray-500">Загрузка...</p>
+  )}
+  {error && <p className="text-center text-red-500">Ошибка: {error}</p>}
+
+  <div className="space-y-4">
+    {notifications.length === 0 ? (
+      <Card className="p-6">
+        <p className="text-center text-gray-500">Нет уведомлений</p>
+      </Card>
+    ) : (
+      notifications.map((notification) => (
+        <Card
+          key={notification.id}
+          className={`p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 border-l-4 transition-all ${
+            notification.is_read
+              ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/40'
+              : 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+          }`}
+        >
+          <div className="flex-1">
+            <p className={`text-sm sm:text-base ${notification.is_read ? 'text-gray-500' : 'font-semibold text-blue-800 dark:text-blue-200'}`}>
+              {notification.message}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              {new Date(notification.created_at).toLocaleString()}
+            </p>
+          </div>
+
+          {!notification.is_read && (
+            <div className="shrink-0">
+              <Button
+                onClick={() => markAsRead(notification.id)}
+                className="text-sm px-3 py-1"
+              >
+                Прочитано
+              </Button>
+            </div>
+          )}
+        </Card>
+      ))
+    )}
+  </div>
+</div>
   );
 }
 
@@ -1655,54 +1835,65 @@ export default function SubmissionsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Мои решения</h1>
-      <Card className="p-6">
+    <div className="max-w-5xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📄 Мои решения</h1>
+
+      <Card>
         {submissions.length === 0 ? (
-          <p className="text-center">Решения отсутствуют</p>
+          <p className="text-center text-gray-500">Решения отсутствуют</p>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-2">Задание</th>
-                <th className="text-left p-2">Курс</th>
-                <th className="text-left p-2">Оценка</th>
-                <th className="text-left p-2">Дата отправки</th>
-              </tr>
-            </thead>
-            <tbody>
-              {submissions.map((submission: Submission) => (
-                <tr key={submission.id} className="border-b">
-                  <td className="p-2">
-                    {submission.course_id && submission.assignment_id ? (
-                      <Link
-                        href={`/courses/${submission.course_id}/assignments/${submission.assignment_id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        {submission.assignment_title}
-                      </Link>
-                    ) : (
-                      submission.assignment_title
-                    )}
-                  </td>
-                  <td className="p-2">{submission.course_title}</td>
-                  <td className="p-2">
-                    {submission.score > 0 ? submission.score.toFixed(2) : 'Не оценено'}
-                  </td>
-                  <td className="p-2">
-                    {submission.submitted_at
-                      ? format(parseISO(submission.submitted_at), 'dd.MM.yyyy HH:mm')
-                      : 'Не указано'}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto text-sm">
+              <thead>
+                <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
+                  <th className="py-2 px-3">Задание</th>
+                  <th className="py-2 px-3">Курс</th>
+                  <th className="py-2 px-3">Оценка</th>
+                  <th className="py-2 px-3">Дата отправки</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {submissions.map((submission: Submission) => (
+                  <tr
+                    key={submission.id}
+                    className="border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  >
+                    <td className="py-2 px-3">
+                      {submission.course_id && submission.assignment_id ? (
+                        <Link
+                          href={`/courses/${submission.course_id}/assignments/${submission.assignment_id}`}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {submission.assignment_title}
+                        </Link>
+                      ) : (
+                        submission.assignment_title
+                      )}
+                    </td>
+                    <td className="py-2 px-3">{submission.course_title}</td>
+                    <td className="py-2 px-3">
+                      {submission.score > 0 ? (
+                        submission.score.toFixed(2)
+                      ) : (
+                        <span className="text-gray-400 italic">Не оценено</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3">
+                      {submission.submitted_at
+                        ? format(parseISO(submission.submitted_at), 'dd.MM.yyyy HH:mm')
+                        : 'Не указано'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1761,37 +1952,31 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Регистрация</h1>
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium mb-1">Имя пользователя</label>
-            <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium mb-1">Пароль</label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          <div>
-            <label htmlFor="classNumber" className="block text-sm font-medium mb-1">Класс (1–11)</label>
-            <Input
-              id="classNumber"
-              type="number"
-              value={classNumber}
-              onChange={(e) => setClassNumber(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" className="w-full">Зарегистрироваться</Button>
-        </form>
-      </Card>
-    </div>
+    <div className="max-w-md mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Регистрация</h1>
+  <Card className="p-6">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
+        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="username" className="block text-sm font-medium mb-1">Имя пользователя</label>
+        <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium mb-1">Пароль</label>
+        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="classNumber" className="block text-sm font-medium mb-1">Класс (1–11)</label>
+        <Input id="classNumber" type="number" value={classNumber} onChange={(e) => setClassNumber(e.target.value)} required />
+      </div>
+      <Button type="submit" className="w-full">Зарегистрироваться</Button>
+    </form>
+  </Card>
+</div>
   );
 }
 
@@ -1808,12 +1993,12 @@ import { Card } from '@/shared/ui/Card';
 
 export default function LoginPage() {
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Вход</h1>
-      <Card className="p-6">
-        <LoginForm />
-      </Card>
-    </div>
+    <div className="max-w-md mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Вход</h1>
+  <Card className="p-6">
+    <LoginForm />
+  </Card>
+</div>
   );
 }
 
@@ -1855,7 +2040,7 @@ export default function ProfilePage() {
     setEditError('');
     try {
       await api.put('/users/me', { username, email });
-      await refetch(); // ✅ без reload
+      await refetch();
       setIsEditing(false);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
@@ -1868,12 +2053,14 @@ export default function ProfilePage() {
   if (!user) return <div className="text-center mt-8">Пользователь не найден</div>;
 
   return (
-    <div className="max-w-2xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Профиль</h1>
-      <Card className="p-6">
+    <div className="max-w-2xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-center mb-8 text-blue-600">Профиль</h1>
+
+      <Card>
         {isEditing ? (
           <form onSubmit={handleEdit} className="space-y-4">
             {editError && <p className="text-red-500 text-sm">{editError}</p>}
+
             <div>
               <label htmlFor="username" className="block text-sm font-medium mb-1">
                 Имя
@@ -1881,10 +2068,11 @@ export default function ProfilePage() {
               <Input
                 id="username"
                 value={username}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">
                 Email
@@ -1893,49 +2081,35 @@ export default function ProfilePage() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
-            <div className="flex space-x-2">
+
+            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
               <Button type="submit">Сохранить</Button>
-              <Button
-                onClick={() => setIsEditing(false)}
-                className="bg-gray-600 hover:bg-gray-700"
-              >
+              <Button type="button" onClick={() => setIsEditing(false)} variant="outline">
                 Отмена
               </Button>
             </div>
           </form>
         ) : (
-          <>
-            <p className="mb-2">
-              <strong>Имя:</strong> {user.username}
-            </p>
-            <p className="mb-2">
-              <strong>Email:</strong> {user.email}
-            </p>
-            <p className="mb-2">
-              <strong>Роль:</strong> {user.role}
-            </p>
-            {user.role === 'student' && (
-              <p className="mb-2">
-                <strong>Класс:</strong> {user.class_number}
-              </p>
-            )}
-            <p className="mb-4">
-              <strong>Баллы:</strong> {user.points}
-            </p>
-            <Button onClick={() => setIsEditing(true)}>Редактировать профиль</Button>
-          </>
+          <div className="space-y-2 text-gray-800 dark:text-gray-100">
+            <p><strong>Имя:</strong> {user.username}</p>
+            <p><strong>Email:</strong> {user.email}</p>
+            <p><strong>Роль:</strong> {user.role}</p>
+            {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}
+            <p><strong>Баллы:</strong> {user.points}</p>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-end">
+              <Button onClick={() => setIsEditing(true)}>Редактировать профиль</Button>
+              <Link href="/achievements">
+                <Button variant="outline">Мои достижения 🏆</Button>
+              </Link>
+            </div>
+          </div>
         )}
       </Card>
-		<div className="mt-6">
-  <Link href="/achievements">
-    <Button>Мои достижения 🏆</Button>
-  </Link>
-</div>
-
     </div>
   );
 }
@@ -1983,22 +2157,23 @@ export default function AchievementsPage() {
   if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
 
   return (
-    <div className="max-w-3xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Мои достижения</h1>
-      {achievements.length === 0 ? (
-        <p className="text-gray-500">Вы ещё не получили ни одного достижения.</p>
-      ) : (
-        <div className="space-y-4">
-          {achievements.map((ach, index) => (
-            <Card key={index} className="p-4">
-              <h2 className="text-xl font-semibold">{ach.title}</h2>
-              <p className="text-gray-700">{ach.description}</p>
-              <p className="text-sm text-gray-400">Получено: {new Date(ach.awarded_at).toLocaleString()}</p>
-            </Card>
-          ))}
-        </div>
-      )}
+    <div className="max-w-3xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🏅 Мои достижения</h1>
+
+  {achievements.length === 0 ? (
+    <p className="text-center text-gray-500">Вы ещё не получили ни одного достижения.</p>
+  ) : (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {achievements.map((ach, index) => (
+        <Card key={index} className="p-5">
+          <h2 className="text-lg font-semibold text-blue-700 dark:text-blue-400">{ach.title}</h2>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">{ach.description}</p>
+          <p className="text-xs text-gray-400">Получено: {new Date(ach.awarded_at).toLocaleString()}</p>
+        </Card>
+      ))}
     </div>
+  )}
+</div>
   );
 }
 
@@ -2075,57 +2250,44 @@ export default function AdminPage() {
     return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Админ-панель</h1>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      <Card className="p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Управление пользователями</h2>
-        <form onSubmit={handleUpdateRole} className="space-y-4">
-          <div>
-            <label htmlFor="userId" className="block text-sm font-medium mb-1">
-              ID пользователя
-            </label>
-            <Input
-              id="userId"
-              type="number"
-              value={userId}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUserId(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="role" className="block text-sm font-medium mb-1">
-              Роль
-            </label>
-            <Input
-              id="role"
-              value={role}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRole(e.target.value)}
-              placeholder="student, teacher, admin"
-              required
-            />
-          </div>
-          <Button type="submit">Изменить роль</Button>
-        </form>
-        <h3 className="text-lg font-semibold mt-6 mb-2">Список пользователей</h3>
-        <ul className="space-y-2">
-          {users.map((u) => (
-            <li key={u.id}>
-              {u.username} (ID: {u.id}, Роль: {u.role})
-            </li>
-          ))}
-        </ul>
-      </Card>
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Управление курсами</h2>
-        <h3 className="text-lg font-semibold mb-2">Список курсов</h3>
-        <ul className="space-y-2">
-          {courses.map((c) => (
-            <li key={c.id}>{c.title} (ID: {c.id})</li>
-          ))}
-        </ul>
-      </Card>
+    <div className="max-w-4xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
+  {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+
+  <Card className="mb-6">
+    <h2 className="text-xl font-semibold mb-4">Управление пользователями</h2>
+    <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label htmlFor="userId" className="block text-sm font-medium mb-1">ID пользователя</label>
+        <Input id="userId" type="number" value={userId} onChange={(e) => setUserId(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="role" className="block text-sm font-medium mb-1">Роль</label>
+        <Input id="role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="student, teacher, admin" required />
+      </div>
+      <div className="sm:col-span-2">
+        <Button type="submit">Изменить роль</Button>
+      </div>
+    </form>
+    <div className="mt-6">
+      <h3 className="text-lg font-semibold mb-2">Список пользователей</h3>
+      <ul className="text-sm space-y-1">
+        {users.map((u) => (
+          <li key={u.id} className="text-gray-700 dark:text-gray-300">{u.username} (ID: {u.id}, Роль: {u.role})</li>
+        ))}
+      </ul>
     </div>
+  </Card>
+
+  <Card>
+    <h2 className="text-xl font-semibold mb-4">Управление курсами</h2>
+    <ul className="text-sm space-y-1">
+      {courses.map((c) => (
+        <li key={c.id}>{c.title} (ID: {c.id})</li>
+      ))}
+    </ul>
+  </Card>
+</div>
   );
 }
 
@@ -2564,16 +2726,25 @@ export function useCourses(limit: number = 6, offset: number = 0): UseCoursesRes
 ║ frontend/src/shared/ui/Input.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// src/shared/ui/Input.tsx
 import { InputHTMLAttributes } from 'react';
+import clsx from 'clsx';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   className?: string;
 }
 
 export function Input({ className = '', ...props }: InputProps) {
-  return <input className={`border p-2 rounded w-full ${className}`} {...props} />;
+  return (
+    <input
+      className={clsx(
+        'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all',
+        className
+      )}
+      {...props}
+    />
+  );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2581,28 +2752,33 @@ export function Input({ className = '', ...props }: InputProps) {
 ════════════════════════════════════════════════════════════════════════════════
 
 import { ButtonHTMLAttributes, ReactNode } from 'react';
+import clsx from 'clsx';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
   variant?: 'default' | 'outline' | 'destructive';
-  children?: ReactNode; // ⬅ Явно добавлено
+  children?: ReactNode;
 }
 
 export function Button({ children, className = '', variant = 'default', ...props }: ButtonProps) {
-  const variantStyles = {
-    default: 'bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700',
-    outline: 'border border-blue-600 text-blue-600 px-4 py-2 rounded hover:bg-blue-100',
-    destructive: 'bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700',
+  const base = 'inline-flex items-center justify-center font-medium text-sm transition-all duration-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2';
+
+  const variants = {
+    default: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
+    outline: 'border border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500',
+    destructive: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
   };
+
   return (
     <button
-      className={`${variantStyles[variant]} ${className}`}
+      className={clsx(base, variants[variant], className, 'px-4 py-2')}
       {...props}
     >
-      {children ?? 'Default Button'} {/* ⬅ Защита от undefined */}
+      {children ?? 'Default Button'}
     </button>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2610,17 +2786,21 @@ export function Button({ children, className = '', variant = 'default', ...props
 ════════════════════════════════════════════════════════════════════════════════
 
 import { ReactNode } from 'react';
+import clsx from 'clsx';
 
 interface CardProps {
   children: ReactNode;
   className?: string;
-  title?: string; // Добавляем пропс title
+  title?: string;
 }
 
 export function Card({ children, className = '', title }: CardProps) {
   return (
-    <div className={`bg-white p-4 rounded shadow ${className}`}>
-      {title && <h2 className="text-xl font-semibold mb-4">{title}</h2>}
+    <div className={clsx(
+      'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-6 transition-all',
+      className
+    )}>
+      {title && <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">{title}</h2>}
       {children}
     </div>
   );
@@ -2638,16 +2818,22 @@ import { useState, useEffect } from 'react';
 import { api } from '@/shared/api';
 import toast from 'react-hot-toast';
 import { AxiosError } from 'axios';
+import Image from 'next/image';
 
 interface Subtask {
   id: number;
   ID?: number;
   question: string;
   Question?: string;
-  options: string[] | undefined;
+  options?: string[];
   Options?: string[];
   sort_order: number;
   SortOrder?: number;
+  input_type?: string;
+InputType?: string;
+
+  file_url?: string;
+  File_url?: string;
 }
 
 interface QuizResult {
@@ -2673,6 +2859,8 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const [answers, setAnswers] = useState<Record<number, { answer: string; attempts: number; isCorrect?: boolean }>>({});
   const [incorrectOptions, setIncorrectOptions] = useState<Record<number, string[]>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Record<number, string>>({});
+  const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0); // Текущий вопрос
 
   console.log('QuizForm props:', { assignmentId, subtasks });
 
@@ -2683,12 +2871,20 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     subtasks.forEach((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
       const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
-      const data = stored ? JSON.parse(stored) : { attempts: 1, incorrectOptions: [] };
-      initialAnswers[subtaskId] = { answer: '', attempts: data.attempts || 1 };
+      const data = stored ? JSON.parse(stored) : { attempts: 0, incorrectOptions: [] };
+      initialAnswers[subtaskId] = { answer: '', attempts: data.attempts || 0, isCorrect: undefined };
       initialIncorrectOptions[subtaskId] = data.incorrectOptions || [];
     });
     setAnswers(initialAnswers);
     setIncorrectOptions(initialIncorrectOptions);
+
+    // Очищаем localStorage при монтировании, если квиз новый
+    return () => {
+      subtasks.forEach((subtask) => {
+        const subtaskId = subtask.id ?? subtask.ID ?? 0;
+        localStorage.removeItem(`quiz_${assignmentId}_${subtaskId}`);
+      });
+    };
   }, [assignmentId, subtasks]);
 
   if (!Array.isArray(subtasks) || subtasks.length === 0) {
@@ -2730,6 +2926,8 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
         `quiz_${assignmentId}_${subtaskId}`,
         JSON.stringify({
           attempts,
+          answer: normalizedAnswer,
+          isCorrect,
           incorrectOptions: [...(incorrectOptions[subtaskId] || []), ...(isCorrect ? [] : [normalizedAnswer])],
         })
       );
@@ -2740,23 +2938,35 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     }
   };
 
+  const handleNext = () => {
+    const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
+    if (!answers[subtaskId]?.answer) {
+      toast.error('Пожалуйста, выберите ответ перед переходом к следующему вопросу');
+      return;
+    }
+    if (currentSubtaskIndex < subtasks.length - 1) {
+      setCurrentSubtaskIndex(currentSubtaskIndex + 1);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
+    if (!answers[subtaskId]?.answer) {
+      toast.error('Пожалуйста, выберите ответ');
+      return;
+    }
+
     const payload = subtasks.map((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
       const answer = answers[subtaskId]?.answer || '';
-      const attempts = answers[subtaskId]?.attempts || 1;
+      const attempts = answers[subtaskId]?.attempts || 0;
       return {
         SubtaskID: subtaskId,
         Answer: answer,
         Attempts: attempts,
       };
     });
-
-    if (payload.some((ans) => ans.Answer === '')) {
-      toast.error('Пожалуйста, ответьте на все вопросы');
-      return;
-    }
 
     console.log('Submitting quiz payload:', { answers: payload });
 
@@ -2780,57 +2990,122 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     }
   };
 
+  const currentSubtask = subtasks[currentSubtaskIndex];
+  const subtaskId = currentSubtask.id ?? currentSubtask.ID ?? 0;
+  const inputType = currentSubtask.input_type ?? currentSubtask.InputType ?? 'multiple_choice';
+const options = Array.isArray(currentSubtask.options)
+  ? currentSubtask.options
+  : Array.isArray(currentSubtask.Options)
+  ? currentSubtask.Options
+  : [];
+
+const question = currentSubtask.question ?? currentSubtask.Question ?? 'Вопрос отсутствует';
+const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
+
+
+  if (inputType === 'multiple_choice' && !options.length) {
+  console.error(`Subtask ${subtaskId} has invalid options:`, currentSubtask);
+  return (
+    <div className="text-red-500">
+      Ошибка: некорректные варианты ответа для вопроса `{question}`
+    </div>
+  );
+}
+
+
+  const isCorrect = answers[subtaskId]?.isCorrect;
+  const incorrectOptionsForSubtask = incorrectOptions[subtaskId] || [];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {subtasks.map((subtask, idx) => {
-        const options = Array.isArray(subtask.options) ? subtask.options : Array.isArray(subtask.Options) ? subtask.Options : [];
-        const question = subtask.question ?? subtask.Question ?? 'Вопрос отсутствует';
-        const subtaskId = subtask.id ?? subtask.ID ?? 0;
-        if (!options.length) {
-          console.error(`Subtask ${subtaskId} has invalid options:`, subtask);
-          return (
-            <div key={subtaskId} className="text-red-500">
-              Ошибка: некорректные варианты ответа для вопроса `{question}`
-            </div>
-          );
-        }
-
-        const isCorrect = answers[subtaskId]?.isCorrect;
-        const incorrectOptionsForSubtask = incorrectOptions[subtaskId] || [];
-
-        return (
-          <div key={subtaskId} className="mb-4">
-            <p className="font-semibold mb-2">{idx + 1}. {question}</p>
-            <div className="space-y-2">
-              {options.map((option: string, i: number) => {
-                const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
-                return (
-                  <label key={i} className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      name={`subtask-${subtaskId}`}
-                      value={option}
-                      checked={answers[subtaskId]?.answer === option}
-                      onChange={() => handleChange(subtaskId, option)}
-                      disabled={isCorrect === true} // Блокируем выбор после правильного ответа
-                      className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
-                    />
-                    <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
-                  </label>
-                );
-              })}
-              <p className="text-sm text-gray-500 mt-1">Попытки: {answers[subtaskId]?.attempts || 1}</p>
-            </div>
-          </div>
-        );
-      })}
-      <button
-        type="submit"
-        disabled={isSubmitting || !subtasks.every((subtask) => answers[subtask.id ?? subtask.ID ?? 0]?.answer)}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+      <div className="mb-4">
+        <p className="font-semibold mb-2">
+          {currentSubtaskIndex + 1}. {question} ({currentSubtaskIndex + 1}/{subtasks.length})
+        </p>
+        {fileUrl && !imageErrors[subtaskId] && (
+  <div className="mt-2 mb-4">
+    {fileUrl.endsWith('.pdf') ? (
+      <a
+        href={fileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:underline"
       >
-        {isSubmitting ? 'Отправка...' : 'Завершить тест'}
-      </button>
+        Просмотреть PDF
+      </a>
+    ) : (
+      <>
+        <Image
+          src={fileUrl}
+          alt={`Subtask ${currentSubtaskIndex + 1} image`}
+          width={300}
+          height={300}
+          className="rounded"
+          onError={() =>
+            setImageErrors((prev) => ({
+              ...prev,
+              [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
+            }))
+          }
+        />
+        {imageErrors[subtaskId] && <p className="text-red-500 text-sm">{imageErrors[subtaskId]}</p>}
+      </>
+    )}
+  </div>
+)}
+        <div className="space-y-2">
+  {inputType === 'multiple_choice' ? (
+    options.map((option: string, i: number) => {
+      const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
+      return (
+        <label key={i} className="flex items-center space-x-2">
+          <input
+            type="radio"
+            name={`subtask-${subtaskId}`}
+            value={option}
+            checked={answers[subtaskId]?.answer === option}
+            onChange={() => handleChange(subtaskId, option)}
+            disabled={isCorrect === true}
+            className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
+          />
+          <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
+        </label>
+      );
+    })
+  ) : (
+    <input
+      type="text"
+      value={answers[subtaskId]?.answer || ''}
+      onChange={(e) => handleChange(subtaskId, e.target.value)}
+      disabled={isCorrect === true}
+      className="w-full border rounded px-3 py-2"
+      placeholder="Введите ответ"
+    />
+  )}
+  <p className="text-sm text-gray-500 mt-1">Попытки: {answers[subtaskId]?.attempts || 0}</p>
+</div>
+
+      </div>
+      <div className="flex space-x-4">
+        {currentSubtaskIndex < subtasks.length - 1 ? (
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+          >
+            Далее
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+          >
+            {isSubmitting ? 'Отправка...' : 'Завершить тест'}
+          </button>
+        )}
+      </div>
     </form>
   );
 }

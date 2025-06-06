@@ -69,90 +69,83 @@ export default function CoursesPage() {
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Курсы</h1>
-      {(user?.role === 'teacher' || user?.role === 'admin') && (
-        <Button onClick={() => setShowCreateForm(!showCreateForm)} className="mb-4">
-          {showCreateForm ? 'Отменить' : 'Создать курс'}
-        </Button>
-      )}
-      {showCreateForm && (
-        <Card className="p-6 mb-6">
-          <form onSubmit={handleCreateCourse} className="space-y-4">
-            {formError && <p className="text-red-500 text-sm">{formError}</p>}
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium mb-1">
-                Название курса
-              </label>
-              <Input
-                id="title"
-                placeholder="Название курса"
-                value={title}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium mb-1">
-                Описание
-              </label>
-              <Input
-                id="description"
-                placeholder="Описание"
-                value={description}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)}
-              />
-            </div>
-            <Button type="submit">Создать</Button>
-          </form>
-        </Card>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {courses.map((course: Course) => (
-          <Card key={course.id} className="p-6">
+    <div className="max-w-5xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📚 Курсы</h1>
+
+  {(user?.role === 'teacher' || user?.role === 'admin') && (
+    <div className="text-center mb-6">
+      <Button onClick={() => setShowCreateForm(!showCreateForm)}>
+        {showCreateForm ? 'Отменить' : 'Создать курс'}
+      </Button>
+    </div>
+  )}
+
+  {showCreateForm && (
+    <Card className="mb-8">
+      <form onSubmit={handleCreateCourse} className="space-y-4">
+        {formError && <p className="text-red-500 text-sm text-center">{formError}</p>}
+        <div>
+          <label htmlFor="title" className="block text-sm font-medium mb-1">Название курса</label>
+          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Введите название курса" />
+        </div>
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium mb-1">Описание</label>
+          <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Введите описание" />
+        </div>
+        <Button type="submit" className="w-full">Создать курс</Button>
+      </form>
+    </Card>
+  )}
+
+  {isLoading ? (
+    <p className="text-center text-gray-500">Загрузка...</p>
+  ) : error ? (
+    <p className="text-center text-red-500">Ошибка: {error}</p>
+  ) : (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      {courses.map((course: Course) => (
+        <Card key={course.id} className="p-6 flex flex-col justify-between">
+          <div>
             <Link href={`/courses/${course.id}`}>
-              <h2 className="text-xl font-semibold hover:underline">{course.title}</h2>
+              <h2 className="text-xl font-bold text-blue-700 hover:underline mb-2">{course.title}</h2>
             </Link>
-            <p className="mt-2">{course.description}</p>
-            <p className="mt-2">
+            <p className="text-sm text-gray-600 mb-2">{course.description}</p>
+            <p className="text-sm text-gray-400">
               <strong>Преподаватель:</strong> {course.teacher.username}
             </p>
-            <div className="mt-4 flex space-x-2">
-              <EnrollButton courseId={course.id} />
-              {user?.role === 'student' && (
-                <Button
-                  onClick={() => handleUnenroll(course.id)}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Отменить запись
-                </Button>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-      {/* Пагинация */}
-      {total && total > limit && (
-        <div className="mt-4 flex justify-center space-x-2">
-          <Button
-            onClick={() => handlePageChange(page - 1)}
-            disabled={page === 1}
-            className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200"
-          >
-            Предыдущая
-          </Button>
-          <span className="text-sm mt-2">
-            Страница {page} из {totalPages}
-          </span>
-          <Button
-            onClick={() => handlePageChange(page + 1)}
-            disabled={page === totalPages}
-            className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200"
-          >
-            Следующая
-          </Button>
-        </div>
-      )}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <EnrollButton courseId={course.id} />
+            {user?.role === 'student' && (
+              <Button onClick={() => handleUnenroll(course.id)} variant="destructive">
+                Отменить запись
+              </Button>
+            )}
+          </div>
+        </Card>
+      ))}
     </div>
+  )}
+
+  {total && total > limit && (
+    <div className="mt-8 flex justify-center items-center gap-4 text-sm">
+      <Button
+        onClick={() => handlePageChange(page - 1)}
+        disabled={page === 1}
+        className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+      >
+        ⬅ Предыдущая
+      </Button>
+      <span className="text-gray-600">Страница {page} из {totalPages}</span>
+      <Button
+        onClick={() => handlePageChange(page + 1)}
+        disabled={page === totalPages}
+        className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+      >
+        Следующая ➡
+      </Button>
+    </div>
+  )}
+</div>
   );
 }

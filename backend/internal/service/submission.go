@@ -313,7 +313,15 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 
 	var totalScore float64
 	responseAnswers := make([]map[string]interface{}, 0, len(answers))
-	subtaskScore := float64(assignment.MaxScore) / float64(len(subtasks)) // Балл за одно подзадание
+	var totalWeight float64
+	for _, st := range subtasks {
+		if st.InputType == "text_input" {
+			totalWeight += 2.0 // Учитывается как 2 обычных
+		} else {
+			totalWeight += 1.0
+		}
+	}
+	subtaskScore := float64(assignment.MaxScore) / totalWeight
 
 	for i, answer := range answers {
 		subtask, ok := subtaskMap[answer.SubtaskID]
@@ -336,24 +344,30 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			attempts = subtaskSubmission.Attempts
 		}
 
-		numOptions := len(subtask.Options)
-		if numOptions < 2 || numOptions > 6 {
-			logger.Log.Errorf("Invalid number of options for SubtaskID %d: %d", answer.SubtaskID, numOptions)
-			return nil, errors.New("некорректное количество вариантов ответа")
+		var weight float64
+		if subtask.InputType == "text_input" {
+			weight = 2.0
+		} else {
+			weight = 1.0
+			numOptions := len(subtask.Options)
+			if numOptions < 2 || numOptions > 6 {
+				logger.Log.Errorf("Invalid number of options for SubtaskID %d: %d", answer.SubtaskID, numOptions)
+				return nil, errors.New("некорректное количество вариантов ответа")
+			}
 		}
 
-		// Подсчёт баллов за подзадание
+		// Подсчёт баллов
 		var score float64
 		if isCorrect {
 			if attempts == 1 {
-				score = subtaskScore // Полный балл за первую попытку
-			} else if attempts < numOptions {
-				// Вычитаем балл за каждую попытку: subtaskScore / numOptions
-				score = subtaskScore * float64(numOptions-attempts) / float64(numOptions-1)
+				score = subtaskScore * weight // полный балл
+			} else if subtask.InputType != "text_input" && attempts < len(subtask.Options) {
+				score = subtaskScore * weight * float64(len(subtask.Options)-attempts) / float64(len(subtask.Options)-1)
 			} else {
-				score = 0 // Если исчерпаны все неправильные варианты
+				score = 0
 			}
 		}
+
 		totalScore += score
 
 		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d, Score=%.2f",

@@ -50,36 +50,30 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6 text-center">Регистрация</h1>
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium mb-1">Имя пользователя</label>
-            <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium mb-1">Пароль</label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          <div>
-            <label htmlFor="classNumber" className="block text-sm font-medium mb-1">Класс (1–11)</label>
-            <Input
-              id="classNumber"
-              type="number"
-              value={classNumber}
-              onChange={(e) => setClassNumber(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" className="w-full">Зарегистрироваться</Button>
-        </form>
-      </Card>
-    </div>
+    <div className="max-w-md mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Регистрация</h1>
+  <Card className="p-6">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
+        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="username" className="block text-sm font-medium mb-1">Имя пользователя</label>
+        <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium mb-1">Пароль</label>
+        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      </div>
+      <div>
+        <label htmlFor="classNumber" className="block text-sm font-medium mb-1">Класс (1–11)</label>
+        <Input id="classNumber" type="number" value={classNumber} onChange={(e) => setClassNumber(e.target.value)} required />
+      </div>
+      <Button type="submit" className="w-full">Зарегистрироваться</Button>
+    </form>
+  </Card>
+</div>
   );
 }

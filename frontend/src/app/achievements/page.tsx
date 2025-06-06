@@ -35,21 +35,22 @@ export default function AchievementsPage() {
   if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
 
   return (
-    <div className="max-w-3xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Мои достижения</h1>
-      {achievements.length === 0 ? (
-        <p className="text-gray-500">Вы ещё не получили ни одного достижения.</p>
-      ) : (
-        <div className="space-y-4">
-          {achievements.map((ach, index) => (
-            <Card key={index} className="p-4">
-              <h2 className="text-xl font-semibold">{ach.title}</h2>
-              <p className="text-gray-700">{ach.description}</p>
-              <p className="text-sm text-gray-400">Получено: {new Date(ach.awarded_at).toLocaleString()}</p>
-            </Card>
-          ))}
-        </div>
-      )}
+    <div className="max-w-3xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🏅 Мои достижения</h1>
+
+  {achievements.length === 0 ? (
+    <p className="text-center text-gray-500">Вы ещё не получили ни одного достижения.</p>
+  ) : (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {achievements.map((ach, index) => (
+        <Card key={index} className="p-5">
+          <h2 className="text-lg font-semibold text-blue-700 dark:text-blue-400">{ach.title}</h2>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">{ach.description}</p>
+          <p className="text-xs text-gray-400">Получено: {new Date(ach.awarded_at).toLocaleString()}</p>
+        </Card>
+      ))}
     </div>
+  )}
+</div>
   );
 }

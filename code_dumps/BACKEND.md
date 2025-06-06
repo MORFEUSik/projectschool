@@ -1045,13 +1045,15 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Produce json
 // @Security BearerAuth
 // @Param title formData string true "Название задания"
-// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/Uploads/...'>)"
+// @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
 // @Param max_score formData integer true "Максимальный балл"
 // @Param due_date formData string true "Срок сдачи (ISO 8601)"
 // @Param course_id formData integer true "ID курса"
 // @Param type formData string true "Тип задания (text | multiple_choice)"
 // @Param subtasks_json formData string false "JSON подзаданий для multiple_choice"
 // @Param file formData file false "Файл (jpg, png, pdf)"
+// @Param subtask_image_0 formData file false "Файл для подзадания 0 (jpg, png, pdf)"
+// @Param subtask_image_1 formData file false "Файл для подзадания 1 (jpg, png, pdf)"
 // @Success 200 {object} map[string]interface{} "message, assignment_id"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
@@ -1163,7 +1165,16 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
-		// Обработка файла
+		// Обработка файлов
+		files := make(map[string]string)
+		uploadDir := "./uploads"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
+			return
+		}
+
+		// Файл для задания
 		var fileURL string
 		file, err := c.FormFile("file")
 		if err == nil { // Файл загружен
@@ -1190,12 +1201,6 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			// Сохранение файла
 			ext := filepath.Ext(file.Filename)
 			filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-			uploadDir := "./uploads"
-			if err := os.MkdirAll(uploadDir, 0755); err != nil {
-				logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
-				return
-			}
 			filePath := filepath.Join(uploadDir, filename)
 			logger.Log.Infof("Saving file to %s", filePath)
 			if err := c.SaveUploadedFile(file, filePath); err != nil {
@@ -1214,6 +1219,56 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			logger.Log.Errorf("Failed to get file: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка обработки файла"})
 			return
+		}
+
+		// Файлы для подзаданий
+		for i := range subtasks {
+			fileKey := fmt.Sprintf("subtask_image_%d", i)
+			file, err := c.FormFile(fileKey)
+			if err == nil { // Файл загружен
+				// Валидация типа файла
+				allowedTypes := map[string]bool{
+					"image/jpeg":      true,
+					"image/png":       true,
+					"application/pdf": true,
+				}
+				fileHeader := file.Header.Get("Content-Type")
+				if !allowedTypes[fileHeader] {
+					logger.Log.Errorf("Unsupported file type for %s: %s", fileKey, fileHeader)
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Неподдерживаемый тип файла для подзадания %d (разрешены jpg, png, pdf)", i)})
+					return
+				}
+
+				// Валидация размера (10 MB)
+				if file.Size > 10*1024*1024 {
+					logger.Log.Errorf("File too large for %s: %d bytes", fileKey, file.Size)
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Файл подзадания %d слишком большой (макс. 10 МБ)", i)})
+					return
+				}
+
+				// Сохранение файла
+				ext := filepath.Ext(file.Filename)
+				filename := fmt.Sprintf("subtask_%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
+				filePath := filepath.Join(uploadDir, filename)
+				logger.Log.Infof("Saving subtask file to %s", filePath)
+				if err := c.SaveUploadedFile(file, filePath); err != nil {
+					logger.Log.Errorf("Failed to save subtask file to %s: %v", filePath, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Ошибка сохранения файла подзадания %d", i)})
+					return
+				}
+				if _, err := os.Stat(filePath); os.IsNotExist(err) {
+					logger.Log.Errorf("Subtask file %s does not exist after saving", filePath)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Файл подзадания %d не был сохранён", i)})
+					return
+				}
+				fileURL := "http://localhost:8080/uploads/" + filename
+				files[fileKey] = fileURL
+				logger.Log.Infof("Subtask file saved successfully: %s", fileURL)
+			} else if !errors.Is(err, http.ErrMissingFile) {
+				logger.Log.Errorf("Failed to get subtask file %s: %v", fileKey, err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Ошибка обработки файла подзадания %d", i)})
+				return
+			}
 		}
 
 		// Создание модели Assignment
@@ -1244,7 +1299,7 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 		}
 
 		// Сохранение через сервис
-		if err := assignmentService.Create(&assignment, subtasks); err != nil {
+		if err := assignmentService.Create(&assignment, subtasks, files); err != nil {
 			logger.Log.Errorf("Failed to create assignment: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -1444,7 +1499,7 @@ func UploadFile() gin.HandlerFunc {
 		// Сохранение файла
 		ext := filepath.Ext(file.Filename)
 		filename := fmt.Sprintf("%d-%s%s", time.Now().UnixNano(), uuid.New().String(), ext)
-		uploadDir := "./Uploads"
+		uploadDir := "./uploads"
 		if err := os.MkdirAll(uploadDir, 0755); err != nil {
 			logger.Log.Errorf("Failed to create upload directory %s: %v", uploadDir, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка создания директории для файлов"})
@@ -2422,7 +2477,6 @@ func (s *Submission) Validate() error {
 ║ backend/internal/model/subtask.go
 ════════════════════════════════════════════════════════════════════════════════
 
-// model/subtask.go
 package model
 
 type Subtask struct {
@@ -2432,6 +2486,8 @@ type Subtask struct {
 	Options      []string `gorm:"type:jsonb;serializer:json"` // список вариантов ответа
 	Answer       string   `gorm:"not null"`                   // правильный ответ
 	SortOrder    int      `gorm:"column:sort_order"`
+	File_url     string   `json:"file_url,omitempty"`
+	InputType    string   `gorm:"type:varchar(20);default:'multiple_choice'" json:"Type"` // ← исправлено
 }
 
 
@@ -3728,7 +3784,15 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 
 	var totalScore float64
 	responseAnswers := make([]map[string]interface{}, 0, len(answers))
-	subtaskScore := float64(assignment.MaxScore) / float64(len(subtasks)) // Балл за одно подзадание
+	var totalWeight float64
+	for _, st := range subtasks {
+		if st.InputType == "text_input" {
+			totalWeight += 2.0 // Учитывается как 2 обычных
+		} else {
+			totalWeight += 1.0
+		}
+	}
+	subtaskScore := float64(assignment.MaxScore) / totalWeight
 
 	for i, answer := range answers {
 		subtask, ok := subtaskMap[answer.SubtaskID]
@@ -3751,24 +3815,30 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			attempts = subtaskSubmission.Attempts
 		}
 
-		numOptions := len(subtask.Options)
-		if numOptions < 2 || numOptions > 6 {
-			logger.Log.Errorf("Invalid number of options for SubtaskID %d: %d", answer.SubtaskID, numOptions)
-			return nil, errors.New("некорректное количество вариантов ответа")
+		var weight float64
+		if subtask.InputType == "text_input" {
+			weight = 2.0
+		} else {
+			weight = 1.0
+			numOptions := len(subtask.Options)
+			if numOptions < 2 || numOptions > 6 {
+				logger.Log.Errorf("Invalid number of options for SubtaskID %d: %d", answer.SubtaskID, numOptions)
+				return nil, errors.New("некорректное количество вариантов ответа")
+			}
 		}
 
-		// Подсчёт баллов за подзадание
+		// Подсчёт баллов
 		var score float64
 		if isCorrect {
 			if attempts == 1 {
-				score = subtaskScore // Полный балл за первую попытку
-			} else if attempts < numOptions {
-				// Вычитаем балл за каждую попытку: subtaskScore / numOptions
-				score = subtaskScore * float64(numOptions-attempts) / float64(numOptions-1)
+				score = subtaskScore * weight // полный балл
+			} else if subtask.InputType != "text_input" && attempts < len(subtask.Options) {
+				score = subtaskScore * weight * float64(len(subtask.Options)-attempts) / float64(len(subtask.Options)-1)
 			} else {
-				score = 0 // Если исчерпаны все неправильные варианты
+				score = 0
 			}
 		}
+
 		totalScore += score
 
 		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d, Score=%.2f",
@@ -4163,7 +4233,7 @@ import (
 )
 
 type AssignmentService interface {
-	Create(assignment *model.Assignment, subtasks []model.Subtask) error
+	Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error // Обновляем сигнатуру
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
@@ -4184,7 +4254,7 @@ func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo
 	}
 }
 
-func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask) error {
+func (s *assignmentService) Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error {
 	logger.Log.Infof("Creating assignment: %s", assignment.Title)
 	if assignment.Type == "multiple_choice" && len(subtasks) == 0 {
 		logger.Log.Errorf("Multiple choice assignment must have at least one subtask")
@@ -4202,16 +4272,36 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 				logger.Log.Errorf("Subtask question cannot be empty")
 				return errors.New("вопрос подзадания не может быть пустым")
 			}
-			if len(subtasks[i].Options) < 2 {
-				logger.Log.Errorf("Subtask must have at least 2 options")
-				return errors.New("подзадание должно содержать хотя бы 2 варианта ответа")
-			}
-			if !contains(subtasks[i].Options, subtasks[i].Answer) {
-				logger.Log.Errorf("Subtask answer must be one of the options")
-				return errors.New("правильный ответ должен быть одним из вариантов")
+			if subtasks[i].InputType == "multiple_choice" {
+				if len(subtasks[i].Options) < 2 {
+					logger.Log.Errorf("Subtask must have at least 2 options")
+					return errors.New("подзадание должно содержать хотя бы 2 варианта ответа")
+				}
+				if !contains(subtasks[i].Options, subtasks[i].Answer) {
+					logger.Log.Errorf("Subtask answer must be one of the options")
+					return errors.New("правильный ответ должен быть одним из вариантов")
+				}
+			} else if subtasks[i].InputType == "text_input" {
+				if len(subtasks[i].Options) > 0 {
+					logger.Log.Errorf("Text input subtask must not have options")
+					return errors.New("подзадание с текстовым вводом не должно содержать варианты ответа")
+				}
+				if subtasks[i].Answer == "" {
+					logger.Log.Errorf("Text input subtask must have an answer")
+					return errors.New("подзадание с текстовым вводом должно содержать правильный ответ")
+				}
+			} else {
+				logger.Log.Errorf("Invalid subtask type: %s", subtasks[i].InputType)
+				return errors.New("неверный тип подзадания")
 			}
 			subtasks[i].AssignmentID = assignment.ID
 			subtasks[i].SortOrder = i + 1
+
+			// Привязываем URL файла к подзаданию
+			if fileURL, ok := files[fmt.Sprintf("subtask_image_%d", i)]; ok {
+				subtasks[i].File_url = fileURL
+			}
+
 			if err := tx.Create(&subtasks[i]).Error; err != nil {
 				logger.Log.Errorf("Failed to create subtask: %v", err)
 				return err
@@ -4870,7 +4960,7 @@ func main() {
 	if err != nil {
 		logger.Log.Fatalf("Failed to get working directory: %v", err)
 	}
-	uploadDir := filepath.Join(wd, "Uploads")
+	uploadDir := filepath.Join(wd, "uploads")
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		logger.Log.Fatalf("Failed to create uploads directory: %v", err)
 	}

@@ -63,36 +63,52 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Уведомления</h1>
-      <div className="space-y-4">
-        {notifications.length === 0 ? (
-          <Card className="p-6">
-            <p className="text-center">Нет уведомлений</p>
-          </Card>
-        ) : (
-          notifications.map((notification) => (
-            <Card key={notification.id} className="p-6 flex justify-between items-center">
-              <div>
-                <p className={notification.is_read ? 'text-gray-500' : 'font-semibold'}>
-                  {notification.message}
-                </p>
-                <p className="text-sm text-gray-500 mt-2">
-                  {new Date(notification.created_at).toLocaleString()}
-                </p>
-              </div>
-              {!notification.is_read && (
-                <Button
-                  onClick={() => markAsRead(notification.id)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Пометить как прочитанное
-                </Button>
-              )}
-            </Card>
-          ))
-        )}
-      </div>
-    </div>
+    <div className="max-w-4xl mx-auto mt-12 px-4">
+  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🔔 Уведомления</h1>
+
+  {isLoading && !notifications.length && (
+    <p className="text-center text-gray-500">Загрузка...</p>
+  )}
+  {error && <p className="text-center text-red-500">Ошибка: {error}</p>}
+
+  <div className="space-y-4">
+    {notifications.length === 0 ? (
+      <Card className="p-6">
+        <p className="text-center text-gray-500">Нет уведомлений</p>
+      </Card>
+    ) : (
+      notifications.map((notification) => (
+        <Card
+          key={notification.id}
+          className={`p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 border-l-4 transition-all ${
+            notification.is_read
+              ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/40'
+              : 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+          }`}
+        >
+          <div className="flex-1">
+            <p className={`text-sm sm:text-base ${notification.is_read ? 'text-gray-500' : 'font-semibold text-blue-800 dark:text-blue-200'}`}>
+              {notification.message}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              {new Date(notification.created_at).toLocaleString()}
+            </p>
+          </div>
+
+          {!notification.is_read && (
+            <div className="shrink-0">
+              <Button
+                onClick={() => markAsRead(notification.id)}
+                className="text-sm px-3 py-1"
+              >
+                Прочитано
+              </Button>
+            </div>
+          )}
+        </Card>
+      ))
+    )}
+  </div>
+</div>
   );
 }

@@ -33,49 +33,59 @@ export default function SubmissionsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">Мои решения</h1>
-      <Card className="p-6">
+    <div className="max-w-5xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📄 Мои решения</h1>
+
+      <Card>
         {submissions.length === 0 ? (
-          <p className="text-center">Решения отсутствуют</p>
+          <p className="text-center text-gray-500">Решения отсутствуют</p>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-2">Задание</th>
-                <th className="text-left p-2">Курс</th>
-                <th className="text-left p-2">Оценка</th>
-                <th className="text-left p-2">Дата отправки</th>
-              </tr>
-            </thead>
-            <tbody>
-              {submissions.map((submission: Submission) => (
-                <tr key={submission.id} className="border-b">
-                  <td className="p-2">
-                    {submission.course_id && submission.assignment_id ? (
-                      <Link
-                        href={`/courses/${submission.course_id}/assignments/${submission.assignment_id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        {submission.assignment_title}
-                      </Link>
-                    ) : (
-                      submission.assignment_title
-                    )}
-                  </td>
-                  <td className="p-2">{submission.course_title}</td>
-                  <td className="p-2">
-                    {submission.score > 0 ? submission.score.toFixed(2) : 'Не оценено'}
-                  </td>
-                  <td className="p-2">
-                    {submission.submitted_at
-                      ? format(parseISO(submission.submitted_at), 'dd.MM.yyyy HH:mm')
-                      : 'Не указано'}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto text-sm">
+              <thead>
+                <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
+                  <th className="py-2 px-3">Задание</th>
+                  <th className="py-2 px-3">Курс</th>
+                  <th className="py-2 px-3">Оценка</th>
+                  <th className="py-2 px-3">Дата отправки</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {submissions.map((submission: Submission) => (
+                  <tr
+                    key={submission.id}
+                    className="border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  >
+                    <td className="py-2 px-3">
+                      {submission.course_id && submission.assignment_id ? (
+                        <Link
+                          href={`/courses/${submission.course_id}/assignments/${submission.assignment_id}`}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {submission.assignment_title}
+                        </Link>
+                      ) : (
+                        submission.assignment_title
+                      )}
+                    </td>
+                    <td className="py-2 px-3">{submission.course_title}</td>
+                    <td className="py-2 px-3">
+                      {submission.score > 0 ? (
+                        submission.score.toFixed(2)
+                      ) : (
+                        <span className="text-gray-400 italic">Не оценено</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3">
+                      {submission.submitted_at
+                        ? format(parseISO(submission.submitted_at), 'dd.MM.yyyy HH:mm')
+                        : 'Не указано'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>

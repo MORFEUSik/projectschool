@@ -52,13 +52,27 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 				logger.Log.Errorf("Subtask question cannot be empty")
 				return errors.New("вопрос подзадания не может быть пустым")
 			}
-			if len(subtasks[i].Options) < 2 {
-				logger.Log.Errorf("Subtask must have at least 2 options")
-				return errors.New("подзадание должно содержать хотя бы 2 варианта ответа")
-			}
-			if !contains(subtasks[i].Options, subtasks[i].Answer) {
-				logger.Log.Errorf("Subtask answer must be one of the options")
-				return errors.New("правильный ответ должен быть одним из вариантов")
+			if subtasks[i].InputType == "multiple_choice" {
+				if len(subtasks[i].Options) < 2 {
+					logger.Log.Errorf("Subtask must have at least 2 options")
+					return errors.New("подзадание должно содержать хотя бы 2 варианта ответа")
+				}
+				if !contains(subtasks[i].Options, subtasks[i].Answer) {
+					logger.Log.Errorf("Subtask answer must be one of the options")
+					return errors.New("правильный ответ должен быть одним из вариантов")
+				}
+			} else if subtasks[i].InputType == "text_input" {
+				if len(subtasks[i].Options) > 0 {
+					logger.Log.Errorf("Text input subtask must not have options")
+					return errors.New("подзадание с текстовым вводом не должно содержать варианты ответа")
+				}
+				if subtasks[i].Answer == "" {
+					logger.Log.Errorf("Text input subtask must have an answer")
+					return errors.New("подзадание с текстовым вводом должно содержать правильный ответ")
+				}
+			} else {
+				logger.Log.Errorf("Invalid subtask type: %s", subtasks[i].InputType)
+				return errors.New("неверный тип подзадания")
 			}
 			subtasks[i].AssignmentID = assignment.ID
 			subtasks[i].SortOrder = i + 1
