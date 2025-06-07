@@ -872,7 +872,6 @@ import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -897,11 +896,17 @@ interface Assignment {
 
 interface Subtask {
   id: number;
+  ID?: number;
   question: string;
+  Question?: string;
   options: string[];
+  Options?: string[];
   sort_order: number;
+  SortOrder?: number;
   input_type: 'multiple_choice' | 'text_input';
+  Type?: 'multiple_choice' | 'text_input';
   file_url?: string;
+  File_url?: string;
 }
 
 interface QuizResult {
@@ -951,14 +956,18 @@ export default function AssignmentPage() {
         setAssignment(assignmentRes.data);
 
         if (assignmentRes.data.type === 'multiple_choice') {
-          const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
-          const normalizedSubtasks = subtasksRes.data.map((subtask) => ({
-            id: subtask.id,
-            question: subtask.question,
-            options: subtask.options || [],
-            sort_order: subtask.sort_order,
-            input_type: subtask.input_type || 'multiple_choice',
-            file_url: subtask.file_url,
+          const subtasksRes = await api.get(`/assignments/${assignmentId}/subtasks`);
+          const normalizedSubtasks = subtasksRes.data.map((subtask: any) => ({
+            id: subtask.ID || subtask.id,
+            question: subtask.Question || subtask.question || '',
+            options: Array.isArray(subtask.Options)
+              ? subtask.Options
+              : Array.isArray(subtask.options)
+              ? subtask.options
+              : [],
+            sort_order: subtask.SortOrder || subtask.sort_order || 0,
+            input_type: subtask.Type || subtask.input_type || 'text_input',
+            file_url: subtask.File_url || subtask.file_url,
           }));
           setSubtasks(normalizedSubtasks);
 
@@ -1144,92 +1153,86 @@ export default function AssignmentPage() {
       )}
 
       {isSubmitted && quizResult && (
-  <Card className="mt-4">
-    <div>
-      <p className="font-semibold">
-        Оценка: {quizResult.grade.toFixed(1)}
-      </p>
-      <p className="font-semibold">
-        Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
-      </p>
-      <div className="mt-2">
-        {quizResult.answers.map((answer, idx) => {
-          const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
-          const subtaskScore = assignment.max_score / subtasks.length;
-          return (
-            <div key={answer.SubtaskID} className="mb-4 border-b pb-2"> {/* Добавляем key */}
-              <p className="font-medium">
-                Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
-              </p>
-              {subtask?.file_url && (
-                <div className="my-2">
-                  {subtask.file_url.endsWith('.pdf') ? (
-                    <a
-                      href={subtask.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      Просмотреть PDF
-                    </a>
-                  ) : (
-                    <Image
-                      src={subtask.file_url}
-                      alt={`Вопрос ${idx + 1}`}
-                      width={300}
-                      height={200}
-                      onError={() =>
-                        setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
-                      }
-                    />
-                  )}
-                </div>
-              )}
-              <p>
-                Ваш ответ:{' '}
-                <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
-                  {answer.Answer || 'Не отвечено'}
-                </span>
-              </p>
-              {!answer.IsCorrect && answer.CorrectAnswer && (
-                <p>
-                  Правильный ответ: {answer.CorrectAnswer}
-                </p>
-              )}
-              <p>
-                Попытки: {answer.Attempts}
-              </p>
-              <p>
-                Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
-              </p>
-              {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
-                <div>
-                  <p>Варианты:</p>
-                  <ul className="list-disc ml-5">
-                    {subtask.options.map((option, optIdx) => (
-                      <li
-                        key={optIdx} // Добавляем key для вариантов ответа
-                        className={
-                          option === answer.Answer
-                            ? answer.IsCorrect
-                              ? 'text-green-600'
-                              : 'text-red-600'
-                            : ''
-                        }
-                      >
-                        {option}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+        <Card className="mt-4">
+          <div>
+            <p className="font-semibold">Оценка: {quizResult.grade.toFixed(1)}</p>
+            <p className="font-semibold">
+              Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
+            </p>
+            <div className="mt-2">
+              {quizResult.answers.map((answer, idx) => {
+                const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
+                const subtaskScore = assignment.max_score / subtasks.length;
+                return (
+                  <div key={answer.SubtaskID} className="mb-4 border-b pb-2">
+                    <p className="font-medium">
+                      Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
+                    </p>
+                    {subtask?.file_url && (
+                      <div className="my-2">
+                        {subtask.file_url.endsWith('.pdf') ? (
+                          <a
+                            href={subtask.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline"
+                          >
+                            Просмотреть PDF
+                          </a>
+                        ) : (
+                          <Image
+                            src={subtask.file_url}
+                            alt={`Вопрос ${idx + 1}`}
+                            width={300}
+                            height={200}
+                            onError={() =>
+                              setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+                    <p>
+                      Ваш ответ:{' '}
+                      <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
+                        {answer.Answer || 'Не отвечено'}
+                      </span>
+                    </p>
+                    {!answer.IsCorrect && answer.CorrectAnswer && (
+                      <p>Правильный ответ: {answer.CorrectAnswer}</p>
+                    )}
+                    <p>Попытки: {answer.Attempts}</p>
+                    <p>
+                      Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
+                    </p>
+                    {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
+                      <div>
+                        <p>Варианты:</p>
+                        <ul className="list-disc ml-5">
+                          {subtask.options.map((option, optIdx) => (
+                            <li
+                              key={optIdx}
+                              className={
+                                option === answer.Answer
+                                  ? answer.IsCorrect
+                                    ? 'text-green-600'
+                                    : 'text-red-600'
+                                  : ''
+                              }
+                            >
+                              {option}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
-    </div>
-  </Card>
-)}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1326,66 +1329,66 @@ export default function CreateAssignmentPage() {
   };
 
   const handleSubtaskChange = (
-    index: number,
-    field: keyof Subtask,
-    value: string | string[] | number | File | null
-  ) => {
-    const newSubtasks = [...subtasks];
+  index: number,
+  field: keyof Subtask,
+  value: string | string[] | number | File | null
+) => {
+  const newSubtasks = [...subtasks];
 
-    if (field === 'numOptions' && typeof value === 'number') {
-      newSubtasks[index].numOptions = value;
-      newSubtasks[index].options = Array(value).fill('');
-      newSubtasks[index].answer = '';
-    } else if (field === 'options' && Array.isArray(value)) {
-      newSubtasks[index].options = value.map(opt => opt.trim());
-    } else if (field === 'image' && value instanceof File) {
-      if (value.size > 10 * 1024 * 1024) {
-        toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
-        return;
-      }
-      if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
-        toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
-        return;
-      }
-      if (newSubtasks[index].imagePreview) {
-        URL.revokeObjectURL(newSubtasks[index].imagePreview);
-      }
-      newSubtasks[index].image = value;
-      newSubtasks[index].imagePreview = URL.createObjectURL(value);
-    } else if (field === 'inputType' && typeof value === 'string') {
-      newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
-      if (value === 'text_input') {
-        newSubtasks[index].options = [];
-        newSubtasks[index].answer = '';
-        console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
-      } else {
-        newSubtasks[index].options = ['', ''];
-        newSubtasks[index].answer = '';
-        newSubtasks[index].numOptions = 2;
-        console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
-      }
-    } else if (typeof value === 'string') {
-      switch (field) {
-        case 'question':
-          newSubtasks[index].question = value.trim();
-          break;
-        case 'answer':
-          if (newSubtasks[index].inputType === 'multiple_choice') {
-            const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
-            if (value && !normalizedOptions.includes(value.trim())) {
-              toast.error('Правильный ответ должен быть одним из вариантов');
-              return;
-            }
-          }
-          newSubtasks[index].answer = value.trim();
-          break;
-        default:
-          break;
-      }
+  if (field === 'numOptions' && typeof value === 'number') {
+    newSubtasks[index].numOptions = value;
+    newSubtasks[index].options = Array(value).fill('');
+    newSubtasks[index].answer = '';
+  } else if (field === 'options' && Array.isArray(value)) {
+    newSubtasks[index].options = value.map(opt => opt.trimEnd()); // Убираем пробелы с конца
+  } else if (field === 'image' && value instanceof File) {
+    if (value.size > 10 * 1024 * 1024) {
+      toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
+      return;
     }
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
+      toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
+      return;
+    }
+    if (newSubtasks[index].imagePreview) {
+      URL.revokeObjectURL(newSubtasks[index].imagePreview);
+    }
+    newSubtasks[index].image = value;
+    newSubtasks[index].imagePreview = URL.createObjectURL(value);
+  } else if (field === 'inputType' && typeof value === 'string') {
+    newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
+    if (value === 'text_input') {
+      newSubtasks[index].options = [];
+      newSubtasks[index].answer = '';
+      console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
+    } else {
+      newSubtasks[index].options = ['', ''];
+      newSubtasks[index].answer = '';
+      newSubtasks[index].numOptions = 2;
+      console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
+    }
+  } else if (typeof value === 'string') {
+    switch (field) {
+      case 'question':
+        newSubtasks[index].question = value.trimEnd(); // Убираем пробелы с конца
+        break;
+      case 'answer':
+        if (newSubtasks[index].inputType === 'multiple_choice') {
+          const normalizedOptions = newSubtasks[index].options.map(opt => opt.trimEnd());
+          if (value && !normalizedOptions.includes(value.trimEnd())) {
+            toast.error('Правильный ответ должен быть одним из вариантов');
+            return;
+          }
+        }
+        newSubtasks[index].answer = value.trimEnd(); // Убираем пробелы с конца
+        break;
+      default:
+        break;
+    }
+  }
 
-    setSubtasks(newSubtasks);
-  };
+  setSubtasks(newSubtasks);
+};
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1412,84 +1415,84 @@ export default function CreateAssignmentPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    setError('');
-    setIsSubmitting(true);
-    try {
-      if (!courseId || typeof courseId !== 'string') {
-        const errorMessage = 'ID курса не указан';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('title', data.title);
-      if (data.description) formData.append('description', data.description);
-      formData.append('max_score', data.max_score.toString());
-      formData.append('due_date', `${data.due_date}:00+00:00`);
-      formData.append('course_id', courseId);
-      formData.append('type', assignmentType);
-      if (data.file) formData.append('file', data.file);
-
-      if (assignmentType === 'multiple_choice') {
-        if (subtasks.length === 0) {
-          setError('Тест должен содержать хотя бы одно подзадание');
-          toast.error('Тест должен содержать хотя бы одно подзадание');
-          return;
-        }
-        for (const [index, subtask] of subtasks.entries()) {
-          if (!subtask.question) {
-            setError(`Вопрос ${index + 1} должен быть заполнен`);
-            toast.error(`Вопрос ${index + 1} должен быть заполнен`);
-            return;
-          }
-          if (subtask.inputType === 'multiple_choice') {
-            if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
-              setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
-              toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
-              return;
-            }
-          } else if (subtask.inputType === 'text_input') {
-            if (subtask.options.length > 0) {
-              setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
-              toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
-              return;
-            }
-          }
-          if (!subtask.answer) {
-            setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
-            toast.error(`Подзадание ${index + 1} должно иметь правильный ответ`);
-            return;
-          }
-          if (subtask.image) {
-            formData.append(`subtask_image_${index}`, subtask.image);
-          }
-        }
-
-        const normalizedSubtasks = subtasks.map((subtask, index) => ({
-          Question: subtask.question,
-          Options: subtask.inputType === 'multiple_choice' ? subtask.options.filter(opt => opt.trim()) : [],
-          Answer: subtask.answer,
-          SortOrder: index + 1,
-          Type: subtask.inputType || 'multiple_choice',
-        }));
-        formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
-      }
-
-      const response = await api.post('/assignments', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
+  setError('');
+  setIsSubmitting(true);
+  try {
+    if (!courseId || typeof courseId !== 'string') {
+      const errorMessage = 'ID курса не указан';
       setError(errorMessage);
       toast.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      return;
     }
-  };
+
+    const formData = new FormData();
+    formData.append('title', data.title.trimEnd()); // Убираем пробелы с конца
+    if (data.description) formData.append('description', data.description.trimEnd()); // Убираем пробелы с конца
+    formData.append('max_score', data.max_score.toString());
+    formData.append('due_date', `${data.due_date}:00+00:00`);
+    formData.append('course_id', courseId);
+    formData.append('type', assignmentType);
+    if (data.file) formData.append('file', data.file);
+
+    if (assignmentType === 'multiple_choice') {
+      if (subtasks.length === 0) {
+        setError('Тест должен содержать хотя бы одно подзадание');
+        toast.error('Тест должен содержать хотя бы одно подзадание');
+        return;
+      }
+      for (const [index, subtask] of subtasks.entries()) {
+        if (!subtask.question) {
+          setError(`Вопрос ${index + 1} должен быть заполнен`);
+          toast.error(`Вопрос ${index + 1} должен быть заполнен`);
+          return;
+        }
+        if (subtask.inputType === 'multiple_choice') {
+          if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
+            setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            return;
+          }
+        } else if (subtask.inputType === 'text_input') {
+          if (subtask.options.length > 0) {
+            setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+            toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+            return;
+          }
+        }
+        if (!subtask.answer) {
+          setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
+          toast.error(`Подзадание ${index + 1} должен иметь правильный ответ`);
+          return;
+        }
+        if (subtask.image) {
+          formData.append(`subtask_image_${index}`, subtask.image);
+        }
+      }
+
+      const normalizedSubtasks = subtasks.map((subtask, index) => ({
+        Question: subtask.question.trimEnd(), // Убираем пробелы с конца
+        Options: subtask.inputType === 'multiple_choice' ? subtask.options.map(opt => opt.trimEnd()) : [], // Убираем пробелы
+        Answer: subtask.answer.trimEnd(), // Убираем пробелы с конца
+        SortOrder: index + 1,
+        Type: subtask.inputType || 'multiple_choice',
+      }));
+      formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
+    }
+
+    const response = await api.post('/assignments', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    toast.success('Задание успешно создано!');
+    window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+  } catch (err: unknown) {
+    const axiosError = err as AxiosError<ErrorResponse>;
+    const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
+    setError(errorMessage);
+    toast.error(errorMessage);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
     return <div>Доступ запрещён</div>;
@@ -2190,6 +2193,7 @@ export default function AchievementsPage() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
@@ -2201,12 +2205,30 @@ import { AxiosError } from 'axios';
 interface User {
   id: number;
   username: string;
+  email: string;
   role: string;
 }
 
-interface Course {
+interface ApiAchievement {
+  ID: number;
+  Title: string;
+  Description: string;
+  Condition: string;
+}
+
+interface Achievement {
   id: number;
   title: string;
+  description: string;
+  condition: string;
+}
+
+interface LogEntry {
+  id: number;
+  user_id: number;
+  action: string;
+  details: string;
+  created_at: string;
 }
 
 interface ErrorResponse {
@@ -2216,32 +2238,40 @@ interface ErrorResponse {
 export default function AdminPage() {
   const { user, isLoading } = useUser();
   const [users, setUsers] = useState<User[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [formError, setFormError] = useState('');
+
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState('');
-  const [error, setError] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('teacher');
+  const [achTitle, setAchTitle] = useState('');
+  const [achDesc, setAchDesc] = useState('');
+  const [achCondition, setAchCondition] = useState('');
 
   const fetchData = async () => {
     try {
-      const usersResponse = await api.get<User[]>('/users');
-      const coursesResponse = await api.get<Course[]>('/courses');
-      setUsers(usersResponse.data);
-      setCourses(coursesResponse.data);
+      const [usersRes, achRes, logRes] = await Promise.all([
+        api.get<User[]>('/users'),
+        api.get<ApiAchievement[]>('/achievements'),
+        api.get<{ logs: LogEntry[]; total: number }>('/admin/logs'),
+      ]);
+      console.log('Achievements response:', achRes.data);
+      // Преобразуем данные API в формат фронтенда
+      const transformedAchievements = achRes.data.map((ach) => ({
+        id: ach.ID,
+        title: ach.Title,
+        description: ach.Description,
+        condition: ach.Condition,
+      }));
+      setUsers(usersRes.data || []);
+      setAchievements(transformedAchievements || []);
+      setLogs(logRes.data.logs || []);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка загрузки данных');
-    }
-  };
-
-  const handleUpdateRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await api.put(`/users/${userId}/role`, { role });
-      fetchData();
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка изменения роли');
+      setFormError(axiosError.response?.data?.error || 'Ошибка загрузки');
     }
   };
 
@@ -2251,49 +2281,189 @@ export default function AdminPage() {
     }
   }, [user]);
 
+  const handleUpdateRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.put(`/users/${userId}/role`, { role });
+      fetchData();
+      setUserId('');
+      setRole('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Ошибка изменения роли');
+    }
+  };
+
+  const handleRegisterUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/create-user', {
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+      });
+      fetchData();
+      setNewUserEmail('');
+      setNewUserPassword('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Ошибка регистрации');
+    }
+  };
+
+  const handleCreateAchievement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/achievements', {
+        title: achTitle,
+        description: achDesc,
+        condition: achCondition || 'custom',
+      });
+      fetchData();
+      setAchTitle('');
+      setAchDesc('');
+      setAchCondition('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Ошибка добавления достижения');
+    }
+  };
+
+  // Список условий для выпадающего меню
+  const conditionOptions = [
+    { value: 'points_50', label: 'Набрать 50 очков' },
+    { value: 'points_100', label: 'Набрать 100 очков' },
+    { value: 'points_500', label: 'Набрать 500 очков' },
+    { value: 'courses_1', label: 'Завершить 1 курс' },
+    { value: 'courses_3', label: 'Записаться на 3 курса' },
+    { value: 'submissions_5', label: 'Сдать 5 заданий' },
+    { value: 'custom', label: 'Произвольное' },
+  ];
+
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (!user || user.role !== 'admin')
     return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
 
   return (
     <div className="max-w-4xl mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
-  {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+      <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
+      {formError && <p className="text-red-500 text-sm mb-4 text-center">{formError}</p>}
 
-  <Card className="mb-6">
-    <h2 className="text-xl font-semibold mb-4">Управление пользователями</h2>
-    <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
-      <div>
-        <label htmlFor="userId" className="block text-sm font-medium mb-1">ID пользователя</label>
-        <Input id="userId" type="number" value={userId} onChange={(e) => setUserId(e.target.value)} required />
-      </div>
-      <div>
-        <label htmlFor="role" className="block text-sm font-medium mb-1">Роль</label>
-        <Input id="role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="student, teacher, admin" required />
-      </div>
-      <div className="sm:col-span-2">
-        <Button type="submit">Изменить роль</Button>
-      </div>
-    </form>
-    <div className="mt-6">
-      <h3 className="text-lg font-semibold mb-2">Список пользователей</h3>
-      <ul className="text-sm space-y-1">
-        {users.map((u) => (
-          <li key={u.id} className="text-gray-700 dark:text-gray-300">{u.username} (ID: {u.id}, Роль: {u.role})</li>
-        ))}
-      </ul>
+      <Card className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Изменить роль пользователя</h2>
+        <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
+          <Input
+            type="number"
+            placeholder="ID пользователя"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            required
+          />
+          <Input
+            placeholder="student / teacher / admin"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            required
+          />
+          <Button type="submit" className="sm:col-span-2">
+            Изменить
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Создать нового пользователя</h2>
+        <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
+          <Input
+            type="email"
+            placeholder="Email"
+            value={newUserEmail}
+            onChange={(e) => setNewUserEmail(e.target.value)}
+            required
+          />
+          <Input
+            type="password"
+            placeholder="Пароль"
+            value={newUserPassword}
+            onChange={(e) => setNewUserPassword(e.target.value)}
+            required
+          />
+          <select
+            value={newUserRole}
+            onChange={(e) => setNewUserRole(e.target.value)}
+            className="p-2 border rounded sm:col-span-2"
+          >
+            <option value="teacher">Преподаватель</option>
+            <option value="admin">Администратор</option>
+          </select>
+          <Button type="submit" className="sm:col-span-2">
+            Создать
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Добавить достижение</h2>
+        <form onSubmit={handleCreateAchievement} className="grid gap-4">
+          <Input
+            placeholder="Название"
+            value={achTitle}
+            onChange={(e) => setAchTitle(e.target.value)}
+            required
+          />
+          <Input
+            placeholder="Описание"
+            value={achDesc}
+            onChange={(e) => setAchDesc(e.target.value)}
+            required
+          />
+          <select
+            value={achCondition}
+            onChange={(e) => setAchCondition(e.target.value)}
+            className="p-2 border rounded-md text-sm"
+            required
+          >
+            <option value="">Выберите условие</option>
+            {conditionOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <Button type="submit">Добавить</Button>
+        </form>
+        <div className="mt-4">
+          <h3 className="font-semibold mb-2">Существующие:</h3>
+          {achievements.length === 0 ? (
+            <p className="text-sm text-gray-500">Нет достижений</p>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {achievements.map((ach) => (
+                <li key={ach.id}>
+                  {ach.title} — {ach.description} ({ach.condition})
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-xl font-semibold mb-4">Действия пользователей</h2>
+        {logs.length === 0 ? (
+          <p className="text-sm text-gray-500">Нет логов</p>
+        ) : (
+          <ul className="text-sm space-y-2 max-h-80 overflow-y-auto">
+            {logs.map((log) => (
+              <li key={log.id}>
+                <span className="font-medium">Пользователь {log.user_id}:</span>{' '}
+                {log.action} ({log.details}){' '}
+                <span className="text-gray-500 text-xs">
+                  ({new Date(log.created_at).toLocaleString()})
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
-  </Card>
-
-  <Card>
-    <h2 className="text-xl font-semibold mb-4">Управление курсами</h2>
-    <ul className="text-sm space-y-1">
-      {courses.map((c) => (
-        <li key={c.id}>{c.title} (ID: {c.id})</li>
-      ))}
-    </ul>
-  </Card>
-</div>
   );
 }
 
@@ -2836,8 +3006,7 @@ interface Subtask {
   sort_order: number;
   SortOrder?: number;
   input_type?: string;
-InputType?: string;
-
+  InputType?: string;
   file_url?: string;
   File_url?: string;
 }
@@ -2866,25 +3035,36 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const [incorrectOptions, setIncorrectOptions] = useState<Record<number, string[]>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<number, string>>({});
-  const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0); // Текущий вопрос
+  const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0);
+  const [tempAnswer, setTempAnswer] = useState<Record<number, string>>({}); // Временный ответ для текстовых подзаданий
+  const [skipped, setSkipped] = useState<Record<number, boolean>>({}); // Флаг пропуска подзадания
 
   console.log('QuizForm props:', { assignmentId, subtasks });
+  console.log('Normalized subtasks in QuizForm:', subtasks);
 
   // Инициализация состояния
   useEffect(() => {
+    // Временная очистка localStorage
+    subtasks.forEach((subtask) => {
+      const subtaskId = subtask.id ?? subtask.ID ?? 0;
+      localStorage.removeItem(`quiz_${assignmentId}_${subtaskId}`);
+    });
+
     const initialAnswers: Record<number, { answer: string; attempts: number; isCorrect?: boolean }> = {};
     const initialIncorrectOptions: Record<number, string[]> = {};
+    const initialTempAnswers: Record<number, string> = {};
     subtasks.forEach((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
       const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
       const data = stored ? JSON.parse(stored) : { attempts: 0, incorrectOptions: [] };
       initialAnswers[subtaskId] = { answer: '', attempts: data.attempts || 0, isCorrect: undefined };
       initialIncorrectOptions[subtaskId] = data.incorrectOptions || [];
+      initialTempAnswers[subtaskId] = '';
     });
     setAnswers(initialAnswers);
     setIncorrectOptions(initialIncorrectOptions);
+    setTempAnswer(initialTempAnswers);
 
-    // Очищаем localStorage при монтировании, если квиз новый
     return () => {
       subtasks.forEach((subtask) => {
         const subtaskId = subtask.id ?? subtask.ID ?? 0;
@@ -2899,7 +3079,7 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   }
 
   const handleChange = async (subtaskId: number, answer: string) => {
-    const normalizedAnswer = answer.trim();
+    const normalizedAnswer = answer.trimEnd(); // Убираем пробелы с конца
 
     try {
       const response = await api.post(`/assignments/${assignmentId}/check-subtask`, {
@@ -2944,12 +3124,45 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     }
   };
 
+  const handleConfirmTextAnswer = async (subtaskId: number) => {
+    const normalizedAnswer = tempAnswer[subtaskId]?.trimEnd() || '';
+    if (!normalizedAnswer) {
+      toast.error('Введите ответ перед подтверждением');
+      return;
+    }
+
+    if (answers[subtaskId].attempts >= 3) {
+      toast.error('Достигнуто максимальное количество попыток (3)');
+      return;
+    }
+
+    await handleChange(subtaskId, normalizedAnswer);
+  };
+
+  const handleSkip = (subtaskId: number) => {
+    setSkipped((prev) => ({ ...prev, [subtaskId]: true }));
+    setAnswers((prev) => ({
+      ...prev,
+      [subtaskId]: {
+        ...prev[subtaskId],
+        answer: '',
+        attempts: prev[subtaskId].attempts,
+        isCorrect: false,
+      },
+    }));
+    toast.info('Подзадание пропущено');
+    handleNext();
+  };
+
   const handleNext = () => {
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
-    if (!answers[subtaskId]?.answer) {
+    const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
+    
+    if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ перед переходом к следующему вопросу');
       return;
     }
+    
     if (currentSubtaskIndex < subtasks.length - 1) {
       setCurrentSubtaskIndex(currentSubtaskIndex + 1);
     }
@@ -2958,7 +3171,9 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
-    if (!answers[subtaskId]?.answer) {
+    const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
+
+    if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ');
       return;
     }
@@ -2999,28 +3214,35 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const currentSubtask = subtasks[currentSubtaskIndex];
   const subtaskId = currentSubtask.id ?? currentSubtask.ID ?? 0;
   const inputType = currentSubtask.input_type ?? currentSubtask.InputType ?? 'multiple_choice';
-const options = Array.isArray(currentSubtask.options)
-  ? currentSubtask.options
-  : Array.isArray(currentSubtask.Options)
-  ? currentSubtask.Options
-  : [];
+  const options = Array.isArray(currentSubtask.options)
+    ? currentSubtask.options
+    : Array.isArray(currentSubtask.Options)
+    ? currentSubtask.Options
+    : [];
+  const question = currentSubtask.question ?? currentSubtask.Question ?? 'Вопрос отсутствует';
+  const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
 
-const question = currentSubtask.question ?? currentSubtask.Question ?? 'Вопрос отсутствует';
-const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
-
+  if (!currentSubtask || !subtaskId) {
+    console.error('Invalid subtask data:', currentSubtask);
+    return (
+      <div className="text-red-500">
+        Ошибка: некорректные данные вопроса. Обратитесь к преподавателю.
+      </div>
+    );
+  }
 
   if (inputType === 'multiple_choice' && !options.length) {
-  console.error(`Subtask ${subtaskId} has invalid options:`, currentSubtask);
-  return (
-    <div className="text-red-500">
-      Ошибка: некорректные варианты ответа для вопроса `{question}`
-    </div>
-  );
-}
-
+    console.error(`Subtask ${subtaskId} has invalid options:`, currentSubtask);
+    return (
+      <div className="text-red-500">
+        Ошибка: отсутствуют варианты ответа для вопроса (ID: {subtaskId}). Обратитесь к преподавателю.
+      </div>
+    );
+  }
 
   const isCorrect = answers[subtaskId]?.isCorrect;
   const incorrectOptionsForSubtask = incorrectOptions[subtaskId] || [];
+  const attempts = answers[subtaskId]?.attempts || 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -3029,68 +3251,90 @@ const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
           {currentSubtaskIndex + 1}. {question} ({currentSubtaskIndex + 1}/{subtasks.length})
         </p>
         {fileUrl && !imageErrors[subtaskId] && (
-  <div className="mt-2 mb-4">
-    {fileUrl.endsWith('.pdf') ? (
-      <a
-        href={fileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-600 hover:underline"
-      >
-        Просмотреть PDF
-      </a>
-    ) : (
-      <>
-        <Image
-          src={fileUrl}
-          alt={`Subtask ${currentSubtaskIndex + 1} image`}
-          width={300}
-          height={300}
-          className="rounded"
-          onError={() =>
-            setImageErrors((prev) => ({
-              ...prev,
-              [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
-            }))
-          }
-        />
-        {imageErrors[subtaskId] && <p className="text-red-500 text-sm">{imageErrors[subtaskId]}</p>}
-      </>
-    )}
-  </div>
-)}
+          <div className="mt-2 mb-4">
+            {fileUrl.endsWith('.pdf') ? (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Просмотреть PDF
+              </a>
+            ) : (
+              <>
+                <Image
+                  src={fileUrl}
+                  alt={`Subtask ${currentSubtaskIndex + 1} image`}
+                  width={300}
+                  height={300}
+                  className="rounded"
+                  onError={() =>
+                    setImageErrors((prev) => ({
+                      ...prev,
+                      [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
+                    }))
+                  }
+                />
+                {imageErrors[subtaskId] && <p className="text-red-500 text-sm">{imageErrors[subtaskId]}</p>}
+              </>
+            )}
+          </div>
+        )}
         <div className="space-y-2">
-  {inputType === 'multiple_choice' ? (
-    options.map((option: string, i: number) => {
-      const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
-      return (
-        <label key={i} className="flex items-center space-x-2">
-          <input
-            type="radio"
-            name={`subtask-${subtaskId}`}
-            value={option}
-            checked={answers[subtaskId]?.answer === option}
-            onChange={() => handleChange(subtaskId, option)}
-            disabled={isCorrect === true}
-            className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
-          />
-          <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
-        </label>
-      );
-    })
-  ) : (
-    <input
-      type="text"
-      value={answers[subtaskId]?.answer || ''}
-      onChange={(e) => handleChange(subtaskId, e.target.value)}
-      disabled={isCorrect === true}
-      className="w-full border rounded px-3 py-2"
-      placeholder="Введите ответ"
-    />
-  )}
-  <p className="text-sm text-gray-500 mt-1">Попытки: {answers[subtaskId]?.attempts || 0}</p>
-</div>
-
+          {inputType === 'multiple_choice' ? (
+            options.map((option: string, i: number) => {
+              const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
+              return (
+                <label key={i} className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name={`subtask-${subtaskId}`}
+                    value={option}
+                    checked={answers[subtaskId]?.answer === option}
+                    onChange={() => handleChange(subtaskId, option)}
+                    disabled={isCorrect === true}
+                    className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
+                  />
+                  <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
+                </label>
+              );
+            })
+          ) : (
+            <>
+              <input
+                type="text"
+                value={tempAnswer[subtaskId] || ''}
+                onChange={(e) => setTempAnswer((prev) => ({ ...prev, [subtaskId]: e.target.value }))}
+                disabled={isCorrect === true || attempts >= 3 || skipped[subtaskId]}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Введите ответ"
+              />
+              {!isCorrect && attempts < 3 && !skipped[subtaskId] && (
+                <div className="flex space-x-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmTextAnswer(subtaskId)}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:bg-gray-400"
+                  >
+                    Подтвердить ответ
+                  </button>
+                  {attempts > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(subtaskId)}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg"
+                    >
+                      Пропустить
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          <p className="text-sm text-gray-500 mt-1">Попытки: {attempts}{inputType === 'text_input' ? ' / 3' : ''}</p>
+        </div>
       </div>
       <div className="flex space-x-4">
         {currentSubtaskIndex < subtasks.length - 1 ? (
@@ -3115,7 +3359,6 @@ const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
     </form>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -3151,6 +3394,7 @@ backend/
 │   │   └── error.go
 │   ├── handler
 │   │   ├── achievement.go
+│   │   ├── action_log.go
 │   │   ├── assignment.go
 │   │   ├── auth.go
 │   │   ├── course.go
@@ -3167,6 +3411,7 @@ backend/
 │   ├── middleware
 │   │   └── ratelimit.go
 │   ├── model
+│   │   ├── action_log.go
 │   │   ├── assignment.go
 │   │   ├── course.go
 │   │   ├── enrollment.go
@@ -3178,6 +3423,7 @@ backend/
 │   │   ├── user.go
 │   │   └── user_achievement.go
 │   ├── repository
+│   │   ├── action_log.go
 │   │   ├── assignment.go
 │   │   ├── course.go
 │   │   ├── notification.go
@@ -3185,6 +3431,7 @@ backend/
 │   │   └── user.go
 │   └── service
 │       ├── achievement.go
+│       ├── action_log.go
 │       ├── assignment.go
 │       ├── auth.go
 │       ├── course.go
@@ -3844,6 +4091,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -3949,6 +4197,18 @@ func UpdateRole(userService service.UserService) gin.HandlerFunc {
 }
 
 // UpdateProfile обновляет профиль пользователя
+// @Summary Обновить профиль пользователя
+// @Description Обновляет имя и email текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body object true "Данные профиля" example={"username":"newname","email":"newemail@example.com"}
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /users/me [put]
 func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -3979,6 +4239,16 @@ func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 }
 
 // ListUsers возвращает список всех пользователей
+// @Summary Получить список пользователей
+// @Description Возвращает список всех пользователей. Требуется JWT-токен. Доступно для ролей: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} model.User
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /users [get]
 func ListUsers(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		users, err := userService.ListAll()
@@ -3988,6 +4258,65 @@ func ListUsers(userService service.UserService) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, users)
+	}
+}
+
+// AdminRegister регистрирует нового пользователя от имени администратора
+// @Summary Зарегистрировать пользователя (админ)
+// @Description Позволяет администратору создать нового пользователя (teacher или admin). Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body object true "Данные пользователя" example={"email":"newuser@example.com","password":"password123","role":"teacher"}
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /admin/create-user [post]
+func AdminRegister(authService service.AuthService, userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var input struct {
+			Email    string     `json:"email" binding:"required,email"`
+			Password string     `json:"password" binding:"required,min=6"`
+			Role     model.Role `json:"role" binding:"required,oneof=teacher admin"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			return
+		}
+
+		user := &model.User{
+			Email:    input.Email,
+			Password: input.Password,
+			Role:     input.Role,
+			Username: input.Email[:strings.Index(input.Email, "@")], // Генерируем username из email
+		}
+
+		logger.Log.Infof("Admin %d attempting to register user %s", userID, input.Email)
+		if err := userService.AdminRegister(user, userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to register user %s: %v", input.Email, err)
+			if err.Error() == "пользователь с таким email уже существует" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Пользователь с таким email уже существует"})
+			} else if err.Error() == "админ не найден" || err.Error() == "недостаточно прав" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка регистрации"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %s registered by admin %d", input.Email, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Пользователь зарегистрирован"})
 	}
 }
 
@@ -5419,6 +5748,43 @@ func CheckDeadlines(courseService service.CourseService) gin.HandlerFunc {
 
 
 ════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/handler/action_log.go
+════════════════════════════════════════════════════════════════════════════════
+
+package handler
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	"github.com/MORFEUSik/projectschool/backend/internal/service"
+	"github.com/gin-gonic/gin"
+)
+
+// GetActionLogs возвращает список логов действий
+func GetActionLogs(s service.ActionLogService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+		logs, total, err := s.GetAll(limit, offset)
+		if err != nil {
+			logger.Log.Errorf("Failed to get action logs: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения логов"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"logs":  logs,
+			"total": total,
+		})
+	}
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/handler/achievement.go
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -5427,28 +5793,123 @@ package handler
 import (
 	"net/http"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/error"
+	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
-func GetMyAchievements(service service.UserService) gin.HandlerFunc {
+// GetMyAchievements возвращает достижения пользователя
+// @Summary Получить достижения пользователя
+// @Description Возвращает список достижений текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Tags achievements
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} model.UserAchievement
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /users/me/achievements [get]
+func GetMyAchievements(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
 		if !exists {
-			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
 			return
 		}
 
-		achievements, err := service.GetAchievements(userID.(uint))
+		achievements, err := userService.GetAchievements(userID.(uint))
 		if err != nil {
 			logger.Log.Errorf("Ошибка при получении достижений: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось получить достижения"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Не удалось получить достижения"})
 			return
 		}
 
 		c.JSON(http.StatusOK, achievements)
+	}
+}
+
+// ListAchievements возвращает список всех глобальных достижений
+// @Summary Получить все достижения
+// @Description Возвращает список всех доступных достижений. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Tags achievements
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} model.GlobalAchievement
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /achievements [get]
+func ListAchievements(achievementService service.AchievementService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		achievements, err := achievementService.ListAll()
+		if err != nil {
+			logger.Log.Errorf("Failed to list achievements: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения достижений"})
+			return
+		}
+
+		c.JSON(http.StatusOK, achievements)
+	}
+}
+
+// CreateAchievement создаёт новое достижение
+// @Summary Создать достижение
+// @Description Создаёт новое глобальное достижение. Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags achievements
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body object true "Данные достижения" example={"title":"Новое достижение","description":"Описание достижения","condition":"points_100"}
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /achievements [post]
+func CreateAchievement(achievementService service.AchievementService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var input struct {
+			Title       string `json:"title" binding:"required,min=3,max=100"`
+			Description string `json:"description" binding:"required,min=3,max=255"`
+			Condition   string `json:"condition" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			return
+		}
+
+		achievement := &model.GlobalAchievement{
+			Title:       input.Title,
+			Description: input.Description,
+			Condition:   input.Condition,
+		}
+
+		logger.Log.Infof("Admin %d attempting to create achievement %s", userID, input.Title)
+		if err := achievementService.Create(achievement, userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to create achievement: %v", err)
+			if err.Error() == "название или условие достижения не может быть пустым" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+			} else if err.Error() == "админ не найден" || err.Error() == "недостаточно прав" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка создания достижения"})
+			}
+			return
+		}
+
+		logger.Log.Infof("Achievement %s created by admin %d", input.Title, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Достижение создано"})
 	}
 }
 
@@ -5843,6 +6304,26 @@ type GlobalAchievement struct {
 
 
 ════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/model/action_log.go
+════════════════════════════════════════════════════════════════════════════════
+
+package model
+
+import (
+	"time"
+)
+
+type UserActionLog struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"index" json:"user_id"`
+	Action    string    `gorm:"type:varchar(255)" json:"action"`
+	Details   string    `gorm:"type:text" json:"details"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/logger/logger.go
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -6218,6 +6699,46 @@ func (r *courseRepository) GetStats(courseID uint) (map[string]interface{}, erro
 		"average_grade":   averageGrade,
 		"completion_rate": completionRate,
 	}, nil
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/repository/action_log.go
+════════════════════════════════════════════════════════════════════════════════
+
+package repository
+
+import (
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"gorm.io/gorm"
+)
+
+type ActionLogRepository interface {
+	Create(log *model.UserActionLog) error
+	FindAll(limit, offset int) ([]model.UserActionLog, int64, error)
+}
+
+type actionLogRepository struct {
+	db *gorm.DB
+}
+
+func NewActionLogRepository(db *gorm.DB) ActionLogRepository {
+	return &actionLogRepository{db: db}
+}
+
+func (r *actionLogRepository) Create(log *model.UserActionLog) error {
+	return r.db.Create(log).Error
+}
+
+func (r *actionLogRepository) FindAll(limit, offset int) ([]model.UserActionLog, int64, error) {
+	var logs []model.UserActionLog
+	var total int64
+	if err := r.db.Model(&model.UserActionLog{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := r.db.Limit(limit).Offset(offset).Order("created_at desc").Find(&logs).Error // Убрали Preload
+	return logs, total, err
 }
 
 
@@ -6635,6 +7156,7 @@ type submissionService struct {
 	userRepo         repository.UserRepository
 	assignmentRepo   repository.AssignmentRepository
 	notificationRepo repository.NotificationRepository
+	logRepo          repository.ActionLogRepository // Добавляем
 	db               *gorm.DB
 }
 
@@ -6643,12 +7165,14 @@ func NewSubmissionService(
 	userRepo repository.UserRepository,
 	assignmentRepo repository.AssignmentRepository,
 	notificationRepo repository.NotificationRepository,
+	logRepo repository.ActionLogRepository, // Добавляем
 ) SubmissionService {
 	return &submissionService{
 		repo:             repo,
 		userRepo:         userRepo,
 		assignmentRepo:   assignmentRepo,
 		notificationRepo: notificationRepo,
+		logRepo:          logRepo, // Добавляем
 		db:               db.DB,
 	}
 }
@@ -6787,7 +7311,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		logger.Log.Errorf("Failed to create grade notification: %v", err)
 	}
 
-	achievementService := NewAchievementService(s.db)
+	achievementService := NewAchievementService(s.db, s.userRepo, s.logRepo)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", submission.UserID, err)
@@ -6836,7 +7360,6 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submission, error) {
 	logger.Log.Infof("Fetching submissions for assignment %d", assignmentID)
 
-	// Проверяем существование задания
 	_, err := s.assignmentRepo.FindByID(assignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
@@ -6918,17 +7441,17 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	}
 
 	var totalScore float64
-	responseAnswers := make([]map[string]interface{}, 0, len(answers))
 	var totalWeight float64
 	for _, st := range subtasks {
 		if st.InputType == "text_input" {
-			totalWeight += 2.0 // Учитывается как 2 обычных
+			totalWeight += 2.0
 		} else {
 			totalWeight += 1.0
 		}
 	}
 	subtaskScore := float64(assignment.MaxScore) / totalWeight
 
+	responseAnswers := make([]map[string]interface{}, 0, len(answers))
 	for i, answer := range answers {
 		subtask, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
@@ -6936,7 +7459,6 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			continue
 		}
 
-		// Проверяем наличие сохранённой попытки
 		var subtaskSubmission model.SubtaskSubmission
 		err = s.db.Where("user_id = ? AND subtask_id = ?", userID, answer.SubtaskID).First(&subtaskSubmission).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -6962,16 +7484,32 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			}
 		}
 
-		// Подсчёт баллов
 		var score float64
-		if isCorrect {
-			if attempts == 1 {
-				score = subtaskScore * weight // полный балл
-			} else if subtask.InputType != "text_input" && attempts < len(subtask.Options) {
-				score = subtaskScore * weight * float64(len(subtask.Options)-attempts) / float64(len(subtask.Options)-1)
+		if answer.Answer == "" {
+			score = 0
+		} else if isCorrect {
+			if subtask.InputType == "text_input" {
+				switch attempts {
+				case 1:
+					score = subtaskScore * weight
+				case 2:
+					score = subtaskScore * weight * 0.5
+				case 3:
+					score = subtaskScore * weight * 0.333
+				default:
+					score = 0
+				}
 			} else {
-				score = 0
+				if attempts == 1 {
+					score = subtaskScore * weight
+				} else if attempts < len(subtask.Options) {
+					score = subtaskScore * weight * float64(len(subtask.Options)-attempts) / float64(len(subtask.Options)-1)
+				} else {
+					score = 0
+				}
 			}
+		} else {
+			score = 0
 		}
 
 		totalScore += score
@@ -6979,7 +7517,6 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d, Score=%.2f",
 			answer.SubtaskID, answer.Answer, subtask.Answer, isCorrect, attempts, score)
 
-		// Формируем ответ для клиента
 		responseAnswer := map[string]interface{}{
 			"SubtaskID": answer.SubtaskID,
 			"Answer":    answer.Answer,
@@ -6987,12 +7524,11 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			"Attempts":  attempts,
 			"Score":     score,
 		}
-		if !isCorrect {
+		if !isCorrect && answer.Answer != "" {
 			responseAnswer["CorrectAnswer"] = subtask.Answer
 		}
 		responseAnswers = append(responseAnswers, responseAnswer)
 
-		// Сохраняем или обновляем подзадачу
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			answers[i].IsCorrect = isCorrect
 			answers[i].UserID = userID
@@ -7054,8 +7590,9 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		"answers":    responseAnswers,
 	}
 
-	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f, answers=%+v",
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.2f, answers=%+v",
 		userID, assignmentID, grade, totalScore, responseAnswers)
+
 	return response, nil
 }
 
@@ -7102,6 +7639,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -7109,10 +7647,12 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"time"
 )
 
 type UserService interface {
 	Register(user *model.User) error
+	AdminRegister(user *model.User, adminID uint) error
 	Login(email, password string) (*model.User, error)
 	GetProfile(userID uint) (*model.User, error)
 	GetLeaderboard(courseID uint) ([]model.User, error)
@@ -7123,21 +7663,22 @@ type UserService interface {
 }
 
 type userService struct {
-	repo repository.UserRepository
-	db   *gorm.DB
+	repo    repository.UserRepository
+	db      *gorm.DB
+	logRepo repository.ActionLogRepository
 }
 
-func NewUserService(repo repository.UserRepository) UserService {
+func NewUserService(repo repository.UserRepository, logRepo repository.ActionLogRepository) UserService {
 	return &userService{
-		repo: repo,
-		db:   db.DB,
+		repo:    repo,
+		db:      db.DB,
+		logRepo: logRepo,
 	}
 }
 
 func (s *userService) Register(user *model.User) error {
 	logger.Log.Infof("Attempting to register user: %s", user.Email)
 
-	// Проверка: существует ли пользователь
 	_, err := s.repo.FindByEmail(user.Email)
 	if err == nil {
 		logger.Log.Warnf("User with email %s already exists", user.Email)
@@ -7148,13 +7689,11 @@ func (s *userService) Register(user *model.User) error {
 		return err
 	}
 
-	// Валидация модели
 	if err := user.Validate(); err != nil {
 		logger.Log.Errorf("User validation failed: %v", err)
 		return err
 	}
 
-	// Хеширование пароля
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		logger.Log.Errorf("Failed to hash password: %v", err)
@@ -7163,13 +7702,79 @@ func (s *userService) Register(user *model.User) error {
 	user.Password = string(hashedPassword)
 	logger.Log.Info("Password hashed successfully")
 
-	// Создание пользователя
 	if err := s.repo.Create(user); err != nil {
 		logger.Log.Errorf("Failed to create user: %v", err)
 		return err
 	}
 
 	logger.Log.Infof("User %s registered successfully", user.Email)
+	log := &model.UserActionLog{
+		UserID:    user.ID,
+		Action:    "register",
+		Details:   "Пользователь зарегистрировался",
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
+}
+
+func (s *userService) AdminRegister(user *model.User, adminID uint) error {
+	logger.Log.Infof("Admin %d attempting to register user: %s", adminID, user.Email)
+
+	admin, err := s.repo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	_, err = s.repo.FindByEmail(user.Email)
+	if err == nil {
+		logger.Log.Warnf("User with email %s already exists", user.Email)
+		return errors.New("пользователь с таким email уже существует")
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Log.Errorf("Error checking email %s: %v", user.Email, err)
+		return err
+	}
+
+	if user.Role != model.Teacher && user.Role != model.Admin {
+		logger.Log.Errorf("Invalid role for admin registration: %s", user.Role)
+		return errors.New("можно регистрировать только учителей или админов")
+	}
+
+	if err := user.Validate(); err != nil {
+		logger.Log.Errorf("User validation failed: %v", err)
+		return err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Log.Errorf("Failed to hash password: %v", err)
+		return err
+	}
+	user.Password = string(hashedPassword)
+
+	if err := s.repo.Create(user); err != nil {
+		logger.Log.Errorf("Failed to create user: %v", err)
+		return err
+	}
+
+	logger.Log.Infof("User %s registered by admin %d", user.Email, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "admin_register",
+		Details:   "Админ зарегистрировал пользователя: " + user.Email,
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
 	return nil
 }
 
@@ -7191,6 +7796,15 @@ func (s *userService) Login(email, password string) (*model.User, error) {
 	}
 
 	logger.Log.Infof("User %s logged in successfully", email)
+	log := &model.UserActionLog{
+		UserID:    user.ID,
+		Action:    "login",
+		Details:   "Пользователь вошёл в систему",
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
 	return user, nil
 }
 
@@ -7232,7 +7846,6 @@ func (s *userService) GetLeaderboard(courseID uint) ([]model.User, error) {
 func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 	logger.Log.Infof("Admin %d updating role for user %d to %s", adminID, userID, role)
 
-	// Проверка: существует ли пользователь
 	_, err := s.repo.FindByID(userID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -7242,7 +7855,6 @@ func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 		return err
 	}
 
-	// Проверка: является ли вызывающий пользователь админом
 	admin, err := s.repo.FindByID(adminID)
 	if err != nil {
 		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
@@ -7253,19 +7865,26 @@ func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 		return errors.New("недостаточно прав")
 	}
 
-	// Проверка валидности роли
 	if role != model.Student && role != model.Teacher && role != model.Admin {
 		logger.Log.Errorf("Invalid role: %s", role)
 		return errors.New("недопустимая роль")
 	}
 
-	// Обновление роли
 	if err := s.repo.UpdateRole(userID, role); err != nil {
 		logger.Log.Errorf("Failed to update role for user %d: %v", userID, err)
 		return err
 	}
 
 	logger.Log.Infof("Role for user %d updated to %s", userID, role)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "update_role",
+		Details:   "Админ изменил роль пользователя " + fmt.Sprint(userID) + " на " + string(role),
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
 	return nil
 }
 
@@ -7279,19 +7898,55 @@ func (s *userService) UpdateProfile(userID uint, username, email string) error {
 	if err := user.Validate(); err != nil {
 		return err
 	}
-	return s.db.Save(user).Error
+	if err := s.db.Save(user).Error; err != nil {
+		return err
+	}
+	log := &model.UserActionLog{
+		UserID:    userID,
+		Action:    "update_profile",
+		Details:   "Пользователь обновил профиль",
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
 }
 
 func (s *userService) ListAll() ([]model.User, error) {
 	var users []model.User
 	err := s.db.Find(&users).Error
-	return users, err
+	if err != nil {
+		return nil, err
+	}
+	log := &model.UserActionLog{
+		UserID:    0,
+		Action:    "list_users",
+		Details:   "Запрошен список всех пользователей",
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return users, nil
 }
 
 func (s *userService) GetAchievements(userID uint) ([]model.UserAchievement, error) {
 	var achievements []model.UserAchievement
 	err := s.db.Preload("Achievement").Where("user_id = ?", userID).Find(&achievements).Error
-	return achievements, err
+	if err != nil {
+		return nil, err
+	}
+	log := &model.UserActionLog{
+		UserID:    userID,
+		Action:    "get_achievements",
+		Details:   "Пользователь запросил свои достижения",
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return achievements, nil
 }
 
 
@@ -7502,18 +8157,16 @@ import (
 	"fmt"
 	"time"
 
-	//"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
-// CourseService определяет интерфейс для работы с курсами
 type CourseService interface {
 	Create(course *model.Course) error
-	List(limit, offset int) ([]model.Course, int, error) // Изменяем сигнатуру, добавляем total	Get(id uint) (*model.Course, error)
-	Get(id uint) (*model.Course, error)                  // Добавляем метод Get
+	List(limit, offset int) ([]model.Course, int, error)
+	Get(id uint) (*model.Course, error)
 	PreloadTeacher(course *model.Course) error
 	Enroll(userID, courseID uint) error
 	Unenroll(userID, courseID uint) error
@@ -7523,30 +8176,30 @@ type CourseService interface {
 	CheckDeadlines() error
 }
 
-// courseService реализует CourseService
 type courseService struct {
 	repo             repository.CourseRepository
 	userRepo         repository.UserRepository
 	notificationRepo repository.NotificationRepository
+	logRepo          repository.ActionLogRepository // Добавляем
 	db               *gorm.DB
 }
 
-// NewCourseService создаёт новый экземпляр CourseService
 func NewCourseService(
 	repo repository.CourseRepository,
 	notificationRepo repository.NotificationRepository,
 	userRepo repository.UserRepository,
+	logRepo repository.ActionLogRepository, // Добавляем
 	db *gorm.DB,
 ) CourseService {
 	return &courseService{
 		repo:             repo,
 		userRepo:         userRepo,
 		notificationRepo: notificationRepo,
+		logRepo:          logRepo, // Добавляем
 		db:               db,
 	}
 }
 
-// Create создаёт новый курс
 func (s *courseService) Create(course *model.Course) error {
 	logger.Log.Infof("Creating course: %s", course.Title)
 	err := s.repo.Create(course)
@@ -7558,7 +8211,6 @@ func (s *courseService) Create(course *model.Course) error {
 	return nil
 }
 
-// List возвращает список курсов с пагинацией и общим количеством
 func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
 	logger.Log.Infof("Fetching courses with limit %d, offset %d", limit, offset)
 	var courses []model.Course
@@ -7577,7 +8229,6 @@ func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
 	return courses, int(total), nil
 }
 
-// Get возвращает курс по ID
 func (s *courseService) Get(id uint) (*model.Course, error) {
 	logger.Log.Infof("Fetching course %d", id)
 	var course model.Course
@@ -7593,7 +8244,6 @@ func (s *courseService) Get(id uint) (*model.Course, error) {
 	return &course, nil
 }
 
-// PreloadTeacher подгружает данные учителя для курса
 func (s *courseService) PreloadTeacher(course *model.Course) error {
 	logger.Log.Infof("Preloading teacher for course %d", course.ID)
 	err := s.db.Preload("Teacher").First(course, course.ID).Error
@@ -7604,11 +8254,9 @@ func (s *courseService) PreloadTeacher(course *model.Course) error {
 	return nil
 }
 
-// Enroll записывает пользователя на курс
 func (s *courseService) Enroll(userID, courseID uint) error {
 	logger.Log.Infof("User %d enrolling in course %d", userID, courseID)
 
-	// Проверка: существует ли курс
 	course, err := s.repo.FindByID(courseID)
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
@@ -7618,7 +8266,6 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: существует ли пользователь
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -7628,13 +8275,11 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: является ли пользователь студентом
 	if user.Role != model.Student {
 		logger.Log.Warnf("User %d is not a student", userID)
 		return errors.New("только студенты могут записываться на курсы")
 	}
 
-	// Проверка: не записан ли пользователь уже
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
 	if err == nil {
@@ -7646,7 +8291,6 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Создание записи
 	enrollment = model.Enrollment{
 		UserID:     userID,
 		CourseID:   courseID,
@@ -7657,7 +8301,6 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Создание уведомления
 	notification := &model.Notification{
 		UserID:    userID,
 		Message:   fmt.Sprintf("Вы записались на курс: %s", course.Title),
@@ -7668,8 +8311,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		logger.Log.Errorf("Failed to create enrollment notification for user %d: %v", userID, err)
 	}
 
-	// Проверка достижений
-	achievementService := NewAchievementService(s.db)
+	achievementService := NewAchievementService(s.db, s.userRepo, s.logRepo)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", userID).Find(&submissions).Error; err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
@@ -7700,11 +8342,9 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	return nil
 }
 
-// Unenroll отменяет запись пользователя на курс
 func (s *courseService) Unenroll(userID, courseID uint) error {
 	logger.Log.Infof("User %d unenrolling from course %d", userID, courseID)
 
-	// Проверка: существует ли курс
 	_, err := s.repo.FindByID(courseID)
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
@@ -7714,7 +8354,6 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: существует ли пользователь
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -7724,13 +8363,11 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: является ли пользователь студентом
 	if user.Role != model.Student {
 		logger.Log.Warnf("User %d is not a student", userID)
 		return errors.New("только студенты могут отменять запись на курсы")
 	}
 
-	// Проверка: записан ли пользователь
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
 	if err != nil {
@@ -7741,7 +8378,6 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Удаление записи
 	if err := s.db.Delete(&enrollment).Error; err != nil {
 		logger.Log.Errorf("Failed to delete enrollment: %v", err)
 		return err
@@ -7751,7 +8387,6 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	return nil
 }
 
-// Delete удаляет курс
 func (s *courseService) Delete(userID, courseID uint) error {
 	logger.Log.Infof("User %d deleting course %d", userID, courseID)
 
@@ -7771,7 +8406,6 @@ func (s *courseService) Delete(userID, courseID uint) error {
 		return err
 	}
 
-	// 💥 Вот тут даём право админу
 	if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
 		return errors.New("нет прав для удаления курса")
 	}
@@ -7784,11 +8418,9 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	return nil
 }
 
-// GetStats возвращает статистику по курсу
 func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) {
 	logger.Log.Infof("Fetching stats for course %d", courseID)
 
-	// Проверка: существует ли курс
 	_, err := s.repo.FindByID(courseID)
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
@@ -7811,7 +8443,6 @@ func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) 
 func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface{}, error) {
 	logger.Log.Infof("Fetching progress for user %d in course %d", userID, courseID)
 
-	// Проверка записи на курс
 	var enrollment model.Enrollment
 	if err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error; err != nil {
 		logger.Log.Errorf("User %d not enrolled in course %d: %v", userID, courseID, err)
@@ -7889,31 +8520,82 @@ func (s *courseService) CheckDeadlines() error {
 
 
 ════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/service/action_log.go
+════════════════════════════════════════════════════════════════════════════════
+
+package service
+
+import (
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"gorm.io/gorm"
+	"time"
+)
+
+type ActionLogService interface {
+	Create(userID uint, action, details string) error
+	GetAll(limit, offset int) ([]model.UserActionLog, int64, error)
+}
+
+type actionLogService struct {
+	repo repository.ActionLogRepository
+	db   *gorm.DB
+}
+
+func NewActionLogService(repo repository.ActionLogRepository, db *gorm.DB) ActionLogService {
+	return &actionLogService{repo: repo, db: db}
+}
+
+func (s *actionLogService) Create(userID uint, action, details string) error {
+	log := &model.UserActionLog{
+		UserID:    userID,
+		Action:    action,
+		Details:   details,
+		CreatedAt: time.Now(),
+	}
+	return s.repo.Create(log)
+}
+
+func (s *actionLogService) GetAll(limit, offset int) ([]model.UserActionLog, int64, error) {
+	return s.repo.FindAll(limit, offset)
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
 ║ backend/internal/service/achievement.go
 ════════════════════════════════════════════════════════════════════════════════
 
 package service
 
 import (
+	"errors"
 	"time"
 
-	//"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
 type AchievementService interface {
 	AwardAchievements(userID uint, points uint, submissions []model.Submission, courseCount int) ([]model.GlobalAchievement, error)
+	Create(achievement *model.GlobalAchievement, adminID uint) error
+	Update(achievementID uint, achievement *model.GlobalAchievement, adminID uint) error
+	ListAll() ([]model.GlobalAchievement, error)
 }
 
 type achievementService struct {
-	db *gorm.DB
+	db       *gorm.DB
+	userRepo repository.UserRepository
+	logRepo  repository.ActionLogRepository
 }
 
-func NewAchievementService(db *gorm.DB) AchievementService {
+func NewAchievementService(db *gorm.DB, userRepo repository.UserRepository, logRepo repository.ActionLogRepository) AchievementService {
 	return &achievementService{
-		db: db,
+		db:       db,
+		userRepo: userRepo,
+		logRepo:  logRepo,
 	}
 }
 
@@ -7926,7 +8608,6 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 		return nil, err
 	}
 
-	// Загружаем все глобальные достижения
 	var globalAchievements []model.GlobalAchievement
 	if err := s.db.Find(&globalAchievements).Error; err != nil {
 		logger.Log.Errorf("Failed to load global achievements: %v", err)
@@ -7935,7 +8616,6 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 
 	var newAchievements []model.GlobalAchievement
 	for _, ach := range globalAchievements {
-		// Проверяем условия
 		conditionMet := false
 		switch ach.Condition {
 		case "points_50":
@@ -7964,13 +8644,11 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 		}
 
 		if conditionMet {
-			// Проверяем, не присвоено ли достижение
 			var count int64
 			s.db.Model(&model.UserAchievement{}).
 				Where("user_id = ? AND achievement_id = ?", userID, ach.ID).
 				Count(&count)
 			if count == 0 {
-				// Присваиваем достижение
 				userAch := model.UserAchievement{
 					UserID:        userID,
 					AchievementID: ach.ID,
@@ -7987,6 +8665,108 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 	}
 
 	return newAchievements, nil
+}
+
+func (s *achievementService) Create(achievement *model.GlobalAchievement, adminID uint) error {
+	logger.Log.Infof("Admin %d creating achievement: %s", adminID, achievement.Title)
+
+	admin, err := s.userRepo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	if achievement.Title == "" || achievement.Condition == "" {
+		logger.Log.Errorf("Achievement title or condition cannot be empty")
+		return errors.New("название или условие достижения не может быть пустым")
+	}
+
+	if err := s.db.Create(achievement).Error; err != nil {
+		logger.Log.Errorf("Failed to create achievement: %v", err)
+		return err
+	}
+
+	logger.Log.Infof("Achievement %s created by admin %d", achievement.Title, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "create_achievement",
+		Details:   "Админ создал достижение: " + achievement.Title,
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
+}
+
+func (s *achievementService) Update(achievementID uint, achievement *model.GlobalAchievement, adminID uint) error {
+	logger.Log.Infof("Admin %d updating achievement %d", adminID, achievementID)
+
+	admin, err := s.userRepo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	var existing model.GlobalAchievement
+	if err := s.db.First(&existing, achievementID).Error; err != nil {
+		logger.Log.Errorf("Achievement %d not found: %v", achievementID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("достижение не найдено")
+		}
+		return err
+	}
+
+	if achievement.Title == "" || achievement.Condition == "" {
+		logger.Log.Errorf("Achievement title or condition cannot be empty")
+		return errors.New("название или условие достижения не может быть пустым")
+	}
+
+	existing.Title = achievement.Title
+	existing.Description = achievement.Description
+	existing.Condition = achievement.Condition
+	if err := s.db.Save(&existing).Error; err != nil {
+		logger.Log.Errorf("Failed to update achievement %d: %v", achievementID, err)
+		return err
+	}
+
+	logger.Log.Infof("Achievement %d updated by admin %d", achievementID, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "update_achievement",
+		Details:   "Админ обновил достижение: " + achievement.Title,
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
+}
+
+func (s *achievementService) ListAll() ([]model.GlobalAchievement, error) {
+	var achievements []model.GlobalAchievement
+	if err := s.db.Find(&achievements).Error; err != nil {
+		logger.Log.Errorf("Failed to list achievements: %v", err)
+		return nil, err
+	}
+	log := &model.UserActionLog{
+		UserID:    0,
+		Action:    "list_achievements",
+		Details:   "Запрошен список всех достижений",
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return achievements, nil
 }
 
 
@@ -8088,6 +8868,7 @@ func main() {
 		&model.UserAchievement{},
 		&model.Notification{},
 		&model.Enrollment{},
+		&model.UserActionLog{},
 	)
 
 	// Создание папки uploads с абсолютным путём
@@ -8114,20 +8895,26 @@ func main() {
 	}
 	r.Use(cors.New(corsConfig))
 
+	// Инициализация репозиториев
 	userRepo := repository.NewUserRepository()
 	courseRepo := repository.NewCourseRepository()
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
+	logRepo := repository.NewActionLogRepository(db.DB)
 
+	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
-	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
+	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
 	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB)
-	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo)
-	userService := service.NewUserService(userRepo)
+	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
+	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 	subtaskService := service.NewSubtaskService(db.DB)
+	actionLogService := service.NewActionLogService(logRepo, db.DB)               // Добавляем ActionLogService
+	achievementService := service.NewAchievementService(db.DB, userRepo, logRepo) // Добавляем AchievementService
 
+	// Настройка CRON для проверки дедлайнов
 	c := cron.New()
 	c.AddFunc("@every 24h", func() {
 		if err := courseService.CheckDeadlines(); err != nil {
@@ -8157,6 +8944,20 @@ func main() {
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 			protected.POST("/check-deadlines", handler.CheckDeadlines(courseService))
 			protected.GET("/users/me/achievements", handler.GetMyAchievements(userService))
+
+			// Админ-маршруты
+			admin := protected.Group("/admin", handler.RoleMiddleware(model.Admin))
+			{
+				admin.GET("/logs", handler.GetActionLogs(actionLogService))                 // Эндпоинт для логов
+				admin.POST("/create-user", handler.AdminRegister(authService, userService)) // Эндпоинт для создания пользователя
+			}
+
+			// Достижения
+			achievements := protected.Group("/achievements")
+			{
+				achievements.GET("", handler.ListAchievements(achievementService))                                        // Получение всех достижений
+				achievements.POST("", handler.RoleMiddleware(model.Admin), handler.CreateAchievement(achievementService)) // Создание достижения
+			}
 
 			courses := protected.Group("/courses")
 			{

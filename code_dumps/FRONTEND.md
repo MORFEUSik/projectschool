@@ -866,7 +866,6 @@ import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -891,11 +890,17 @@ interface Assignment {
 
 interface Subtask {
   id: number;
+  ID?: number;
   question: string;
+  Question?: string;
   options: string[];
+  Options?: string[];
   sort_order: number;
+  SortOrder?: number;
   input_type: 'multiple_choice' | 'text_input';
+  Type?: 'multiple_choice' | 'text_input';
   file_url?: string;
+  File_url?: string;
 }
 
 interface QuizResult {
@@ -945,14 +950,18 @@ export default function AssignmentPage() {
         setAssignment(assignmentRes.data);
 
         if (assignmentRes.data.type === 'multiple_choice') {
-          const subtasksRes = await api.get<Subtask[]>(`/assignments/${assignmentId}/subtasks`);
-          const normalizedSubtasks = subtasksRes.data.map((subtask) => ({
-            id: subtask.id,
-            question: subtask.question,
-            options: subtask.options || [],
-            sort_order: subtask.sort_order,
-            input_type: subtask.input_type || 'multiple_choice',
-            file_url: subtask.file_url,
+          const subtasksRes = await api.get(`/assignments/${assignmentId}/subtasks`);
+          const normalizedSubtasks = subtasksRes.data.map((subtask: any) => ({
+            id: subtask.ID || subtask.id,
+            question: subtask.Question || subtask.question || '',
+            options: Array.isArray(subtask.Options)
+              ? subtask.Options
+              : Array.isArray(subtask.options)
+              ? subtask.options
+              : [],
+            sort_order: subtask.SortOrder || subtask.sort_order || 0,
+            input_type: subtask.Type || subtask.input_type || 'text_input',
+            file_url: subtask.File_url || subtask.file_url,
           }));
           setSubtasks(normalizedSubtasks);
 
@@ -1138,92 +1147,86 @@ export default function AssignmentPage() {
       )}
 
       {isSubmitted && quizResult && (
-  <Card className="mt-4">
-    <div>
-      <p className="font-semibold">
-        Оценка: {quizResult.grade.toFixed(1)}
-      </p>
-      <p className="font-semibold">
-        Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
-      </p>
-      <div className="mt-2">
-        {quizResult.answers.map((answer, idx) => {
-          const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
-          const subtaskScore = assignment.max_score / subtasks.length;
-          return (
-            <div key={answer.SubtaskID} className="mb-4 border-b pb-2"> {/* Добавляем key */}
-              <p className="font-medium">
-                Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
-              </p>
-              {subtask?.file_url && (
-                <div className="my-2">
-                  {subtask.file_url.endsWith('.pdf') ? (
-                    <a
-                      href={subtask.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      Просмотреть PDF
-                    </a>
-                  ) : (
-                    <Image
-                      src={subtask.file_url}
-                      alt={`Вопрос ${idx + 1}`}
-                      width={300}
-                      height={200}
-                      onError={() =>
-                        setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
-                      }
-                    />
-                  )}
-                </div>
-              )}
-              <p>
-                Ваш ответ:{' '}
-                <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
-                  {answer.Answer || 'Не отвечено'}
-                </span>
-              </p>
-              {!answer.IsCorrect && answer.CorrectAnswer && (
-                <p>
-                  Правильный ответ: {answer.CorrectAnswer}
-                </p>
-              )}
-              <p>
-                Попытки: {answer.Attempts}
-              </p>
-              <p>
-                Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
-              </p>
-              {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
-                <div>
-                  <p>Варианты:</p>
-                  <ul className="list-disc ml-5">
-                    {subtask.options.map((option, optIdx) => (
-                      <li
-                        key={optIdx} // Добавляем key для вариантов ответа
-                        className={
-                          option === answer.Answer
-                            ? answer.IsCorrect
-                              ? 'text-green-600'
-                              : 'text-red-600'
-                            : ''
-                        }
-                      >
-                        {option}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+        <Card className="mt-4">
+          <div>
+            <p className="font-semibold">Оценка: {quizResult.grade.toFixed(1)}</p>
+            <p className="font-semibold">
+              Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
+            </p>
+            <div className="mt-2">
+              {quizResult.answers.map((answer, idx) => {
+                const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
+                const subtaskScore = assignment.max_score / subtasks.length;
+                return (
+                  <div key={answer.SubtaskID} className="mb-4 border-b pb-2">
+                    <p className="font-medium">
+                      Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
+                    </p>
+                    {subtask?.file_url && (
+                      <div className="my-2">
+                        {subtask.file_url.endsWith('.pdf') ? (
+                          <a
+                            href={subtask.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline"
+                          >
+                            Просмотреть PDF
+                          </a>
+                        ) : (
+                          <Image
+                            src={subtask.file_url}
+                            alt={`Вопрос ${idx + 1}`}
+                            width={300}
+                            height={200}
+                            onError={() =>
+                              setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+                    <p>
+                      Ваш ответ:{' '}
+                      <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
+                        {answer.Answer || 'Не отвечено'}
+                      </span>
+                    </p>
+                    {!answer.IsCorrect && answer.CorrectAnswer && (
+                      <p>Правильный ответ: {answer.CorrectAnswer}</p>
+                    )}
+                    <p>Попытки: {answer.Attempts}</p>
+                    <p>
+                      Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
+                    </p>
+                    {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
+                      <div>
+                        <p>Варианты:</p>
+                        <ul className="list-disc ml-5">
+                          {subtask.options.map((option, optIdx) => (
+                            <li
+                              key={optIdx}
+                              className={
+                                option === answer.Answer
+                                  ? answer.IsCorrect
+                                    ? 'text-green-600'
+                                    : 'text-red-600'
+                                  : ''
+                              }
+                            >
+                              {option}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
-    </div>
-  </Card>
-)}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1320,66 +1323,66 @@ export default function CreateAssignmentPage() {
   };
 
   const handleSubtaskChange = (
-    index: number,
-    field: keyof Subtask,
-    value: string | string[] | number | File | null
-  ) => {
-    const newSubtasks = [...subtasks];
+  index: number,
+  field: keyof Subtask,
+  value: string | string[] | number | File | null
+) => {
+  const newSubtasks = [...subtasks];
 
-    if (field === 'numOptions' && typeof value === 'number') {
-      newSubtasks[index].numOptions = value;
-      newSubtasks[index].options = Array(value).fill('');
-      newSubtasks[index].answer = '';
-    } else if (field === 'options' && Array.isArray(value)) {
-      newSubtasks[index].options = value.map(opt => opt.trim());
-    } else if (field === 'image' && value instanceof File) {
-      if (value.size > 10 * 1024 * 1024) {
-        toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
-        return;
-      }
-      if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
-        toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
-        return;
-      }
-      if (newSubtasks[index].imagePreview) {
-        URL.revokeObjectURL(newSubtasks[index].imagePreview);
-      }
-      newSubtasks[index].image = value;
-      newSubtasks[index].imagePreview = URL.createObjectURL(value);
-    } else if (field === 'inputType' && typeof value === 'string') {
-      newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
-      if (value === 'text_input') {
-        newSubtasks[index].options = [];
-        newSubtasks[index].answer = '';
-        console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
-      } else {
-        newSubtasks[index].options = ['', ''];
-        newSubtasks[index].answer = '';
-        newSubtasks[index].numOptions = 2;
-        console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
-      }
-    } else if (typeof value === 'string') {
-      switch (field) {
-        case 'question':
-          newSubtasks[index].question = value.trim();
-          break;
-        case 'answer':
-          if (newSubtasks[index].inputType === 'multiple_choice') {
-            const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
-            if (value && !normalizedOptions.includes(value.trim())) {
-              toast.error('Правильный ответ должен быть одним из вариантов');
-              return;
-            }
-          }
-          newSubtasks[index].answer = value.trim();
-          break;
-        default:
-          break;
-      }
+  if (field === 'numOptions' && typeof value === 'number') {
+    newSubtasks[index].numOptions = value;
+    newSubtasks[index].options = Array(value).fill('');
+    newSubtasks[index].answer = '';
+  } else if (field === 'options' && Array.isArray(value)) {
+    newSubtasks[index].options = value.map(opt => opt.trimEnd()); // Убираем пробелы с конца
+  } else if (field === 'image' && value instanceof File) {
+    if (value.size > 10 * 1024 * 1024) {
+      toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
+      return;
     }
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
+      toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
+      return;
+    }
+    if (newSubtasks[index].imagePreview) {
+      URL.revokeObjectURL(newSubtasks[index].imagePreview);
+    }
+    newSubtasks[index].image = value;
+    newSubtasks[index].imagePreview = URL.createObjectURL(value);
+  } else if (field === 'inputType' && typeof value === 'string') {
+    newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
+    if (value === 'text_input') {
+      newSubtasks[index].options = [];
+      newSubtasks[index].answer = '';
+      console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
+    } else {
+      newSubtasks[index].options = ['', ''];
+      newSubtasks[index].answer = '';
+      newSubtasks[index].numOptions = 2;
+      console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
+    }
+  } else if (typeof value === 'string') {
+    switch (field) {
+      case 'question':
+        newSubtasks[index].question = value.trimEnd(); // Убираем пробелы с конца
+        break;
+      case 'answer':
+        if (newSubtasks[index].inputType === 'multiple_choice') {
+          const normalizedOptions = newSubtasks[index].options.map(opt => opt.trimEnd());
+          if (value && !normalizedOptions.includes(value.trimEnd())) {
+            toast.error('Правильный ответ должен быть одним из вариантов');
+            return;
+          }
+        }
+        newSubtasks[index].answer = value.trimEnd(); // Убираем пробелы с конца
+        break;
+      default:
+        break;
+    }
+  }
 
-    setSubtasks(newSubtasks);
-  };
+  setSubtasks(newSubtasks);
+};
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1406,84 +1409,84 @@ export default function CreateAssignmentPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    setError('');
-    setIsSubmitting(true);
-    try {
-      if (!courseId || typeof courseId !== 'string') {
-        const errorMessage = 'ID курса не указан';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('title', data.title);
-      if (data.description) formData.append('description', data.description);
-      formData.append('max_score', data.max_score.toString());
-      formData.append('due_date', `${data.due_date}:00+00:00`);
-      formData.append('course_id', courseId);
-      formData.append('type', assignmentType);
-      if (data.file) formData.append('file', data.file);
-
-      if (assignmentType === 'multiple_choice') {
-        if (subtasks.length === 0) {
-          setError('Тест должен содержать хотя бы одно подзадание');
-          toast.error('Тест должен содержать хотя бы одно подзадание');
-          return;
-        }
-        for (const [index, subtask] of subtasks.entries()) {
-          if (!subtask.question) {
-            setError(`Вопрос ${index + 1} должен быть заполнен`);
-            toast.error(`Вопрос ${index + 1} должен быть заполнен`);
-            return;
-          }
-          if (subtask.inputType === 'multiple_choice') {
-            if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
-              setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
-              toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
-              return;
-            }
-          } else if (subtask.inputType === 'text_input') {
-            if (subtask.options.length > 0) {
-              setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
-              toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
-              return;
-            }
-          }
-          if (!subtask.answer) {
-            setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
-            toast.error(`Подзадание ${index + 1} должно иметь правильный ответ`);
-            return;
-          }
-          if (subtask.image) {
-            formData.append(`subtask_image_${index}`, subtask.image);
-          }
-        }
-
-        const normalizedSubtasks = subtasks.map((subtask, index) => ({
-          Question: subtask.question,
-          Options: subtask.inputType === 'multiple_choice' ? subtask.options.filter(opt => opt.trim()) : [],
-          Answer: subtask.answer,
-          SortOrder: index + 1,
-          Type: subtask.inputType || 'multiple_choice',
-        }));
-        formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
-      }
-
-      const response = await api.post('/assignments', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
+  setError('');
+  setIsSubmitting(true);
+  try {
+    if (!courseId || typeof courseId !== 'string') {
+      const errorMessage = 'ID курса не указан';
       setError(errorMessage);
       toast.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      return;
     }
-  };
+
+    const formData = new FormData();
+    formData.append('title', data.title.trimEnd()); // Убираем пробелы с конца
+    if (data.description) formData.append('description', data.description.trimEnd()); // Убираем пробелы с конца
+    formData.append('max_score', data.max_score.toString());
+    formData.append('due_date', `${data.due_date}:00+00:00`);
+    formData.append('course_id', courseId);
+    formData.append('type', assignmentType);
+    if (data.file) formData.append('file', data.file);
+
+    if (assignmentType === 'multiple_choice') {
+      if (subtasks.length === 0) {
+        setError('Тест должен содержать хотя бы одно подзадание');
+        toast.error('Тест должен содержать хотя бы одно подзадание');
+        return;
+      }
+      for (const [index, subtask] of subtasks.entries()) {
+        if (!subtask.question) {
+          setError(`Вопрос ${index + 1} должен быть заполнен`);
+          toast.error(`Вопрос ${index + 1} должен быть заполнен`);
+          return;
+        }
+        if (subtask.inputType === 'multiple_choice') {
+          if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
+            setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            return;
+          }
+        } else if (subtask.inputType === 'text_input') {
+          if (subtask.options.length > 0) {
+            setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+            toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+            return;
+          }
+        }
+        if (!subtask.answer) {
+          setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
+          toast.error(`Подзадание ${index + 1} должен иметь правильный ответ`);
+          return;
+        }
+        if (subtask.image) {
+          formData.append(`subtask_image_${index}`, subtask.image);
+        }
+      }
+
+      const normalizedSubtasks = subtasks.map((subtask, index) => ({
+        Question: subtask.question.trimEnd(), // Убираем пробелы с конца
+        Options: subtask.inputType === 'multiple_choice' ? subtask.options.map(opt => opt.trimEnd()) : [], // Убираем пробелы
+        Answer: subtask.answer.trimEnd(), // Убираем пробелы с конца
+        SortOrder: index + 1,
+        Type: subtask.inputType || 'multiple_choice',
+      }));
+      formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
+    }
+
+    const response = await api.post('/assignments', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    toast.success('Задание успешно создано!');
+    window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+  } catch (err: unknown) {
+    const axiosError = err as AxiosError<ErrorResponse>;
+    const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
+    setError(errorMessage);
+    toast.error(errorMessage);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
     return <div>Доступ запрещён</div>;
@@ -2184,6 +2187,7 @@ export default function AchievementsPage() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
@@ -2195,12 +2199,30 @@ import { AxiosError } from 'axios';
 interface User {
   id: number;
   username: string;
+  email: string;
   role: string;
 }
 
-interface Course {
+interface ApiAchievement {
+  ID: number;
+  Title: string;
+  Description: string;
+  Condition: string;
+}
+
+interface Achievement {
   id: number;
   title: string;
+  description: string;
+  condition: string;
+}
+
+interface LogEntry {
+  id: number;
+  user_id: number;
+  action: string;
+  details: string;
+  created_at: string;
 }
 
 interface ErrorResponse {
@@ -2210,32 +2232,40 @@ interface ErrorResponse {
 export default function AdminPage() {
   const { user, isLoading } = useUser();
   const [users, setUsers] = useState<User[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [formError, setFormError] = useState('');
+
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState('');
-  const [error, setError] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('teacher');
+  const [achTitle, setAchTitle] = useState('');
+  const [achDesc, setAchDesc] = useState('');
+  const [achCondition, setAchCondition] = useState('');
 
   const fetchData = async () => {
     try {
-      const usersResponse = await api.get<User[]>('/users');
-      const coursesResponse = await api.get<Course[]>('/courses');
-      setUsers(usersResponse.data);
-      setCourses(coursesResponse.data);
+      const [usersRes, achRes, logRes] = await Promise.all([
+        api.get<User[]>('/users'),
+        api.get<ApiAchievement[]>('/achievements'),
+        api.get<{ logs: LogEntry[]; total: number }>('/admin/logs'),
+      ]);
+      console.log('Achievements response:', achRes.data);
+      // Преобразуем данные API в формат фронтенда
+      const transformedAchievements = achRes.data.map((ach) => ({
+        id: ach.ID,
+        title: ach.Title,
+        description: ach.Description,
+        condition: ach.Condition,
+      }));
+      setUsers(usersRes.data || []);
+      setAchievements(transformedAchievements || []);
+      setLogs(logRes.data.logs || []);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка загрузки данных');
-    }
-  };
-
-  const handleUpdateRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await api.put(`/users/${userId}/role`, { role });
-      fetchData();
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка изменения роли');
+      setFormError(axiosError.response?.data?.error || 'Ошибка загрузки');
     }
   };
 
@@ -2245,49 +2275,189 @@ export default function AdminPage() {
     }
   }, [user]);
 
+  const handleUpdateRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.put(`/users/${userId}/role`, { role });
+      fetchData();
+      setUserId('');
+      setRole('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Ошибка изменения роли');
+    }
+  };
+
+  const handleRegisterUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/create-user', {
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+      });
+      fetchData();
+      setNewUserEmail('');
+      setNewUserPassword('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Ошибка регистрации');
+    }
+  };
+
+  const handleCreateAchievement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/achievements', {
+        title: achTitle,
+        description: achDesc,
+        condition: achCondition || 'custom',
+      });
+      fetchData();
+      setAchTitle('');
+      setAchDesc('');
+      setAchCondition('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Ошибка добавления достижения');
+    }
+  };
+
+  // Список условий для выпадающего меню
+  const conditionOptions = [
+    { value: 'points_50', label: 'Набрать 50 очков' },
+    { value: 'points_100', label: 'Набрать 100 очков' },
+    { value: 'points_500', label: 'Набрать 500 очков' },
+    { value: 'courses_1', label: 'Завершить 1 курс' },
+    { value: 'courses_3', label: 'Записаться на 3 курса' },
+    { value: 'submissions_5', label: 'Сдать 5 заданий' },
+    { value: 'custom', label: 'Произвольное' },
+  ];
+
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (!user || user.role !== 'admin')
     return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
 
   return (
     <div className="max-w-4xl mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
-  {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+      <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
+      {formError && <p className="text-red-500 text-sm mb-4 text-center">{formError}</p>}
 
-  <Card className="mb-6">
-    <h2 className="text-xl font-semibold mb-4">Управление пользователями</h2>
-    <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
-      <div>
-        <label htmlFor="userId" className="block text-sm font-medium mb-1">ID пользователя</label>
-        <Input id="userId" type="number" value={userId} onChange={(e) => setUserId(e.target.value)} required />
-      </div>
-      <div>
-        <label htmlFor="role" className="block text-sm font-medium mb-1">Роль</label>
-        <Input id="role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="student, teacher, admin" required />
-      </div>
-      <div className="sm:col-span-2">
-        <Button type="submit">Изменить роль</Button>
-      </div>
-    </form>
-    <div className="mt-6">
-      <h3 className="text-lg font-semibold mb-2">Список пользователей</h3>
-      <ul className="text-sm space-y-1">
-        {users.map((u) => (
-          <li key={u.id} className="text-gray-700 dark:text-gray-300">{u.username} (ID: {u.id}, Роль: {u.role})</li>
-        ))}
-      </ul>
+      <Card className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Изменить роль пользователя</h2>
+        <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
+          <Input
+            type="number"
+            placeholder="ID пользователя"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            required
+          />
+          <Input
+            placeholder="student / teacher / admin"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            required
+          />
+          <Button type="submit" className="sm:col-span-2">
+            Изменить
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Создать нового пользователя</h2>
+        <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
+          <Input
+            type="email"
+            placeholder="Email"
+            value={newUserEmail}
+            onChange={(e) => setNewUserEmail(e.target.value)}
+            required
+          />
+          <Input
+            type="password"
+            placeholder="Пароль"
+            value={newUserPassword}
+            onChange={(e) => setNewUserPassword(e.target.value)}
+            required
+          />
+          <select
+            value={newUserRole}
+            onChange={(e) => setNewUserRole(e.target.value)}
+            className="p-2 border rounded sm:col-span-2"
+          >
+            <option value="teacher">Преподаватель</option>
+            <option value="admin">Администратор</option>
+          </select>
+          <Button type="submit" className="sm:col-span-2">
+            Создать
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Добавить достижение</h2>
+        <form onSubmit={handleCreateAchievement} className="grid gap-4">
+          <Input
+            placeholder="Название"
+            value={achTitle}
+            onChange={(e) => setAchTitle(e.target.value)}
+            required
+          />
+          <Input
+            placeholder="Описание"
+            value={achDesc}
+            onChange={(e) => setAchDesc(e.target.value)}
+            required
+          />
+          <select
+            value={achCondition}
+            onChange={(e) => setAchCondition(e.target.value)}
+            className="p-2 border rounded-md text-sm"
+            required
+          >
+            <option value="">Выберите условие</option>
+            {conditionOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <Button type="submit">Добавить</Button>
+        </form>
+        <div className="mt-4">
+          <h3 className="font-semibold mb-2">Существующие:</h3>
+          {achievements.length === 0 ? (
+            <p className="text-sm text-gray-500">Нет достижений</p>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {achievements.map((ach) => (
+                <li key={ach.id}>
+                  {ach.title} — {ach.description} ({ach.condition})
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-xl font-semibold mb-4">Действия пользователей</h2>
+        {logs.length === 0 ? (
+          <p className="text-sm text-gray-500">Нет логов</p>
+        ) : (
+          <ul className="text-sm space-y-2 max-h-80 overflow-y-auto">
+            {logs.map((log) => (
+              <li key={log.id}>
+                <span className="font-medium">Пользователь {log.user_id}:</span>{' '}
+                {log.action} ({log.details}){' '}
+                <span className="text-gray-500 text-xs">
+                  ({new Date(log.created_at).toLocaleString()})
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
-  </Card>
-
-  <Card>
-    <h2 className="text-xl font-semibold mb-4">Управление курсами</h2>
-    <ul className="text-sm space-y-1">
-      {courses.map((c) => (
-        <li key={c.id}>{c.title} (ID: {c.id})</li>
-      ))}
-    </ul>
-  </Card>
-</div>
   );
 }
 
@@ -2830,8 +3000,7 @@ interface Subtask {
   sort_order: number;
   SortOrder?: number;
   input_type?: string;
-InputType?: string;
-
+  InputType?: string;
   file_url?: string;
   File_url?: string;
 }
@@ -2860,25 +3029,36 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const [incorrectOptions, setIncorrectOptions] = useState<Record<number, string[]>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<number, string>>({});
-  const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0); // Текущий вопрос
+  const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0);
+  const [tempAnswer, setTempAnswer] = useState<Record<number, string>>({}); // Временный ответ для текстовых подзаданий
+  const [skipped, setSkipped] = useState<Record<number, boolean>>({}); // Флаг пропуска подзадания
 
   console.log('QuizForm props:', { assignmentId, subtasks });
+  console.log('Normalized subtasks in QuizForm:', subtasks);
 
   // Инициализация состояния
   useEffect(() => {
+    // Временная очистка localStorage
+    subtasks.forEach((subtask) => {
+      const subtaskId = subtask.id ?? subtask.ID ?? 0;
+      localStorage.removeItem(`quiz_${assignmentId}_${subtaskId}`);
+    });
+
     const initialAnswers: Record<number, { answer: string; attempts: number; isCorrect?: boolean }> = {};
     const initialIncorrectOptions: Record<number, string[]> = {};
+    const initialTempAnswers: Record<number, string> = {};
     subtasks.forEach((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
       const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
       const data = stored ? JSON.parse(stored) : { attempts: 0, incorrectOptions: [] };
       initialAnswers[subtaskId] = { answer: '', attempts: data.attempts || 0, isCorrect: undefined };
       initialIncorrectOptions[subtaskId] = data.incorrectOptions || [];
+      initialTempAnswers[subtaskId] = '';
     });
     setAnswers(initialAnswers);
     setIncorrectOptions(initialIncorrectOptions);
+    setTempAnswer(initialTempAnswers);
 
-    // Очищаем localStorage при монтировании, если квиз новый
     return () => {
       subtasks.forEach((subtask) => {
         const subtaskId = subtask.id ?? subtask.ID ?? 0;
@@ -2893,7 +3073,7 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   }
 
   const handleChange = async (subtaskId: number, answer: string) => {
-    const normalizedAnswer = answer.trim();
+    const normalizedAnswer = answer.trimEnd(); // Убираем пробелы с конца
 
     try {
       const response = await api.post(`/assignments/${assignmentId}/check-subtask`, {
@@ -2938,12 +3118,45 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     }
   };
 
+  const handleConfirmTextAnswer = async (subtaskId: number) => {
+    const normalizedAnswer = tempAnswer[subtaskId]?.trimEnd() || '';
+    if (!normalizedAnswer) {
+      toast.error('Введите ответ перед подтверждением');
+      return;
+    }
+
+    if (answers[subtaskId].attempts >= 3) {
+      toast.error('Достигнуто максимальное количество попыток (3)');
+      return;
+    }
+
+    await handleChange(subtaskId, normalizedAnswer);
+  };
+
+  const handleSkip = (subtaskId: number) => {
+    setSkipped((prev) => ({ ...prev, [subtaskId]: true }));
+    setAnswers((prev) => ({
+      ...prev,
+      [subtaskId]: {
+        ...prev[subtaskId],
+        answer: '',
+        attempts: prev[subtaskId].attempts,
+        isCorrect: false,
+      },
+    }));
+    toast.info('Подзадание пропущено');
+    handleNext();
+  };
+
   const handleNext = () => {
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
-    if (!answers[subtaskId]?.answer) {
+    const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
+    
+    if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ перед переходом к следующему вопросу');
       return;
     }
+    
     if (currentSubtaskIndex < subtasks.length - 1) {
       setCurrentSubtaskIndex(currentSubtaskIndex + 1);
     }
@@ -2952,7 +3165,9 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
-    if (!answers[subtaskId]?.answer) {
+    const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
+
+    if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ');
       return;
     }
@@ -2993,28 +3208,35 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const currentSubtask = subtasks[currentSubtaskIndex];
   const subtaskId = currentSubtask.id ?? currentSubtask.ID ?? 0;
   const inputType = currentSubtask.input_type ?? currentSubtask.InputType ?? 'multiple_choice';
-const options = Array.isArray(currentSubtask.options)
-  ? currentSubtask.options
-  : Array.isArray(currentSubtask.Options)
-  ? currentSubtask.Options
-  : [];
+  const options = Array.isArray(currentSubtask.options)
+    ? currentSubtask.options
+    : Array.isArray(currentSubtask.Options)
+    ? currentSubtask.Options
+    : [];
+  const question = currentSubtask.question ?? currentSubtask.Question ?? 'Вопрос отсутствует';
+  const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
 
-const question = currentSubtask.question ?? currentSubtask.Question ?? 'Вопрос отсутствует';
-const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
-
+  if (!currentSubtask || !subtaskId) {
+    console.error('Invalid subtask data:', currentSubtask);
+    return (
+      <div className="text-red-500">
+        Ошибка: некорректные данные вопроса. Обратитесь к преподавателю.
+      </div>
+    );
+  }
 
   if (inputType === 'multiple_choice' && !options.length) {
-  console.error(`Subtask ${subtaskId} has invalid options:`, currentSubtask);
-  return (
-    <div className="text-red-500">
-      Ошибка: некорректные варианты ответа для вопроса `{question}`
-    </div>
-  );
-}
-
+    console.error(`Subtask ${subtaskId} has invalid options:`, currentSubtask);
+    return (
+      <div className="text-red-500">
+        Ошибка: отсутствуют варианты ответа для вопроса (ID: {subtaskId}). Обратитесь к преподавателю.
+      </div>
+    );
+  }
 
   const isCorrect = answers[subtaskId]?.isCorrect;
   const incorrectOptionsForSubtask = incorrectOptions[subtaskId] || [];
+  const attempts = answers[subtaskId]?.attempts || 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -3023,68 +3245,90 @@ const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
           {currentSubtaskIndex + 1}. {question} ({currentSubtaskIndex + 1}/{subtasks.length})
         </p>
         {fileUrl && !imageErrors[subtaskId] && (
-  <div className="mt-2 mb-4">
-    {fileUrl.endsWith('.pdf') ? (
-      <a
-        href={fileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-600 hover:underline"
-      >
-        Просмотреть PDF
-      </a>
-    ) : (
-      <>
-        <Image
-          src={fileUrl}
-          alt={`Subtask ${currentSubtaskIndex + 1} image`}
-          width={300}
-          height={300}
-          className="rounded"
-          onError={() =>
-            setImageErrors((prev) => ({
-              ...prev,
-              [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
-            }))
-          }
-        />
-        {imageErrors[subtaskId] && <p className="text-red-500 text-sm">{imageErrors[subtaskId]}</p>}
-      </>
-    )}
-  </div>
-)}
+          <div className="mt-2 mb-4">
+            {fileUrl.endsWith('.pdf') ? (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Просмотреть PDF
+              </a>
+            ) : (
+              <>
+                <Image
+                  src={fileUrl}
+                  alt={`Subtask ${currentSubtaskIndex + 1} image`}
+                  width={300}
+                  height={300}
+                  className="rounded"
+                  onError={() =>
+                    setImageErrors((prev) => ({
+                      ...prev,
+                      [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
+                    }))
+                  }
+                />
+                {imageErrors[subtaskId] && <p className="text-red-500 text-sm">{imageErrors[subtaskId]}</p>}
+              </>
+            )}
+          </div>
+        )}
         <div className="space-y-2">
-  {inputType === 'multiple_choice' ? (
-    options.map((option: string, i: number) => {
-      const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
-      return (
-        <label key={i} className="flex items-center space-x-2">
-          <input
-            type="radio"
-            name={`subtask-${subtaskId}`}
-            value={option}
-            checked={answers[subtaskId]?.answer === option}
-            onChange={() => handleChange(subtaskId, option)}
-            disabled={isCorrect === true}
-            className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
-          />
-          <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
-        </label>
-      );
-    })
-  ) : (
-    <input
-      type="text"
-      value={answers[subtaskId]?.answer || ''}
-      onChange={(e) => handleChange(subtaskId, e.target.value)}
-      disabled={isCorrect === true}
-      className="w-full border rounded px-3 py-2"
-      placeholder="Введите ответ"
-    />
-  )}
-  <p className="text-sm text-gray-500 mt-1">Попытки: {answers[subtaskId]?.attempts || 0}</p>
-</div>
-
+          {inputType === 'multiple_choice' ? (
+            options.map((option: string, i: number) => {
+              const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
+              return (
+                <label key={i} className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name={`subtask-${subtaskId}`}
+                    value={option}
+                    checked={answers[subtaskId]?.answer === option}
+                    onChange={() => handleChange(subtaskId, option)}
+                    disabled={isCorrect === true}
+                    className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
+                  />
+                  <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
+                </label>
+              );
+            })
+          ) : (
+            <>
+              <input
+                type="text"
+                value={tempAnswer[subtaskId] || ''}
+                onChange={(e) => setTempAnswer((prev) => ({ ...prev, [subtaskId]: e.target.value }))}
+                disabled={isCorrect === true || attempts >= 3 || skipped[subtaskId]}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Введите ответ"
+              />
+              {!isCorrect && attempts < 3 && !skipped[subtaskId] && (
+                <div className="flex space-x-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmTextAnswer(subtaskId)}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:bg-gray-400"
+                  >
+                    Подтвердить ответ
+                  </button>
+                  {attempts > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(subtaskId)}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg"
+                    >
+                      Пропустить
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          <p className="text-sm text-gray-500 mt-1">Попытки: {attempts}{inputType === 'text_input' ? ' / 3' : ''}</p>
+        </div>
       </div>
       <div className="flex space-x-4">
         {currentSubtaskIndex < subtasks.length - 1 ? (
@@ -3109,7 +3353,6 @@ const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
     </form>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════

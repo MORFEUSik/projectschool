@@ -85,66 +85,66 @@ export default function CreateAssignmentPage() {
   };
 
   const handleSubtaskChange = (
-    index: number,
-    field: keyof Subtask,
-    value: string | string[] | number | File | null
-  ) => {
-    const newSubtasks = [...subtasks];
+  index: number,
+  field: keyof Subtask,
+  value: string | string[] | number | File | null
+) => {
+  const newSubtasks = [...subtasks];
 
-    if (field === 'numOptions' && typeof value === 'number') {
-      newSubtasks[index].numOptions = value;
-      newSubtasks[index].options = Array(value).fill('');
-      newSubtasks[index].answer = '';
-    } else if (field === 'options' && Array.isArray(value)) {
-      newSubtasks[index].options = value.map(opt => opt.trim());
-    } else if (field === 'image' && value instanceof File) {
-      if (value.size > 10 * 1024 * 1024) {
-        toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
-        return;
-      }
-      if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
-        toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
-        return;
-      }
-      if (newSubtasks[index].imagePreview) {
-        URL.revokeObjectURL(newSubtasks[index].imagePreview);
-      }
-      newSubtasks[index].image = value;
-      newSubtasks[index].imagePreview = URL.createObjectURL(value);
-    } else if (field === 'inputType' && typeof value === 'string') {
-      newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
-      if (value === 'text_input') {
-        newSubtasks[index].options = [];
-        newSubtasks[index].answer = '';
-        console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
-      } else {
-        newSubtasks[index].options = ['', ''];
-        newSubtasks[index].answer = '';
-        newSubtasks[index].numOptions = 2;
-        console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
-      }
-    } else if (typeof value === 'string') {
-      switch (field) {
-        case 'question':
-          newSubtasks[index].question = value.trim();
-          break;
-        case 'answer':
-          if (newSubtasks[index].inputType === 'multiple_choice') {
-            const normalizedOptions = newSubtasks[index].options.map(opt => opt.trim());
-            if (value && !normalizedOptions.includes(value.trim())) {
-              toast.error('Правильный ответ должен быть одним из вариантов');
-              return;
-            }
-          }
-          newSubtasks[index].answer = value.trim();
-          break;
-        default:
-          break;
-      }
+  if (field === 'numOptions' && typeof value === 'number') {
+    newSubtasks[index].numOptions = value;
+    newSubtasks[index].options = Array(value).fill('');
+    newSubtasks[index].answer = '';
+  } else if (field === 'options' && Array.isArray(value)) {
+    newSubtasks[index].options = value.map(opt => opt.trimEnd()); // Убираем пробелы с конца
+  } else if (field === 'image' && value instanceof File) {
+    if (value.size > 10 * 1024 * 1024) {
+      toast.error(`Файл подзадания ${index + 1} слишком большой (макс. 10 МБ)`);
+      return;
     }
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(value.type)) {
+      toast.error(`Неподдерживаемый тип файла для подзадания ${index + 1} (jpg, png, pdf)`);
+      return;
+    }
+    if (newSubtasks[index].imagePreview) {
+      URL.revokeObjectURL(newSubtasks[index].imagePreview);
+    }
+    newSubtasks[index].image = value;
+    newSubtasks[index].imagePreview = URL.createObjectURL(value);
+  } else if (field === 'inputType' && typeof value === 'string') {
+    newSubtasks[index].inputType = value as 'multiple_choice' | 'text_input';
+    if (value === 'text_input') {
+      newSubtasks[index].options = [];
+      newSubtasks[index].answer = '';
+      console.log(`Subtask ${index} switched to text_input, options cleared:`, newSubtasks[index].options);
+    } else {
+      newSubtasks[index].options = ['', ''];
+      newSubtasks[index].answer = '';
+      newSubtasks[index].numOptions = 2;
+      console.log(`Subtask ${index} switched to multiple_choice, options set:`, newSubtasks[index].options);
+    }
+  } else if (typeof value === 'string') {
+    switch (field) {
+      case 'question':
+        newSubtasks[index].question = value.trimEnd(); // Убираем пробелы с конца
+        break;
+      case 'answer':
+        if (newSubtasks[index].inputType === 'multiple_choice') {
+          const normalizedOptions = newSubtasks[index].options.map(opt => opt.trimEnd());
+          if (value && !normalizedOptions.includes(value.trimEnd())) {
+            toast.error('Правильный ответ должен быть одним из вариантов');
+            return;
+          }
+        }
+        newSubtasks[index].answer = value.trimEnd(); // Убираем пробелы с конца
+        break;
+      default:
+        break;
+    }
+  }
 
-    setSubtasks(newSubtasks);
-  };
+  setSubtasks(newSubtasks);
+};
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,84 +171,84 @@ export default function CreateAssignmentPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    setError('');
-    setIsSubmitting(true);
-    try {
-      if (!courseId || typeof courseId !== 'string') {
-        const errorMessage = 'ID курса не указан';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('title', data.title);
-      if (data.description) formData.append('description', data.description);
-      formData.append('max_score', data.max_score.toString());
-      formData.append('due_date', `${data.due_date}:00+00:00`);
-      formData.append('course_id', courseId);
-      formData.append('type', assignmentType);
-      if (data.file) formData.append('file', data.file);
-
-      if (assignmentType === 'multiple_choice') {
-        if (subtasks.length === 0) {
-          setError('Тест должен содержать хотя бы одно подзадание');
-          toast.error('Тест должен содержать хотя бы одно подзадание');
-          return;
-        }
-        for (const [index, subtask] of subtasks.entries()) {
-          if (!subtask.question) {
-            setError(`Вопрос ${index + 1} должен быть заполнен`);
-            toast.error(`Вопрос ${index + 1} должен быть заполнен`);
-            return;
-          }
-          if (subtask.inputType === 'multiple_choice') {
-            if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
-              setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
-              toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
-              return;
-            }
-          } else if (subtask.inputType === 'text_input') {
-            if (subtask.options.length > 0) {
-              setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
-              toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
-              return;
-            }
-          }
-          if (!subtask.answer) {
-            setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
-            toast.error(`Подзадание ${index + 1} должно иметь правильный ответ`);
-            return;
-          }
-          if (subtask.image) {
-            formData.append(`subtask_image_${index}`, subtask.image);
-          }
-        }
-
-        const normalizedSubtasks = subtasks.map((subtask, index) => ({
-          Question: subtask.question,
-          Options: subtask.inputType === 'multiple_choice' ? subtask.options.filter(opt => opt.trim()) : [],
-          Answer: subtask.answer,
-          SortOrder: index + 1,
-          Type: subtask.inputType || 'multiple_choice',
-        }));
-        formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
-      }
-
-      const response = await api.post('/assignments', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
+  setError('');
+  setIsSubmitting(true);
+  try {
+    if (!courseId || typeof courseId !== 'string') {
+      const errorMessage = 'ID курса не указан';
       setError(errorMessage);
       toast.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      return;
     }
-  };
+
+    const formData = new FormData();
+    formData.append('title', data.title.trimEnd()); // Убираем пробелы с конца
+    if (data.description) formData.append('description', data.description.trimEnd()); // Убираем пробелы с конца
+    formData.append('max_score', data.max_score.toString());
+    formData.append('due_date', `${data.due_date}:00+00:00`);
+    formData.append('course_id', courseId);
+    formData.append('type', assignmentType);
+    if (data.file) formData.append('file', data.file);
+
+    if (assignmentType === 'multiple_choice') {
+      if (subtasks.length === 0) {
+        setError('Тест должен содержать хотя бы одно подзадание');
+        toast.error('Тест должен содержать хотя бы одно подзадание');
+        return;
+      }
+      for (const [index, subtask] of subtasks.entries()) {
+        if (!subtask.question) {
+          setError(`Вопрос ${index + 1} должен быть заполнен`);
+          toast.error(`Вопрос ${index + 1} должен быть заполнен`);
+          return;
+        }
+        if (subtask.inputType === 'multiple_choice') {
+          if (subtask.options.filter(opt => opt.trim()).length < 2 || subtask.options.length > 6) {
+            setError(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            toast.error(`Подзадание ${index + 1} должно иметь от 2 до 6 вариантов ответа`);
+            return;
+          }
+        } else if (subtask.inputType === 'text_input') {
+          if (subtask.options.length > 0) {
+            setError(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+            toast.error(`Подзадание ${index + 1} с текстовым вводом не должно содержать варианты ответа`);
+            return;
+          }
+        }
+        if (!subtask.answer) {
+          setError(`Подзадание ${index + 1} должно иметь правильный ответ`);
+          toast.error(`Подзадание ${index + 1} должен иметь правильный ответ`);
+          return;
+        }
+        if (subtask.image) {
+          formData.append(`subtask_image_${index}`, subtask.image);
+        }
+      }
+
+      const normalizedSubtasks = subtasks.map((subtask, index) => ({
+        Question: subtask.question.trimEnd(), // Убираем пробелы с конца
+        Options: subtask.inputType === 'multiple_choice' ? subtask.options.map(opt => opt.trimEnd()) : [], // Убираем пробелы
+        Answer: subtask.answer.trimEnd(), // Убираем пробелы с конца
+        SortOrder: index + 1,
+        Type: subtask.inputType || 'multiple_choice',
+      }));
+      formData.append('subtasks_json', JSON.stringify(normalizedSubtasks));
+    }
+
+    const response = await api.post('/assignments', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    toast.success('Задание успешно создано!');
+    window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+  } catch (err: unknown) {
+    const axiosError = err as AxiosError<ErrorResponse>;
+    const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
+    setError(errorMessage);
+    toast.error(errorMessage);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   if (!user || (user.role !== 'teacher' && user.role !== 'admin')) {
     return <div>Доступ запрещён</div>;

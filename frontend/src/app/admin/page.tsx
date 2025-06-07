@@ -1,21 +1,41 @@
+// frontend/src/app/admin/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
-import { Card } from '@/shared/ui/Card';
-import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { UserRoleForm } from './components/UserRoleForm';
+import { CreateUserForm } from './components/CreateUserForm';
+import { AchievementManagement } from './components/AchievementManagement';
+import { ActionLogs } from './components/ActionLogs';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 
 interface User {
   id: number;
   username: string;
+  email: string;
   role: string;
 }
 
-interface Course {
+interface ApiAchievement {
+  ID: number;
+  Title: string;
+  Description: string;
+  Condition: string;
+}
+
+interface Achievement {
   id: number;
   title: string;
+  description: string;
+  condition: string;
+}
+
+interface LogEntry {
+  id: number;
+  user_id: number;
+  action: string;
+  details: string;
+  created_at: string;
 }
 
 interface ErrorResponse {
@@ -25,32 +45,30 @@ interface ErrorResponse {
 export default function AdminPage() {
   const { user, isLoading } = useUser();
   const [users, setUsers] = useState<User[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [userId, setUserId] = useState('');
-  const [role, setRole] = useState('');
-  const [error, setError] = useState('');
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [formError, setFormError] = useState('');
 
   const fetchData = async () => {
     try {
-      const usersResponse = await api.get<User[]>('/users');
-      const coursesResponse = await api.get<Course[]>('/courses');
-      setUsers(usersResponse.data);
-      setCourses(coursesResponse.data);
+      const [usersRes, achRes, logRes] = await Promise.all([
+        api.get<User[]>('/users'),
+        api.get<ApiAchievement[]>('/achievements'),
+        api.get<{ logs: LogEntry[]; total: number }>('/admin/logs'),
+      ]);
+      const transformedAchievements = achRes.data.map((ach) => ({
+        id: ach.ID,
+        title: ach.Title,
+        description: ach.Description,
+        condition: ach.Condition,
+      }));
+      setUsers(usersRes.data || []);
+      setAchievements(transformedAchievements || []);
+      setLogs(logRes.data.logs || []);
+      setFormError('');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка загрузки данных');
-    }
-  };
-
-  const handleUpdateRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await api.put(`/users/${userId}/role`, { role });
-      fetchData();
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка изменения роли');
+      setFormError(axiosError.response?.data?.error || 'Ошибка загрузки данных');
     }
   };
 
@@ -66,42 +84,17 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-4xl mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
-  {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+      <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
+      {formError && <p className="text-red-500 text-sm mb-4 text-center">{formError}</p>}
 
-  <Card className="mb-6">
-    <h2 className="text-xl font-semibold mb-4">Управление пользователями</h2>
-    <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
-      <div>
-        <label htmlFor="userId" className="block text-sm font-medium mb-1">ID пользователя</label>
-        <Input id="userId" type="number" value={userId} onChange={(e) => setUserId(e.target.value)} required />
-      </div>
-      <div>
-        <label htmlFor="role" className="block text-sm font-medium mb-1">Роль</label>
-        <Input id="role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="student, teacher, admin" required />
-      </div>
-      <div className="sm:col-span-2">
-        <Button type="submit">Изменить роль</Button>
-      </div>
-    </form>
-    <div className="mt-6">
-      <h3 className="text-lg font-semibold mb-2">Список пользователей</h3>
-      <ul className="text-sm space-y-1">
-        {users.map((u) => (
-          <li key={u.id} className="text-gray-700 dark:text-gray-300">{u.username} (ID: {u.id}, Роль: {u.role})</li>
-        ))}
-      </ul>
+      <UserRoleForm onSuccess={fetchData} setFormError={setFormError} />
+      <CreateUserForm onSuccess={fetchData} setFormError={setFormError} />
+      <AchievementManagement
+        achievements={achievements}
+        onSuccess={fetchData}
+        setFormError={setFormError}
+      />
+      <ActionLogs logs={logs} />
     </div>
-  </Card>
-
-  <Card>
-    <h2 className="text-xl font-semibold mb-4">Управление курсами</h2>
-    <ul className="text-sm space-y-1">
-      {courses.map((c) => (
-        <li key={c.id}>{c.title} (ID: {c.id})</li>
-      ))}
-    </ul>
-  </Card>
-</div>
   );
 }

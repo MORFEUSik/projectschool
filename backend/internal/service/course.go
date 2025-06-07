@@ -5,18 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	//"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
 )
 
-// CourseService определяет интерфейс для работы с курсами
 type CourseService interface {
 	Create(course *model.Course) error
-	List(limit, offset int) ([]model.Course, int, error) // Изменяем сигнатуру, добавляем total	Get(id uint) (*model.Course, error)
-	Get(id uint) (*model.Course, error)                  // Добавляем метод Get
+	List(limit, offset int) ([]model.Course, int, error)
+	Get(id uint) (*model.Course, error)
 	PreloadTeacher(course *model.Course) error
 	Enroll(userID, courseID uint) error
 	Unenroll(userID, courseID uint) error
@@ -26,30 +24,30 @@ type CourseService interface {
 	CheckDeadlines() error
 }
 
-// courseService реализует CourseService
 type courseService struct {
 	repo             repository.CourseRepository
 	userRepo         repository.UserRepository
 	notificationRepo repository.NotificationRepository
+	logRepo          repository.ActionLogRepository // Добавляем
 	db               *gorm.DB
 }
 
-// NewCourseService создаёт новый экземпляр CourseService
 func NewCourseService(
 	repo repository.CourseRepository,
 	notificationRepo repository.NotificationRepository,
 	userRepo repository.UserRepository,
+	logRepo repository.ActionLogRepository, // Добавляем
 	db *gorm.DB,
 ) CourseService {
 	return &courseService{
 		repo:             repo,
 		userRepo:         userRepo,
 		notificationRepo: notificationRepo,
+		logRepo:          logRepo, // Добавляем
 		db:               db,
 	}
 }
 
-// Create создаёт новый курс
 func (s *courseService) Create(course *model.Course) error {
 	logger.Log.Infof("Creating course: %s", course.Title)
 	err := s.repo.Create(course)
@@ -61,7 +59,6 @@ func (s *courseService) Create(course *model.Course) error {
 	return nil
 }
 
-// List возвращает список курсов с пагинацией и общим количеством
 func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
 	logger.Log.Infof("Fetching courses with limit %d, offset %d", limit, offset)
 	var courses []model.Course
@@ -80,7 +77,6 @@ func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
 	return courses, int(total), nil
 }
 
-// Get возвращает курс по ID
 func (s *courseService) Get(id uint) (*model.Course, error) {
 	logger.Log.Infof("Fetching course %d", id)
 	var course model.Course
@@ -96,7 +92,6 @@ func (s *courseService) Get(id uint) (*model.Course, error) {
 	return &course, nil
 }
 
-// PreloadTeacher подгружает данные учителя для курса
 func (s *courseService) PreloadTeacher(course *model.Course) error {
 	logger.Log.Infof("Preloading teacher for course %d", course.ID)
 	err := s.db.Preload("Teacher").First(course, course.ID).Error
@@ -107,11 +102,9 @@ func (s *courseService) PreloadTeacher(course *model.Course) error {
 	return nil
 }
 
-// Enroll записывает пользователя на курс
 func (s *courseService) Enroll(userID, courseID uint) error {
 	logger.Log.Infof("User %d enrolling in course %d", userID, courseID)
 
-	// Проверка: существует ли курс
 	course, err := s.repo.FindByID(courseID)
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
@@ -121,7 +114,6 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: существует ли пользователь
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -131,13 +123,11 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: является ли пользователь студентом
 	if user.Role != model.Student {
 		logger.Log.Warnf("User %d is not a student", userID)
 		return errors.New("только студенты могут записываться на курсы")
 	}
 
-	// Проверка: не записан ли пользователь уже
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
 	if err == nil {
@@ -149,7 +139,6 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Создание записи
 	enrollment = model.Enrollment{
 		UserID:     userID,
 		CourseID:   courseID,
@@ -160,7 +149,6 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Создание уведомления
 	notification := &model.Notification{
 		UserID:    userID,
 		Message:   fmt.Sprintf("Вы записались на курс: %s", course.Title),
@@ -171,8 +159,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 		logger.Log.Errorf("Failed to create enrollment notification for user %d: %v", userID, err)
 	}
 
-	// Проверка достижений
-	achievementService := NewAchievementService(s.db)
+	achievementService := NewAchievementService(s.db, s.userRepo, s.logRepo)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", userID).Find(&submissions).Error; err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", userID, err)
@@ -203,11 +190,9 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	return nil
 }
 
-// Unenroll отменяет запись пользователя на курс
 func (s *courseService) Unenroll(userID, courseID uint) error {
 	logger.Log.Infof("User %d unenrolling from course %d", userID, courseID)
 
-	// Проверка: существует ли курс
 	_, err := s.repo.FindByID(courseID)
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
@@ -217,7 +202,6 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: существует ли пользователь
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		logger.Log.Errorf("User %d not found: %v", userID, err)
@@ -227,13 +211,11 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Проверка: является ли пользователь студентом
 	if user.Role != model.Student {
 		logger.Log.Warnf("User %d is not a student", userID)
 		return errors.New("только студенты могут отменять запись на курсы")
 	}
 
-	// Проверка: записан ли пользователь
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
 	if err != nil {
@@ -244,7 +226,6 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 		return err
 	}
 
-	// Удаление записи
 	if err := s.db.Delete(&enrollment).Error; err != nil {
 		logger.Log.Errorf("Failed to delete enrollment: %v", err)
 		return err
@@ -254,7 +235,6 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	return nil
 }
 
-// Delete удаляет курс
 func (s *courseService) Delete(userID, courseID uint) error {
 	logger.Log.Infof("User %d deleting course %d", userID, courseID)
 
@@ -274,7 +254,6 @@ func (s *courseService) Delete(userID, courseID uint) error {
 		return err
 	}
 
-	// 💥 Вот тут даём право админу
 	if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
 		return errors.New("нет прав для удаления курса")
 	}
@@ -287,11 +266,9 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	return nil
 }
 
-// GetStats возвращает статистику по курсу
 func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) {
 	logger.Log.Infof("Fetching stats for course %d", courseID)
 
-	// Проверка: существует ли курс
 	_, err := s.repo.FindByID(courseID)
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
@@ -314,7 +291,6 @@ func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) 
 func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface{}, error) {
 	logger.Log.Infof("Fetching progress for user %d in course %d", userID, courseID)
 
-	// Проверка записи на курс
 	var enrollment model.Enrollment
 	if err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error; err != nil {
 		logger.Log.Errorf("User %d not enrolled in course %d: %v", userID, courseID, err)

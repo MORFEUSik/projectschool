@@ -53,6 +53,7 @@ func main() {
 		&model.UserAchievement{},
 		&model.Notification{},
 		&model.Enrollment{},
+		&model.UserActionLog{},
 	)
 
 	// Создание папки uploads с абсолютным путём
@@ -79,20 +80,26 @@ func main() {
 	}
 	r.Use(cors.New(corsConfig))
 
+	// Инициализация репозиториев
 	userRepo := repository.NewUserRepository()
 	courseRepo := repository.NewCourseRepository()
 	assignmentRepo := repository.NewAssignmentRepository()
 	submissionRepo := repository.NewSubmissionRepository()
 	notificationRepo := repository.NewNotificationRepository(db.DB)
+	logRepo := repository.NewActionLogRepository(db.DB)
 
+	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
-	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, db.DB)
+	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
 	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB)
-	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo)
-	userService := service.NewUserService(userRepo)
+	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
+	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 	subtaskService := service.NewSubtaskService(db.DB)
+	actionLogService := service.NewActionLogService(logRepo, db.DB)
+	achievementService := service.NewAchievementService(db.DB, userRepo, logRepo)
 
+	// Настройка CRON для проверки дедлайнов
 	c := cron.New()
 	c.AddFunc("@every 24h", func() {
 		if err := courseService.CheckDeadlines(); err != nil {
@@ -122,6 +129,22 @@ func main() {
 			protected.PUT("/users/:id/role", handler.RoleMiddleware(model.Admin), handler.UpdateRole(userService))
 			protected.POST("/check-deadlines", handler.CheckDeadlines(courseService))
 			protected.GET("/users/me/achievements", handler.GetMyAchievements(userService))
+
+			// Админ-маршруты
+			admin := protected.Group("/admin", handler.RoleMiddleware(model.Admin))
+			{
+				admin.GET("/logs", handler.GetActionLogs(actionLogService))
+				admin.POST("/create-user", handler.AdminRegister(authService, userService))
+			}
+
+			// Достижения
+			achievements := protected.Group("/achievements")
+			{
+				achievements.GET("", handler.ListAchievements(achievementService))
+				achievements.POST("", handler.RoleMiddleware(model.Admin), handler.CreateAchievement(achievementService))
+				achievements.PUT("/:id", handler.RoleMiddleware(model.Admin), handler.UpdateAchievement(achievementService))
+				achievements.DELETE("/:id", handler.RoleMiddleware(model.Admin), handler.DeleteAchievement(achievementService))
+			}
 
 			courses := protected.Group("/courses")
 			{

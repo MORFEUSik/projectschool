@@ -29,6 +29,7 @@ type submissionService struct {
 	userRepo         repository.UserRepository
 	assignmentRepo   repository.AssignmentRepository
 	notificationRepo repository.NotificationRepository
+	logRepo          repository.ActionLogRepository // Добавляем
 	db               *gorm.DB
 }
 
@@ -37,12 +38,14 @@ func NewSubmissionService(
 	userRepo repository.UserRepository,
 	assignmentRepo repository.AssignmentRepository,
 	notificationRepo repository.NotificationRepository,
+	logRepo repository.ActionLogRepository, // Добавляем
 ) SubmissionService {
 	return &submissionService{
 		repo:             repo,
 		userRepo:         userRepo,
 		assignmentRepo:   assignmentRepo,
 		notificationRepo: notificationRepo,
+		logRepo:          logRepo, // Добавляем
 		db:               db.DB,
 	}
 }
@@ -181,7 +184,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		logger.Log.Errorf("Failed to create grade notification: %v", err)
 	}
 
-	achievementService := NewAchievementService(s.db)
+	achievementService := NewAchievementService(s.db, s.userRepo, s.logRepo)
 	var submissions []model.Submission
 	if err := s.db.Where("user_id = ?", submission.UserID).Find(&submissions).Error; err != nil {
 		logger.Log.Errorf("Failed to fetch submissions for user %d: %v", submission.UserID, err)
@@ -230,7 +233,6 @@ func (s *submissionService) GetByUserID(userID uint) ([]model.Submission, error)
 func (s *submissionService) GetByAssignment(assignmentID uint) ([]model.Submission, error) {
 	logger.Log.Infof("Fetching submissions for assignment %d", assignmentID)
 
-	// Проверяем существование задания
 	_, err := s.assignmentRepo.FindByID(assignmentID)
 	if err != nil {
 		logger.Log.Errorf("Assignment %d not found: %v", assignmentID, err)
@@ -312,17 +314,17 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	}
 
 	var totalScore float64
-	responseAnswers := make([]map[string]interface{}, 0, len(answers))
 	var totalWeight float64
 	for _, st := range subtasks {
 		if st.InputType == "text_input" {
-			totalWeight += 2.0 // Учитывается как 2 обычных
+			totalWeight += 2.0
 		} else {
 			totalWeight += 1.0
 		}
 	}
 	subtaskScore := float64(assignment.MaxScore) / totalWeight
 
+	responseAnswers := make([]map[string]interface{}, 0, len(answers))
 	for i, answer := range answers {
 		subtask, ok := subtaskMap[answer.SubtaskID]
 		if !ok {
@@ -330,7 +332,6 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			continue
 		}
 
-		// Проверяем наличие сохранённой попытки
 		var subtaskSubmission model.SubtaskSubmission
 		err = s.db.Where("user_id = ? AND subtask_id = ?", userID, answer.SubtaskID).First(&subtaskSubmission).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -356,16 +357,32 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			}
 		}
 
-		// Подсчёт баллов
 		var score float64
-		if isCorrect {
-			if attempts == 1 {
-				score = subtaskScore * weight // полный балл
-			} else if subtask.InputType != "text_input" && attempts < len(subtask.Options) {
-				score = subtaskScore * weight * float64(len(subtask.Options)-attempts) / float64(len(subtask.Options)-1)
+		if answer.Answer == "" {
+			score = 0
+		} else if isCorrect {
+			if subtask.InputType == "text_input" {
+				switch attempts {
+				case 1:
+					score = subtaskScore * weight
+				case 2:
+					score = subtaskScore * weight * 0.5
+				case 3:
+					score = subtaskScore * weight * 0.333
+				default:
+					score = 0
+				}
 			} else {
-				score = 0
+				if attempts == 1 {
+					score = subtaskScore * weight
+				} else if attempts < len(subtask.Options) {
+					score = subtaskScore * weight * float64(len(subtask.Options)-attempts) / float64(len(subtask.Options)-1)
+				} else {
+					score = 0
+				}
 			}
+		} else {
+			score = 0
 		}
 
 		totalScore += score
@@ -373,7 +390,6 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		logger.Log.Infof("Processing answer for SubtaskID %d: UserAnswer='%s', CorrectAnswer='%s', IsCorrect=%v, Attempts=%d, Score=%.2f",
 			answer.SubtaskID, answer.Answer, subtask.Answer, isCorrect, attempts, score)
 
-		// Формируем ответ для клиента
 		responseAnswer := map[string]interface{}{
 			"SubtaskID": answer.SubtaskID,
 			"Answer":    answer.Answer,
@@ -381,12 +397,11 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 			"Attempts":  attempts,
 			"Score":     score,
 		}
-		if !isCorrect {
+		if !isCorrect && answer.Answer != "" {
 			responseAnswer["CorrectAnswer"] = subtask.Answer
 		}
 		responseAnswers = append(responseAnswers, responseAnswer)
 
-		// Сохраняем или обновляем подзадачу
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			answers[i].IsCorrect = isCorrect
 			answers[i].UserID = userID
@@ -448,7 +463,8 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		"answers":    responseAnswers,
 	}
 
-	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.1f, answers=%+v",
+	logger.Log.Infof("Quiz submission processed for user %d, assignment %d: grade=%.1f, totalScore=%.2f, answers=%+v",
 		userID, assignmentID, grade, totalScore, responseAnswers)
+
 	return response, nil
 }

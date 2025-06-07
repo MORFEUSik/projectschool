@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -108,6 +109,18 @@ func UpdateRole(userService service.UserService) gin.HandlerFunc {
 }
 
 // UpdateProfile обновляет профиль пользователя
+// @Summary Обновить профиль пользователя
+// @Description Обновляет имя и email текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body object true "Данные профиля" example={"username":"newname","email":"newemail@example.com"}
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /users/me [put]
 func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -138,6 +151,16 @@ func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 }
 
 // ListUsers возвращает список всех пользователей
+// @Summary Получить список пользователей
+// @Description Возвращает список всех пользователей. Требуется JWT-токен. Доступно для ролей: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} model.User
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /users [get]
 func ListUsers(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		users, err := userService.ListAll()
@@ -147,5 +170,64 @@ func ListUsers(userService service.UserService) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, users)
+	}
+}
+
+// AdminRegister регистрирует нового пользователя от имени администратора
+// @Summary Зарегистрировать пользователя (админ)
+// @Description Позволяет администратору создать нового пользователя (teacher или admin). Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param body body object true "Данные пользователя" example={"email":"newuser@example.com","password":"password123","role":"teacher"}
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /admin/create-user [post]
+func AdminRegister(authService service.AuthService, userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var input struct {
+			Email    string     `json:"email" binding:"required,email"`
+			Password string     `json:"password" binding:"required,min=6"`
+			Role     model.Role `json:"role" binding:"required,oneof=teacher admin"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			return
+		}
+
+		user := &model.User{
+			Email:    input.Email,
+			Password: input.Password,
+			Role:     input.Role,
+			Username: input.Email[:strings.Index(input.Email, "@")], // Генерируем username из email
+		}
+
+		logger.Log.Infof("Admin %d attempting to register user %s", userID, input.Email)
+		if err := userService.AdminRegister(user, userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to register user %s: %v", input.Email, err)
+			if err.Error() == "пользователь с таким email уже существует" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Пользователь с таким email уже существует"})
+			} else if err.Error() == "админ не найден" || err.Error() == "недостаточно прав" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка регистрации"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %s registered by admin %d", input.Email, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Пользователь зарегистрирован"})
 	}
 }

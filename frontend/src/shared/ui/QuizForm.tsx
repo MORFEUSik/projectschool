@@ -46,9 +46,11 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<number, string>>({});
   const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0);
+  const [tempAnswer, setTempAnswer] = useState<Record<number, string>>({}); // Временный ответ для текстовых подзаданий
+  const [skipped, setSkipped] = useState<Record<number, boolean>>({}); // Флаг пропуска подзадания
 
   console.log('QuizForm props:', { assignmentId, subtasks });
-  console.log('Normalized subtasks in QuizForm:', subtasks); // Добавлено для отладки
+  console.log('Normalized subtasks in QuizForm:', subtasks);
 
   // Инициализация состояния
   useEffect(() => {
@@ -60,15 +62,18 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
 
     const initialAnswers: Record<number, { answer: string; attempts: number; isCorrect?: boolean }> = {};
     const initialIncorrectOptions: Record<number, string[]> = {};
+    const initialTempAnswers: Record<number, string> = {};
     subtasks.forEach((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
       const stored = localStorage.getItem(`quiz_${assignmentId}_${subtaskId}`);
       const data = stored ? JSON.parse(stored) : { attempts: 0, incorrectOptions: [] };
       initialAnswers[subtaskId] = { answer: '', attempts: data.attempts || 0, isCorrect: undefined };
       initialIncorrectOptions[subtaskId] = data.incorrectOptions || [];
+      initialTempAnswers[subtaskId] = '';
     });
     setAnswers(initialAnswers);
     setIncorrectOptions(initialIncorrectOptions);
+    setTempAnswer(initialTempAnswers);
 
     return () => {
       subtasks.forEach((subtask) => {
@@ -84,7 +89,7 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   }
 
   const handleChange = async (subtaskId: number, answer: string) => {
-    const normalizedAnswer = answer.trim();
+    const normalizedAnswer = answer.trimEnd(); // Убираем пробелы с конца
 
     try {
       const response = await api.post(`/assignments/${assignmentId}/check-subtask`, {
@@ -129,12 +134,45 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     }
   };
 
+  const handleConfirmTextAnswer = async (subtaskId: number) => {
+    const normalizedAnswer = tempAnswer[subtaskId]?.trimEnd() || '';
+    if (!normalizedAnswer) {
+      toast.error('Введите ответ перед подтверждением');
+      return;
+    }
+
+    if (answers[subtaskId].attempts >= 3) {
+      toast.error('Достигнуто максимальное количество попыток (3)');
+      return;
+    }
+
+    await handleChange(subtaskId, normalizedAnswer);
+  };
+
+  const handleSkip = (subtaskId: number) => {
+    setSkipped((prev) => ({ ...prev, [subtaskId]: true }));
+    setAnswers((prev) => ({
+      ...prev,
+      [subtaskId]: {
+        ...prev[subtaskId],
+        answer: '',
+        attempts: prev[subtaskId].attempts,
+        isCorrect: false,
+      },
+    }));
+    toast.info('Подзадание пропущено');
+    handleNext();
+  };
+
   const handleNext = () => {
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
-    if (!answers[subtaskId]?.answer) {
+    const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
+    
+    if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ перед переходом к следующему вопросу');
       return;
     }
+    
     if (currentSubtaskIndex < subtasks.length - 1) {
       setCurrentSubtaskIndex(currentSubtaskIndex + 1);
     }
@@ -143,7 +181,9 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
-    if (!answers[subtaskId]?.answer) {
+    const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
+
+    if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ');
       return;
     }
@@ -212,6 +252,7 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
 
   const isCorrect = answers[subtaskId]?.isCorrect;
   const incorrectOptionsForSubtask = incorrectOptions[subtaskId] || [];
+  const attempts = answers[subtaskId]?.attempts || 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -270,16 +311,39 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
               );
             })
           ) : (
-            <input
-              type="text"
-              value={answers[subtaskId]?.answer || ''}
-              onChange={(e) => handleChange(subtaskId, e.target.value)}
-              disabled={isCorrect === true}
-              className="w-full border rounded px-3 py-2"
-              placeholder="Введите ответ"
-            />
+            <>
+              <input
+                type="text"
+                value={tempAnswer[subtaskId] || ''}
+                onChange={(e) => setTempAnswer((prev) => ({ ...prev, [subtaskId]: e.target.value }))}
+                disabled={isCorrect === true || attempts >= 3 || skipped[subtaskId]}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Введите ответ"
+              />
+              {!isCorrect && attempts < 3 && !skipped[subtaskId] && (
+                <div className="flex space-x-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmTextAnswer(subtaskId)}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:bg-gray-400"
+                  >
+                    Подтвердить ответ
+                  </button>
+                  {attempts > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(subtaskId)}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg"
+                    >
+                      Пропустить
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
-          <p className="text-sm text-gray-500 mt-1">Попытки: {answers[subtaskId]?.attempts || 0}</p>
+          <p className="text-sm text-gray-500 mt-1">Попытки: {attempts}{inputType === 'text_input' ? ' / 3' : ''}</p>
         </div>
       </div>
       <div className="flex space-x-4">
