@@ -1882,11 +1882,10 @@ func GetLeaderboard(userService service.UserService) gin.HandlerFunc {
 package handler
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
@@ -1894,7 +1893,6 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
@@ -1902,6 +1900,8 @@ import (
 type CreateCourseInput struct {
 	Title       string `json:"title" binding:"required,min=3,max=100" swaggertype:"string" example:"Math 101" description:"Название курса (обязательное, 3-100 символов)"`
 	Description string `json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание курса (опциональное)"`
+	Subject     string `json:"subject" binding:"required" swaggertype:"string" example:"Математика" description:"Предмет курса (обязательное)"`
+	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
 }
 
 // ListCourses возвращает список курсов
@@ -1920,14 +1920,29 @@ type CreateCourseInput struct {
 // @Router /courses [get]
 func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6")) // По умолчанию 6
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 		if limit < 1 || offset < 0 {
 			logger.Log.Errorf("Invalid pagination params: limit=%d, offset=%d", limit, offset)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверные параметры пагинации"})
 			return
 		}
-		courses, total, err := courseService.List(limit, offset)
+
+		userID, exists := c.Get("userID")
+		var uid uint
+		if exists {
+			uid = userID.(uint)
+		}
+
+		// Извлекаем class_number из query-параметров
+		classNumber := c.Query("class_number")
+		if classNumber != "" {
+			// Добавляем class_number в контекст для сервиса
+			ctx := context.WithValue(c.Request.Context(), "class_number", classNumber)
+			c.Request = c.Request.WithContext(ctx)
+		}
+
+		courses, total, err := courseService.List(limit, offset, uid)
 		if err != nil {
 			logger.Log.Errorf("Failed to list courses: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения курсов"})
@@ -1976,33 +1991,19 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 		course := model.Course{
 			Title:       input.Title,
 			Description: input.Description,
+			Subject:     input.Subject,
+			ClassNumber: input.ClassNumber,
 			TeacherID:   userID.(uint),
 		}
 
 		logger.Log.Infof("Creating course: %+v", course)
 
-		// Валидация
-		if err := course.Validate(); err != nil {
-			logger.Log.Errorf("Course validation failed: %v", err)
-			validationErrors := make([]string, 0)
-			if errs, ok := err.(validator.ValidationErrors); ok {
-				for _, e := range errs {
-					validationErrors = append(validationErrors, fmt.Sprintf("Поле %s: %s", e.Field(), e.Tag()))
-				}
-			} else {
-				validationErrors = append(validationErrors, err.Error())
-			}
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: strings.Join(validationErrors, "; ")})
-			return
-		}
-
 		if err := courseService.Create(&course); err != nil {
 			logger.Log.Errorf("Failed to create course: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: err.Error()})
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
 			return
 		}
 
-		// Подгружаем данные учителя
 		if err := courseService.PreloadTeacher(&course); err != nil {
 			logger.Log.Errorf("Failed to preload teacher for course %d: %v", course.ID, err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка загрузки данных преподавателя"})
@@ -3031,9 +3032,11 @@ type Course struct {
 	ID          uint         `gorm:"primaryKey" json:"id" swaggertype:"integer" example:"1" description:"Уникальный идентификатор курса"`
 	Title       string       `gorm:"not null;unique" validate:"required,min=3,max=100" json:"title" swaggertype:"string" example:"Math 101" description:"Название курса (обязательное, 3-100 символов)"`
 	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание курса (опциональное)"`
+	Subject     string       `gorm:"not null" validate:"required" json:"subject" swaggertype:"string" example:"Математика" description:"Предмет курса (обязательное)"`
+	ClassNumber int          `gorm:"not null" validate:"required,gte=1,lte=11" json:"class_number" swaggertype:"integer" example:"6" description:"Номер класса (обязательное, 1-11)"`
 	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя (устанавливается автоматически из токена)"`
 	Teacher     User         `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Информация о преподавателе"`
-	Assignments []Assignment `gorm:"foreignKey:CourseID" json:"assignments" description:"Список заданий курса"` // Добавляем
+	Assignments []Assignment `gorm:"foreignKey:CourseID" json:"assignments" description:"Список заданий курса"`
 	CreatedAt   time.Time    `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата создания курса"`
 	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата последнего обновления курса"`
 }
@@ -3510,6 +3513,7 @@ package db
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/MORFEUSik/projectschool/backend/config"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
@@ -3519,13 +3523,67 @@ import (
 
 var DB *gorm.DB
 
-func Init(cfg *config.Config) {
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort)
+func Init(cfg *config.Config) error {
+	port, err := strconv.Atoi(cfg.DBPort)
+	if err != nil {
+		log.Fatalf("Не удалось преобразовать порт %s в число: %v", cfg.DBPort, err)
+	}
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d",
+		cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, port)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Не удалось подключиться к БД: %v", err)
+	}
+
+	// Проверка и добавление столбца subject в таблице courses
+	log.Println("Checking subject column in courses")
+	var subjectColumnExists int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'courses' AND column_name = 'subject'").Scan(&subjectColumnExists).Error; err != nil {
+		log.Printf("Ошибка: не удалось проверить столбец subject: %v", err)
+		return err
+	}
+	if subjectColumnExists == 0 {
+		log.Println("Adding subject column to courses")
+		if err := db.Exec("ALTER TABLE courses ADD COLUMN subject TEXT").Error; err != nil {
+			log.Printf("Ошибка добавления столбца subject: %v", err)
+			return err
+		}
+		log.Println("Updating NULL subject values to default")
+		if err := db.Exec("UPDATE courses SET subject = 'Не указан' WHERE subject IS NULL").Error; err != nil {
+			log.Printf("Ошибка обновления NULL значений для subject: %v", err)
+			return err
+		}
+		log.Println("Adding NOT NULL constraint to subject")
+		if err := db.Exec("ALTER TABLE courses ALTER COLUMN subject SET NOT NULL").Error; err != nil {
+			log.Printf("Ошибка установки NOT NULL для subject: %v", err)
+			return err
+		}
+	}
+
+	// Проверка и добавление столбца class_number в таблице courses
+	log.Println("Checking class_number column in courses")
+	var classNumberColumnExists int
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'courses' AND column_name = 'class_number'").Scan(&classNumberColumnExists).Error; err != nil {
+		log.Printf("Ошибка: не удалось проверить столбец class_number: %v", err)
+		return err
+	}
+	if classNumberColumnExists == 0 {
+		log.Println("Adding class_number column to courses")
+		if err := db.Exec("ALTER TABLE courses ADD COLUMN class_number INTEGER").Error; err != nil {
+			log.Printf("Ошибка добавления столбца class_number: %v", err)
+			return err
+		}
+		log.Println("Updating NULL class_number values to default")
+		if err := db.Exec("UPDATE courses SET class_number = 0 WHERE class_number IS NULL").Error; err != nil {
+			log.Printf("Ошибка обновления NULL значений для class_number: %v", err)
+			return err
+		}
+		log.Println("Adding NOT NULL constraint to class_number")
+		if err := db.Exec("ALTER TABLE courses ALTER COLUMN class_number SET NOT NULL").Error; err != nil {
+			log.Printf("Ошибка установки NOT NULL для class_number: %v", err)
+			return err
+		}
 	}
 
 	// Автомиграция моделей
@@ -3541,20 +3599,23 @@ func Init(cfg *config.Config) {
 		&model.UserAchievement{},
 	)
 	if err != nil {
-		log.Fatalf("Ошибка миграции: %v", err)
+		log.Printf("Ошибка миграции: %v", err)
+		return err
 	}
 
-	// Проверка и добавление столбца teacher_id в таблицу courses
+	// Проверка и добавление столбца teacher_id в таблице courses
 	log.Println("Checking teacher_id column in courses")
 	var columnExists int
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'courses' AND column_name = 'teacher_id'").Scan(&columnExists).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось проверить столбец teacher_id: %v", err)
-	} else if columnExists == 0 {
+		log.Printf("Ошибка: не удалось проверить столбец teacher_id: %v", err)
+		return err
+	}
+	if columnExists == 0 {
 		log.Println("Adding teacher_id column to courses")
-		err = db.Exec("ALTER TABLE courses ADD COLUMN teacher_id BIGINT NOT NULL DEFAULT 0").Error
-		if err != nil {
-			log.Printf("Предупреждение: не удалось добавить teacher_id: %v", err)
+		if err = db.Exec("ALTER TABLE courses ADD COLUMN teacher_id BIGINT NOT NULL DEFAULT 0").Error; err != nil {
+			log.Printf("Ошибка: не удалось добавить teacher_id: %v", err)
+			return err
 		}
 	}
 
@@ -3563,198 +3624,210 @@ func Init(cfg *config.Config) {
 	var assignmentColumnExists int
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'assignments' AND column_name = 'teacher_id'").Scan(&assignmentColumnExists).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось проверить столбец teacher_id в assignments: %v", err)
-	} else if assignmentColumnExists == 0 {
+		log.Printf("Ошибка: не удалось проверить столбец teacher_id в assignments: %v", err)
+		return err
+	}
+	if assignmentColumnExists == 0 {
 		log.Println("Adding teacher_id column to assignments")
-		err = db.Exec("ALTER TABLE assignments ADD COLUMN teacher_id BIGINT NOT NULL DEFAULT 0").Error
-		if err != nil {
-			log.Printf("Предупреждение: не удалось добавить teacher_id в assignments: %v", err)
+		if err := db.Exec("ALTER TABLE assignments ADD COLUMN teacher_id BIGINT NOT NULL DEFAULT 0").Error; err != nil {
+			log.Printf("Ошибка: не удалось добавить teacher_id: %v", err)
+			return err
 		}
 	}
 
-	// Проверка и обновление колонки password
+	// Проверка и обновление столбца password
 	log.Println("Checking password column type")
 	var columnType string
 	err = db.Raw("SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password'").Scan(&columnType).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось проверить тип колонки password: %v", err)
-	} else if columnType != "character varying" {
+		log.Printf("Ошибка: не удалось проверить тип столбца password: %v", err)
+		return err
+	}
+	if columnType != "character varying" {
 		log.Println("Updating password column to varchar(255)")
-		err = db.Exec(`ALTER TABLE users ALTER COLUMN password TYPE varchar(255)`).Error
-		if err != nil {
-			log.Printf("Предупреждение: не удалось обновить колонку password: %v", err)
+		if err := db.Exec(`ALTER TABLE users ALTER COLUMN password TYPE VARCHAR(255)`).Error; err != nil {
+			log.Printf("Ошибка: не удалось обновить колонку password: %v", err)
+			return err
 		}
 	}
 
-	// Проверка и добавление столбца class_number в таблицу users
+	// Проверка и добавление столбца class_number в таблице users
 	log.Println("Checking class_number column in users")
-	var classNumberColumnExists int
-	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'class_number'").Scan(&classNumberColumnExists).Error
+	var classNumberColumnExistsUsers int
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'class_number'").Scan(&classNumberColumnExistsUsers).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось проверить столбец class_number: %v", err)
-	} else if classNumberColumnExists == 0 {
+		log.Printf("Ошибка: не удалось проверить столбец class_number: %v", err)
+		return err
+	}
+	if classNumberColumnExistsUsers == 0 {
 		log.Println("Adding class_number column to users")
-		err = db.Exec("ALTER TABLE users ADD COLUMN class_number INTEGER DEFAULT 0").Error
-		if err != nil {
-			log.Printf("Предупреждение: не удалось добавить class_number: %v", err)
+		if err := db.Exec("ALTER TABLE users ADD COLUMN class_number INTEGER DEFAULT 0").Error; err != nil {
+			log.Printf("Ошибка: не удалось добавить class_number: %v", err)
+			return err
 		}
 	}
 
 	// Проверка уникальных индексов
 	log.Println("Ensuring unique constraints")
 	err = db.Exec(`
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_constraint
-                WHERE conname = 'users_email_key'
-            ) THEN
-                ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
-            END IF;
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_constraint
-                WHERE conname = 'users_username_key'
-            ) THEN
-                ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
-            END IF;
-        END $$;
-    `).Error
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_constraint
+				WHERE conname = 'users_email_key'
+			) THEN
+				ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
+			END IF;
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_constraint
+				WHERE conname = 'users_username_key'
+			) THEN
+				ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
+			END IF;
+		END $$;
+	`).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось добавить уникальные индексы: %v", err)
+		log.Printf("Ошибка: не удалось добавить уникальные индексы: %v", err)
+		return err
 	}
 
 	// Добавление индексов для оптимизации
 	log.Println("Ensuring indexes")
 	err = db.Exec(`
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_indexes
-                WHERE indexname = 'idx_submissions_user_id'
-            ) THEN
-                CREATE INDEX idx_submissions_user_id ON submissions(user_id);
-            END IF;
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_indexes
-                WHERE indexname = 'idx_assignments_course_id'
-            ) THEN
-                CREATE INDEX idx_assignments_course_id ON assignments(course_id);
-            END IF;
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_indexes
-                WHERE indexname = 'idx_notifications_user_id'
-            ) THEN
-                CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-            END IF;
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_indexes
-                WHERE indexname = 'idx_user_achievements_user_id'
-            ) THEN
-                CREATE INDEX idx_user_achievements_user_id ON user_achievements(user_id);
-            END IF;
-        END $$;
-    `).Error
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_indexes
+				WHERE indexname = 'idx_submissions_user_id'
+			) THEN
+				CREATE INDEX idx_submissions_user_id ON submissions(user_id);
+			END IF;
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_indexes
+				WHERE indexname = 'idx_assignments_course_id'
+			) THEN
+				CREATE INDEX idx_assignments_course_id ON assignments(course_id);
+			END IF;
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_indexes
+				WHERE indexname = 'idx_notifications_user_id'
+			) THEN
+				CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+			END IF;
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_indexes
+				WHERE indexname = 'idx_user_achievements_user_id'
+			) THEN
+				CREATE INDEX idx_user_achievements_user_id ON user_achievements(user_id);
+			END IF;
+		END $$;
+	`).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось добавить индексы: %v", err)
+		log.Printf("Ошибка: не удалось добавить индексы: %v", err)
+		return err
 	}
 
-	// Проверка и добавление столбца is_read в таблицу notifications
+	// Проверка и добавление столбца is_read в таблице notifications
 	log.Println("Checking is_read column in notifications")
 	var isReadColumnExists int
-	err = db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'is_read'").Scan(&isReadColumnExists).Error
-	if err != nil {
-		log.Printf("Предупреждение: не удалось проверить столбец is_read: %v", err)
-	} else if isReadColumnExists == 0 {
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'is_read'").Scan(&isReadColumnExists).Error; err != nil {
+		log.Printf("Ошибка: не удалось проверить столбец is_read: %v", err)
+		return err
+	}
+	if isReadColumnExists == 0 {
 		log.Println("Adding is_read column to notifications")
-		err = db.Exec("ALTER TABLE notifications ADD COLUMN is_read BOOLEAN DEFAULT FALSE").Error
-		if err != nil {
-			log.Printf("Предупреждение: не удалось добавить is_read: %v", err)
+		if err := db.Exec("ALTER TABLE notifications ADD COLUMN is_read BOOLEAN DEFAULT FALSE").Error; err != nil {
+			log.Printf("Ошибка: не удалось добавить is_read: %v", err)
+			return err
 		}
 	}
 
-	// Логирование схемы таблицы users
+	// Логирование схем таблиц
 	type ColumnSchema struct {
 		ColumnName string `gorm:"column:column_name"`
 		DataType   string `gorm:"column:data_type"`
 	}
+
+	// Схема таблицы users
 	var schemas []ColumnSchema
 	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'").Scan(&schemas).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось получить схему таблицы users: %v", err)
-	} else {
-		log.Println("Table users schema:")
-		for _, schema := range schemas {
-			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
-		}
+		log.Printf("Ошибка: не удалось получить схему таблицы users: %v", err)
+		return err
+	}
+	log.Println("Table users schema:")
+	for _, schema := range schemas {
+		log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 	}
 
-	// Логирование схемы таблицы courses
+	// Схема таблицы courses
 	var courseSchemas []ColumnSchema
 	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'courses'").Scan(&courseSchemas).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось получить схему таблицы courses: %v", err)
-	} else {
-		log.Println("Table courses schema:")
-		for _, schema := range courseSchemas {
-			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
-		}
+		log.Printf("Ошибка: не удалось получить схему таблицы courses: %v", err)
+		return err
+	}
+	log.Println("Table courses schema:")
+	for _, schema := range courseSchemas {
+		log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 	}
 
-	// Логирование схемы таблицы assignments
+	// Схема таблицы assignments
 	var assignmentSchemas []ColumnSchema
 	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'assignments'").Scan(&assignmentSchemas).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось получить схему таблицы assignments: %v", err)
-	} else {
-		log.Println("Table assignments schema:")
-		for _, schema := range assignmentSchemas {
-			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
-		}
+		log.Printf("Ошибка: не удалось получить схему таблицы assignments: %v", err)
+		return err
+	}
+	log.Println("Table assignments schema:")
+	for _, schema := range assignmentSchemas {
+		log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 	}
 
-	// Логирование схемы таблицы notifications
+	// Схема таблицы notifications
 	var notificationSchemas []ColumnSchema
 	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'notifications'").Scan(&notificationSchemas).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось получить схему таблицы notifications: %v", err)
-	} else {
-		log.Println("Table notifications schema:")
-		for _, schema := range notificationSchemas {
-			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
-		}
+		log.Printf("Ошибка: не удалось получить схему таблицы notifications: %v", err)
+		return err
+	}
+	log.Println("Table notifications schema:")
+	for _, schema := range notificationSchemas {
+		log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 	}
 
-	// Логирование схемы таблицы global_achievements
+	// Схема таблицы global_achievements
 	var globalAchievementSchemas []ColumnSchema
 	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'global_achievements'").Scan(&globalAchievementSchemas).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось получить схему таблицы global_achievements: %v", err)
-	} else {
-		log.Println("Table global_achievements schema:")
-		for _, schema := range globalAchievementSchemas {
-			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
-		}
+		log.Printf("Ошибка: не удалось получить схему таблицы global_achievements: %v", err)
+		return err
+	}
+	log.Println("Table global_achievements schema:")
+	for _, schema := range globalAchievementSchemas {
+		log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 	}
 
-	// Логирование схемы таблицы user_achievements
+	// Схема таблицы user_achievements
 	var userAchievementSchemas []ColumnSchema
 	err = db.Raw("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'user_achievements'").Scan(&userAchievementSchemas).Error
 	if err != nil {
-		log.Printf("Предупреждение: не удалось получить схему таблицы user_achievements: %v", err)
-	} else {
-		log.Println("Table user_achievements schema:")
-		for _, schema := range userAchievementSchemas {
-			log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
-		}
+		log.Printf("Ошибка: не удалось получить схему таблицы user_achievements: %v", err)
+		return err
+	}
+	log.Println("Table user_achievements schema:")
+	for _, schema := range userAchievementSchemas {
+		log.Printf("  Column: %s, Type: %s", schema.ColumnName, schema.DataType)
 	}
 
 	DB = db
+	return nil
 }
 
 
@@ -4934,6 +5007,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -4944,7 +5018,7 @@ import (
 
 type CourseService interface {
 	Create(course *model.Course) error
-	List(limit, offset int) ([]model.Course, int, error)
+	List(limit, offset int, userID uint) ([]model.Course, int, error)
 	Get(id uint) (*model.Course, error)
 	PreloadTeacher(course *model.Course) error
 	Enroll(userID, courseID uint) error
@@ -4981,6 +5055,10 @@ func NewCourseService(
 
 func (s *courseService) Create(course *model.Course) error {
 	logger.Log.Infof("Creating course: %s", course.Title)
+	if err := course.Validate(); err != nil {
+		logger.Log.Errorf("Course validation failed: %v", err)
+		return fmt.Errorf("ошибка валидации: %v", err)
+	}
 	err := s.repo.Create(course)
 	if err != nil {
 		logger.Log.Errorf("Failed to create course: %v", err)
@@ -4990,21 +5068,61 @@ func (s *courseService) Create(course *model.Course) error {
 	return nil
 }
 
-func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
-	logger.Log.Infof("Fetching courses with limit %d, offset %d", limit, offset)
+func (s *courseService) List(limit, offset int, userID uint) ([]model.Course, int, error) {
+	logger.Log.Infof("Получение курсов с лимитом %d, смещением %d для пользователя %d", limit, offset, userID)
 	var courses []model.Course
 	var total int64
-	err := s.db.Model(&model.Course{}).Count(&total).Error
-	if err != nil {
-		logger.Log.Errorf("Failed to count courses: %v", err)
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Log.Errorf("Не удалось найти пользователя %d: %v", userID, err)
 		return nil, 0, err
 	}
-	err = s.db.Preload("Teacher").Limit(limit).Offset(offset).Find(&courses).Error
-	if err != nil {
-		logger.Log.Errorf("Failed to fetch courses: %v", err)
+
+	query := s.db.Model(&model.Course{}).Preload("Teacher")
+
+	// Фильтрация по class_number
+	var requestedClassNumber int
+	if classNumberStr := s.db.Statement.Context.Value("class_number"); classNumberStr != nil {
+		logger.Log.Infof("Получен class_number из контекста: %v", classNumberStr)
+		if num, err := strconv.Atoi(classNumberStr.(string)); err == nil && num >= 1 && num <= 11 {
+			requestedClassNumber = num
+			query = query.Where("class_number = ?", requestedClassNumber)
+			logger.Log.Infof("Применён фильтр: class_number=%d", requestedClassNumber)
+		} else {
+			logger.Log.Warnf("Некорректный class_number: %v", classNumberStr)
+		}
+	} else {
+		logger.Log.Info("class_number не указан в контексте")
+	}
+
+	// Для студентов: если class_number НЕ передан, используем их класс
+	if requestedClassNumber == 0 && user != nil && user.Role == model.Student && user.ClassNumber > 0 {
+		if user.ClassNumber > uint(11) {
+			logger.Log.Warnf("Некорректный номер класса для пользователя %d: %d", userID, user.ClassNumber)
+			return nil, 0, errors.New("Некорректный номер класса пользователя")
+		}
+		requestedClassNumber = int(user.ClassNumber)
+		query = query.Where("class_number = ?", requestedClassNumber)
+		logger.Log.Infof("Для студента применён фильтр по его классу: class_number=%d", requestedClassNumber)
+	}
+
+	// Подсчет общего количества курсов
+	if err := query.Count(&total).Error; err != nil {
+		logger.Log.Errorf("Не удалось подсчитать курсы: %v", err)
 		return nil, 0, err
 	}
-	logger.Log.Infof("Fetched %d courses out of %d total", len(courses), total)
+
+	// Сортировка по subject, class_number и created_at
+	query = query.Order("subject ASC, class_number ASC, created_at DESC")
+
+	// Получение курсов
+	err = query.Limit(limit).Offset(offset).Find(&courses).Error
+	if err != nil {
+		logger.Log.Errorf("Не удалось получить курсы: %v", err)
+		return nil, 0, err
+	}
+	logger.Log.Infof("Получено %d курсов из %d всего", len(courses), total)
 	return courses, int(total), nil
 }
 

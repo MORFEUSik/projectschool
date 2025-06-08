@@ -12,13 +12,14 @@ import toast from 'react-hot-toast';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 
-// Регистрация компонентов Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 interface Course {
   id: number;
   title: string;
   description: string;
+  subject: string;
+  class_number: number;
   teacher: { username: string };
 }
 
@@ -153,6 +154,12 @@ export default function CoursePage() {
 
       <Card className="mb-6">
         <p className="text-gray-700 mb-2">{course.description}</p>
+        <p className="text-sm text-gray-500 mb-2">
+          <strong>Предмет:</strong> {course.subject}
+        </p>
+        <p className="text-sm text-gray-500 mb-2">
+          <strong>Класс:</strong> {course.class_number}
+        </p>
         <p className="text-sm text-gray-500">
           <strong>Преподаватель:</strong> {course.teacher.username}
         </p>

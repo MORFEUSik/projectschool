@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
@@ -13,7 +14,7 @@ import (
 
 type CourseService interface {
 	Create(course *model.Course) error
-	List(limit, offset int) ([]model.Course, int, error)
+	List(limit, offset int, userID uint) ([]model.Course, int, error)
 	Get(id uint) (*model.Course, error)
 	PreloadTeacher(course *model.Course) error
 	Enroll(userID, courseID uint) error
@@ -50,6 +51,10 @@ func NewCourseService(
 
 func (s *courseService) Create(course *model.Course) error {
 	logger.Log.Infof("Creating course: %s", course.Title)
+	if err := course.Validate(); err != nil {
+		logger.Log.Errorf("Course validation failed: %v", err)
+		return fmt.Errorf("ошибка валидации: %v", err)
+	}
 	err := s.repo.Create(course)
 	if err != nil {
 		logger.Log.Errorf("Failed to create course: %v", err)
@@ -59,21 +64,61 @@ func (s *courseService) Create(course *model.Course) error {
 	return nil
 }
 
-func (s *courseService) List(limit, offset int) ([]model.Course, int, error) {
-	logger.Log.Infof("Fetching courses with limit %d, offset %d", limit, offset)
+func (s *courseService) List(limit, offset int, userID uint) ([]model.Course, int, error) {
+	logger.Log.Infof("Получение курсов с лимитом %d, смещением %d для пользователя %d", limit, offset, userID)
 	var courses []model.Course
 	var total int64
-	err := s.db.Model(&model.Course{}).Count(&total).Error
-	if err != nil {
-		logger.Log.Errorf("Failed to count courses: %v", err)
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Log.Errorf("Не удалось найти пользователя %d: %v", userID, err)
 		return nil, 0, err
 	}
-	err = s.db.Preload("Teacher").Limit(limit).Offset(offset).Find(&courses).Error
-	if err != nil {
-		logger.Log.Errorf("Failed to fetch courses: %v", err)
+
+	query := s.db.Model(&model.Course{}).Preload("Teacher")
+
+	// Фильтрация по class_number
+	var requestedClassNumber int
+	if classNumberStr := s.db.Statement.Context.Value("class_number"); classNumberStr != nil {
+		logger.Log.Infof("Получен class_number из контекста: %v", classNumberStr)
+		if num, err := strconv.Atoi(classNumberStr.(string)); err == nil && num >= 1 && num <= 11 {
+			requestedClassNumber = num
+			query = query.Where("class_number = ?", requestedClassNumber)
+			logger.Log.Infof("Применён фильтр: class_number=%d", requestedClassNumber)
+		} else {
+			logger.Log.Warnf("Некорректный class_number: %v", classNumberStr)
+		}
+	} else {
+		logger.Log.Info("class_number не указан в контексте")
+	}
+
+	// Для студентов: если class_number НЕ передан, используем их класс
+	if requestedClassNumber == 0 && user != nil && user.Role == model.Student && user.ClassNumber > 0 {
+		if user.ClassNumber > uint(11) {
+			logger.Log.Warnf("Некорректный номер класса для пользователя %d: %d", userID, user.ClassNumber)
+			return nil, 0, errors.New("Некорректный номер класса пользователя")
+		}
+		requestedClassNumber = int(user.ClassNumber)
+		query = query.Where("class_number = ?", requestedClassNumber)
+		logger.Log.Infof("Для студента применён фильтр по его классу: class_number=%d", requestedClassNumber)
+	}
+
+	// Подсчет общего количества курсов
+	if err := query.Count(&total).Error; err != nil {
+		logger.Log.Errorf("Не удалось подсчитать курсы: %v", err)
 		return nil, 0, err
 	}
-	logger.Log.Infof("Fetched %d courses out of %d total", len(courses), total)
+
+	// Сортировка по subject, class_number и created_at
+	query = query.Order("subject ASC, class_number ASC, created_at DESC")
+
+	// Получение курсов
+	err = query.Limit(limit).Offset(offset).Find(&courses).Error
+	if err != nil {
+		logger.Log.Errorf("Не удалось получить курсы: %v", err)
+		return nil, 0, err
+	}
+	logger.Log.Infof("Получено %d курсов из %d всего", len(courses), total)
 	return courses, int(total), nil
 }
 

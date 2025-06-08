@@ -1,11 +1,10 @@
 package handler
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
@@ -13,7 +12,6 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
@@ -21,6 +19,8 @@ import (
 type CreateCourseInput struct {
 	Title       string `json:"title" binding:"required,min=3,max=100" swaggertype:"string" example:"Math 101" description:"Название курса (обязательное, 3-100 символов)"`
 	Description string `json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание курса (опциональное)"`
+	Subject     string `json:"subject" binding:"required" swaggertype:"string" example:"Математика" description:"Предмет курса (обязательное)"`
+	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
 }
 
 // ListCourses возвращает список курсов
@@ -39,14 +39,29 @@ type CreateCourseInput struct {
 // @Router /courses [get]
 func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6")) // По умолчанию 6
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 		if limit < 1 || offset < 0 {
 			logger.Log.Errorf("Invalid pagination params: limit=%d, offset=%d", limit, offset)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверные параметры пагинации"})
 			return
 		}
-		courses, total, err := courseService.List(limit, offset)
+
+		userID, exists := c.Get("userID")
+		var uid uint
+		if exists {
+			uid = userID.(uint)
+		}
+
+		// Извлекаем class_number из query-параметров
+		classNumber := c.Query("class_number")
+		if classNumber != "" {
+			// Добавляем class_number в контекст для сервиса
+			ctx := context.WithValue(c.Request.Context(), "class_number", classNumber)
+			c.Request = c.Request.WithContext(ctx)
+		}
+
+		courses, total, err := courseService.List(limit, offset, uid)
 		if err != nil {
 			logger.Log.Errorf("Failed to list courses: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения курсов"})
@@ -95,33 +110,19 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 		course := model.Course{
 			Title:       input.Title,
 			Description: input.Description,
+			Subject:     input.Subject,
+			ClassNumber: input.ClassNumber,
 			TeacherID:   userID.(uint),
 		}
 
 		logger.Log.Infof("Creating course: %+v", course)
 
-		// Валидация
-		if err := course.Validate(); err != nil {
-			logger.Log.Errorf("Course validation failed: %v", err)
-			validationErrors := make([]string, 0)
-			if errs, ok := err.(validator.ValidationErrors); ok {
-				for _, e := range errs {
-					validationErrors = append(validationErrors, fmt.Sprintf("Поле %s: %s", e.Field(), e.Tag()))
-				}
-			} else {
-				validationErrors = append(validationErrors, err.Error())
-			}
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: strings.Join(validationErrors, "; ")})
-			return
-		}
-
 		if err := courseService.Create(&course); err != nil {
 			logger.Log.Errorf("Failed to create course: %v", err)
-			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: err.Error()})
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
 			return
 		}
 
-		// Подгружаем данные учителя
 		if err := courseService.PreloadTeacher(&course); err != nil {
 			logger.Log.Errorf("Failed to preload teacher for course %d: %v", course.ID, err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка загрузки данных преподавателя"})
