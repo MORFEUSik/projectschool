@@ -27,6 +27,7 @@ type User struct {
 	Points      uint      `gorm:"default:0" json:"points"`
 	CreatedAt   time.Time `gorm:"default:current_timestamp" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"default:current_timestamp" json:"updated_at"`
+	AvatarURL   string    `json:"avatar_url"`
 }
 
 func (u *User) Validate() error {

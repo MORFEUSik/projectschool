@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
@@ -7,6 +8,8 @@ import { Input } from '@/shared/ui/Input';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 import Link from 'next/link';
+import { AvatarModal } from '@/widgets/AvatarModal';
+import { avatarOptions } from '@/shared/constants/avatars';
 
 interface ErrorResponse {
   error?: string;
@@ -17,14 +20,15 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState(''); // Добавляем ФИО
+  const [fullName, setFullName] = useState('');
   const [editError, setEditError] = useState('');
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
       setUsername(user.username);
       setEmail(user.email);
-      setFullName(user.full_name || ''); // Устанавливаем ФИО
+      setFullName(user.full_name || '');
     }
   }, [user]);
 
@@ -32,13 +36,17 @@ export default function ProfilePage() {
     e.preventDefault();
     setEditError('');
     try {
-      await api.put('/users/me', { username, email, full_name: fullName }); // Добавляем ФИО
+      await api.put('/users/me', { username, email, full_name: fullName });
       await refetch();
       setIsEditing(false);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       setEditError(axiosError.response?.data?.error || 'Ошибка обновления профиля');
     }
+  };
+
+  const handleAvatarUpdate = async (url: string) => {
+    await refetch();
   };
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
@@ -48,6 +56,18 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl mx-auto mt-12 px-4">
       <h1 className="text-4xl font-extrabold text-center mb-8 text-blue-600">Профиль</h1>
+
+      <Card className="p-6 mb-6">
+        <h2 className="text-xl font-bold mb-4">Аватар</h2>
+        <div className="flex items-center gap-4">
+          <img
+            src={user?.avatar_url || avatarOptions[0]}
+            alt="avatar"
+            className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover"
+          />
+          <Button onClick={() => setAvatarModalOpen(true)}>Выбрать аватар</Button>
+        </div>
+      </Card>
 
       <Card>
         {isEditing ? (
@@ -101,7 +121,7 @@ export default function ProfilePage() {
         ) : (
           <div className="space-y-2 text-gray-800 dark:text-gray-100">
             <p><strong>Имя:</strong> {user.username}</p>
-            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>} {/* Отображаем ФИО */}
+            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>}
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Роль:</strong> {user.role}</p>
             {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}
@@ -116,6 +136,13 @@ export default function ProfilePage() {
           </div>
         )}
       </Card>
+
+      <AvatarModal
+        isOpen={avatarModalOpen}
+        onClose={() => setAvatarModalOpen(false)}
+        currentAvatar={user?.avatar_url}
+        onAvatarUpdate={handleAvatarUpdate}
+      />
     </div>
   );
 }

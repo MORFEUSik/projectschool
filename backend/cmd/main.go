@@ -123,6 +123,7 @@ func main() {
 			protected.POST("/assignments/upload", handler.UploadFile())
 			protected.GET("/users/me", handler.GetProfile(userService))
 			protected.PUT("/users/me", handler.UpdateProfile(userService))
+			protected.PUT("/users/me/avatar", handler.UpdateUserAvatar)
 			protected.GET("/notifications", handler.GetNotifications(notificationService))
 			protected.PUT("/notifications/:id/read", handler.MarkNotificationAsRead(notificationService))
 			protected.GET("/users/me/submissions", handler.GetUserSubmissions(submissionService))
