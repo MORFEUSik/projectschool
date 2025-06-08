@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 
+	"time"
+
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"time"
 )
 
 type UserService interface {
@@ -20,7 +21,7 @@ type UserService interface {
 	GetProfile(userID uint) (*model.User, error)
 	GetLeaderboard(courseID uint) ([]model.User, error)
 	UpdateRole(userID, adminID uint, role model.Role) error
-	UpdateProfile(userID uint, username, email string) error
+	UpdateProfile(userID uint, username, email, fullName string) error
 	ListAll() ([]model.User, error)
 	GetAchievements(userID uint) ([]model.UserAchievement, error)
 }
@@ -251,13 +252,14 @@ func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 	return nil
 }
 
-func (s *userService) UpdateProfile(userID uint, username, email string) error {
+func (s *userService) UpdateProfile(userID uint, username, email, fullName string) error {
 	user, err := s.repo.FindByID(userID)
 	if err != nil {
 		return err
 	}
 	user.Username = username
 	user.Email = email
+	user.FullName = fullName
 	if err := user.Validate(); err != nil {
 		return err
 	}

@@ -22,6 +22,7 @@ type SubmissionService interface {
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
 	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error)
+	GetByCourse(courseID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
@@ -467,4 +468,22 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		userID, assignmentID, grade, totalScore, responseAnswers)
 
 	return response, nil
+}
+
+func (s *submissionService) GetByCourse(courseID uint) ([]model.Submission, error) {
+	logger.Log.Infof("Fetching submissions for course %d", courseID)
+
+	var submissions []model.Submission
+	err := s.db.Preload("User").
+		Preload("Assignment").
+		Preload("Assignment.Course").
+		Joins("JOIN assignments ON submissions.assignment_id = assignments.id").
+		Where("assignments.course_id = ?", courseID).
+		Find(&submissions).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for course %d: %v", courseID, err)
+		return nil, err
+	}
+
+	return submissions, nil
 }

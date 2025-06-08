@@ -17,12 +17,14 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState(''); // Добавляем ФИО
   const [editError, setEditError] = useState('');
 
   useEffect(() => {
     if (user) {
       setUsername(user.username);
       setEmail(user.email);
+      setFullName(user.full_name || ''); // Устанавливаем ФИО
     }
   }, [user]);
 
@@ -30,7 +32,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setEditError('');
     try {
-      await api.put('/users/me', { username, email });
+      await api.put('/users/me', { username, email, full_name: fullName }); // Добавляем ФИО
       await refetch();
       setIsEditing(false);
     } catch (err: unknown) {
@@ -65,6 +67,18 @@ export default function ProfilePage() {
             </div>
 
             <div>
+              <label htmlFor="fullName" className="block text-sm font-medium mb-1">
+                ФИО
+              </label>
+              <Input
+                id="fullName"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">
                 Email
               </label>
@@ -87,6 +101,7 @@ export default function ProfilePage() {
         ) : (
           <div className="space-y-2 text-gray-800 dark:text-gray-100">
             <p><strong>Имя:</strong> {user.username}</p>
+            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>} {/* Отображаем ФИО */}
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Роль:</strong> {user.role}</p>
             {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}

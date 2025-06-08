@@ -110,12 +110,12 @@ func UpdateRole(userService service.UserService) gin.HandlerFunc {
 
 // UpdateProfile обновляет профиль пользователя
 // @Summary Обновить профиль пользователя
-// @Description Обновляет имя и email текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Description Обновляет имя, email и ФИО текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags users
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param body body object true "Данные профиля" example={"username":"newname","email":"newemail@example.com"}
+// @Param body body object true "Данные профиля" example={"username":"newname","email":"newemail@example.com","full_name":"Иванов Иван Иванович"}
 // @Success 200 {object} map[string]string "message"
 // @Failure 400 {object} errorpkg.APIError
 // @Failure 401 {object} errorpkg.APIError
@@ -133,6 +133,7 @@ func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 		var input struct {
 			Username string `json:"username" binding:"required,min=3,max=50"`
 			Email    string `json:"email" binding:"required,email"`
+			FullName string `json:"full_name" binding:"omitempty,min=5,max=255"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -140,7 +141,7 @@ func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 			return
 		}
 
-		if err := userService.UpdateProfile(userID.(uint), input.Username, input.Email); err != nil {
+		if err := userService.UpdateProfile(userID.(uint), input.Username, input.Email, input.FullName); err != nil {
 			logger.Log.Errorf("Failed to update profile: %v", err)
 			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: err.Error()})
 			return
@@ -180,7 +181,7 @@ func ListUsers(userService service.UserService) gin.HandlerFunc {
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param body body object true "Данные пользователя" example={"email":"newuser@example.com","password":"password123","role":"teacher"}
+// @Param body body object true "Данные пользователя" example={"email":"newuser@example.com","password":"password123","role":"teacher","full_name":"Иванов Иван Иванович"}
 // @Success 200 {object} map[string]string "message"
 // @Failure 400 {object} errorpkg.APIError
 // @Failure 401 {object} errorpkg.APIError
@@ -200,6 +201,7 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 			Email    string     `json:"email" binding:"required,email"`
 			Password string     `json:"password" binding:"required,min=6"`
 			Role     model.Role `json:"role" binding:"required,oneof=teacher admin"`
+			FullName string     `json:"full_name" binding:"required,min=5,max=255"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -211,7 +213,8 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 			Email:    input.Email,
 			Password: input.Password,
 			Role:     input.Role,
-			Username: input.Email[:strings.Index(input.Email, "@")], // Генерируем username из email
+			Username: input.Email[:strings.Index(input.Email, "@")],
+			FullName: input.FullName,
 		}
 
 		logger.Log.Infof("Admin %d attempting to register user %s", userID, input.Email)

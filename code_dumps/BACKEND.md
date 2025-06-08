@@ -262,7 +262,7 @@ type AuthService interface {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param user body object true "Данные пользователя" example={"username":"testuser","email":"test@example.com","password":"password123","role":"student","class_number":5}
+// @Param user body object true "Данные пользователя" example={"username":"testuser","email":"test@example.com","password":"password123","role":"student","class_number":5,"full_name":"Иванов Иван Иванович"}
 // @Success 200 {object} map[string]interface{} "message, token"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
@@ -270,8 +270,12 @@ type AuthService interface {
 func Register(service AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {
-			model.User
-			ClassNumber uint `json:"class_number"`
+			Username    string     `json:"username" binding:"required,min=3,max=50"`
+			Email       string     `json:"email" binding:"required,email"`
+			Password    string     `json:"password" binding:"required,min=6"`
+			Role        model.Role `json:"role" binding:"required,oneof=student"`
+			ClassNumber uint       `json:"class_number" binding:"required,gte=1,lte=11"`
+			FullName    string     `json:"full_name" binding:"omitempty,min=5,max=255"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -285,11 +289,12 @@ func Register(service AuthService) gin.HandlerFunc {
 			Password:    input.Password,
 			Role:        input.Role,
 			ClassNumber: input.ClassNumber,
-			Points:      0, // Устанавливаем по умолчанию, как в модели
+			FullName:    input.FullName,
+			Points:      0,
 		}
 
-		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, class_number=%d",
-			user.Username, user.Email, user.Role, user.ClassNumber)
+		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, class_number=%d, full_name=%s",
+			user.Username, user.Email, user.Role, user.ClassNumber, user.FullName)
 
 		// Валидация структуры User
 		validate := validator.New()
@@ -509,13 +514,13 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 			return
 		}
 
-		// Проверка роли
 		var user model.User
 		if err := db.DB.First(&user, userID).Error; err != nil {
 			logger.Log.Errorf("User %d not found: %v", userID, err)
 			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не найден"})
 			return
 		}
+
 		if user.Role != model.Teacher && user.Role != model.Admin {
 			logger.Log.Warnf("User %d does not have permission to list submissions", userID)
 			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Нет прав для просмотра решений"})
@@ -524,6 +529,7 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 
 		assignmentIDStr := c.Query("assignment_id")
 		userIDStr := c.Query("user_id")
+		courseIDStr := c.Query("course_id")
 
 		var response []map[string]interface{}
 
@@ -544,22 +550,7 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Внутренняя ошибка сервера"})
 				return
 			}
-			// Формируем ответ с дополнительными полями
-			response = make([]map[string]interface{}, len(submissions))
-			for i, sub := range submissions {
-				response[i] = map[string]interface{}{
-					"id":               sub.ID,
-					"user_id":          sub.UserID,
-					"username":         sub.User.Username,
-					"content":          sub.Content,
-					"score":            sub.Grade,
-					"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
-					"assignment_id":    sub.AssignmentID,
-					"assignment_title": sub.Assignment.Title,
-					"course_id":        sub.Assignment.CourseID,
-					"course_title":     sub.Assignment.Course.Title,
-				}
-			}
+			response = makeSubmissionResponse(submissions)
 		} else if userIDStr != "" {
 			userIDQuery, err := strconv.Atoi(userIDStr)
 			if err != nil {
@@ -573,31 +564,50 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Внутренняя ошибка сервера"})
 				return
 			}
-			// Формируем ответ с дополнительными полями
-			response = make([]map[string]interface{}, len(submissions))
-			for i, sub := range submissions {
-				response[i] = map[string]interface{}{
-					"id":               sub.ID,
-					"user_id":          sub.UserID,
-					"username":         sub.User.Username,
-					"content":          sub.Content,
-					"score":            sub.Grade,
-					"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
-					"assignment_id":    sub.AssignmentID,
-					"assignment_title": sub.Assignment.Title,
-					"course_id":        sub.Assignment.CourseID,
-					"course_title":     sub.Assignment.Course.Title,
-				}
+			response = makeSubmissionResponse(submissions)
+		} else if courseIDStr != "" {
+			courseID, err := strconv.Atoi(courseIDStr)
+			if err != nil {
+				logger.Log.Errorf("Invalid course_id: %v", err)
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный course_id"})
+				return
 			}
+			submissions, err := submissionService.GetByCourse(uint(courseID))
+			if err != nil {
+				logger.Log.Errorf("Failed to get submissions for course %d: %v", courseID, err)
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений по курсу"})
+				return
+			}
+			response = makeSubmissionResponse(submissions)
 		} else {
-			logger.Log.Error("Missing assignment_id or user_id")
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Требуется assignment_id или user_id"})
+			logger.Log.Error("Missing assignment_id, user_id, or course_id")
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Требуется assignment_id, user_id или course_id"})
 			return
 		}
 
 		logger.Log.Infof("Returning %d submissions", len(response))
 		c.JSON(http.StatusOK, response)
 	}
+}
+
+// Вспомогательная функция для форматирования ответов
+func makeSubmissionResponse(submissions []model.Submission) []map[string]interface{} {
+	response := make([]map[string]interface{}, len(submissions))
+	for i, sub := range submissions {
+		response[i] = map[string]interface{}{
+			"id":               sub.ID,
+			"user_id":          sub.UserID,
+			"username":         sub.User.Username,
+			"content":          sub.Content,
+			"score":            sub.Grade,
+			"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			"assignment_id":    sub.AssignmentID,
+			"assignment_title": sub.Assignment.Title,
+			"course_id":        sub.Assignment.CourseID,
+			"course_title":     sub.Assignment.Course.Title,
+		}
+	}
+	return response
 }
 
 // GetUserSubmissions возвращает список решений текущего пользователя
@@ -820,12 +830,12 @@ func UpdateRole(userService service.UserService) gin.HandlerFunc {
 
 // UpdateProfile обновляет профиль пользователя
 // @Summary Обновить профиль пользователя
-// @Description Обновляет имя и email текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Description Обновляет имя, email и ФИО текущего пользователя. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags users
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param body body object true "Данные профиля" example={"username":"newname","email":"newemail@example.com"}
+// @Param body body object true "Данные профиля" example={"username":"newname","email":"newemail@example.com","full_name":"Иванов Иван Иванович"}
 // @Success 200 {object} map[string]string "message"
 // @Failure 400 {object} errorpkg.APIError
 // @Failure 401 {object} errorpkg.APIError
@@ -843,6 +853,7 @@ func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 		var input struct {
 			Username string `json:"username" binding:"required,min=3,max=50"`
 			Email    string `json:"email" binding:"required,email"`
+			FullName string `json:"full_name" binding:"omitempty,min=5,max=255"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -850,7 +861,7 @@ func UpdateProfile(userService service.UserService) gin.HandlerFunc {
 			return
 		}
 
-		if err := userService.UpdateProfile(userID.(uint), input.Username, input.Email); err != nil {
+		if err := userService.UpdateProfile(userID.(uint), input.Username, input.Email, input.FullName); err != nil {
 			logger.Log.Errorf("Failed to update profile: %v", err)
 			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: err.Error()})
 			return
@@ -890,7 +901,7 @@ func ListUsers(userService service.UserService) gin.HandlerFunc {
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param body body object true "Данные пользователя" example={"email":"newuser@example.com","password":"password123","role":"teacher"}
+// @Param body body object true "Данные пользователя" example={"email":"newuser@example.com","password":"password123","role":"teacher","full_name":"Иванов Иван Иванович"}
 // @Success 200 {object} map[string]string "message"
 // @Failure 400 {object} errorpkg.APIError
 // @Failure 401 {object} errorpkg.APIError
@@ -910,6 +921,7 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 			Email    string     `json:"email" binding:"required,email"`
 			Password string     `json:"password" binding:"required,min=6"`
 			Role     model.Role `json:"role" binding:"required,oneof=teacher admin"`
+			FullName string     `json:"full_name" binding:"required,min=5,max=255"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -921,7 +933,8 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 			Email:    input.Email,
 			Password: input.Password,
 			Role:     input.Role,
-			Username: input.Email[:strings.Index(input.Email, "@")], // Генерируем username из email
+			Username: input.Email[:strings.Index(input.Email, "@")],
+			FullName: input.FullName,
 		}
 
 		logger.Log.Infof("Admin %d attempting to register user %s", userID, input.Email)
@@ -2414,8 +2427,9 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
-	errorpkg "github.com/MORFEUSik/projectschool/backend/internal/error"
+	"github.com/MORFEUSik/projectschool/backend/internal/error" // Исправлен импорт
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
@@ -2430,22 +2444,22 @@ import (
 // @Produce json
 // @Security BearerAuth
 // @Success 200 {array} model.UserAchievement
-// @Failure 401 {object} errorpkg.APIError
-// @Failure 500 {object} errorpkg.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 500 {object} error.APIError
 // @Router /users/me/achievements [get]
 func GetMyAchievements(userService service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
 		if !exists {
 			logger.Log.Error("UserID not found in context")
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
 			return
 		}
 
 		achievements, err := userService.GetAchievements(userID.(uint))
 		if err != nil {
 			logger.Log.Errorf("Ошибка при получении достижений: %v", err)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Не удалось получить достижения"})
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось получить достижения"})
 			return
 		}
 
@@ -2461,15 +2475,15 @@ func GetMyAchievements(userService service.UserService) gin.HandlerFunc {
 // @Produce json
 // @Security BearerAuth
 // @Success 200 {array} model.GlobalAchievement
-// @Failure 401 {object} errorpkg.APIError
-// @Failure 500 {object} errorpkg.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 500 {object} error.APIError
 // @Router /achievements [get]
 func ListAchievements(achievementService service.AchievementService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		achievements, err := achievementService.ListAll()
 		if err != nil {
 			logger.Log.Errorf("Failed to list achievements: %v", err)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения достижений"})
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения достижений"})
 			return
 		}
 
@@ -2486,17 +2500,17 @@ func ListAchievements(achievementService service.AchievementService) gin.Handler
 // @Security BearerAuth
 // @Param body body object true "Данные достижения" example={"title":"Новое достижение","description":"Описание достижения","condition":"points_100"}
 // @Success 200 {object} map[string]string "message"
-// @Failure 400 {object} errorpkg.APIError
-// @Failure 401 {object} errorpkg.APIError
-// @Failure 403 {object} errorpkg.APIError
-// @Failure 500 {object} errorpkg.APIError
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
 // @Router /achievements [post]
 func CreateAchievement(achievementService service.AchievementService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
 		if !exists {
 			logger.Log.Error("UserID not found in context")
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
 			return
 		}
 
@@ -2507,7 +2521,7 @@ func CreateAchievement(achievementService service.AchievementService) gin.Handle
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
 			return
 		}
 
@@ -2521,17 +2535,135 @@ func CreateAchievement(achievementService service.AchievementService) gin.Handle
 		if err := achievementService.Create(achievement, userID.(uint)); err != nil {
 			logger.Log.Errorf("Failed to create achievement: %v", err)
 			if err.Error() == "название или условие достижения не может быть пустым" {
-				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
 			} else if err.Error() == "админ не найден" || err.Error() == "недостаточно прав" {
-				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+				error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: err.Error()})
 			} else {
-				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка создания достижения"})
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка создания достижения"})
 			}
 			return
 		}
 
 		logger.Log.Infof("Achievement %s created by admin %d", input.Title, userID)
 		c.JSON(http.StatusOK, gin.H{"message": "Достижение создано"})
+	}
+}
+
+// UpdateAchievement обновляет существующее достижение
+// @Summary Обновить достижение
+// @Description Обновляет данные достижения по ID. Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags achievements
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID достижения"
+// @Param body body object true "Данные достижения" example={"title":"Обновленное достижение","description":"Новое описание","condition":"points_500"}
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 404 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /achievements/{id} [put]
+func UpdateAchievement(achievementService service.AchievementService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid achievement ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID достижения"})
+			return
+		}
+
+		var input struct {
+			Title       string `json:"title" binding:"required,min=3,max=100"`
+			Description string `json:"description" binding:"required,min=3,max=255"`
+			Condition   string `json:"condition" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			logger.Log.Errorf("Failed to bind JSON: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный формат данных"})
+			return
+		}
+
+		achievement := &model.GlobalAchievement{
+			Title:       input.Title,
+			Description: input.Description,
+			Condition:   input.Condition,
+		}
+
+		logger.Log.Infof("Admin %d attempting to update achievement %d", userID, id)
+		if err := achievementService.Update(uint(id), achievement, userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to update achievement: %v", err)
+			if err.Error() == "название или условие достижения не может быть пустым" {
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: err.Error()})
+			} else if err.Error() == "достижение не найдено" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: err.Error()})
+			} else if err.Error() == "админ не найден" || err.Error() == "недостаточно прав" {
+				error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка обновления достижения"})
+			}
+			return
+		}
+
+		logger.Log.Infof("Achievement %d updated by admin %d", id, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Достижение обновлено"})
+	}
+}
+
+// DeleteAchievement удаляет достижение
+// @Summary Удалить достижение
+// @Description Удаляет достижение по ID. Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags achievements
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID достижения"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 404 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /achievements/{id} [delete]
+func DeleteAchievement(achievementService service.AchievementService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid achievement ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID достижения"})
+			return
+		}
+
+		logger.Log.Infof("Admin %d attempting to delete achievement %d", userID, id)
+		if err := achievementService.Delete(uint(id), userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to delete achievement: %v", err)
+			if err.Error() == "достижение не найдено" {
+				error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: err.Error()})
+			} else if err.Error() == "админ не найден" || err.Error() == "недостаточно прав" {
+				error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка удаления достижения"})
+			}
+			return
+		}
+
+		logger.Log.Infof("Achievement %d deleted by admin %d", id, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Достижение удалено"})
 	}
 }
 
@@ -2735,6 +2867,7 @@ const (
 type User struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Username    string    `gorm:"unique;not null" validate:"required,min=3,max=50" json:"username"`
+	FullName    string    `gorm:"type:varchar(255)" validate:"omitempty,min=5,max=255" json:"full_name"` // Убираем required
 	Email       string    `gorm:"unique;not null" validate:"required,email" json:"email"`
 	Password    string    `gorm:"type:varchar(255);" validate:"omitempty,min=8,max=255" json:"password,omitempty"`
 	Role        Role      `gorm:"type:varchar(50);not null;default:student" validate:"required,oneof=student teacher admin" json:"role"`
@@ -2756,6 +2889,9 @@ func (u *User) Validate() error {
 	}
 	if u.Role != Student && u.ClassNumber != 0 {
 		return fmt.Errorf("номер класса указывается только для студентов")
+	}
+	if (u.Role == Teacher || u.Role == Admin) && u.FullName == "" {
+		return fmt.Errorf("для учителей и админов необходимо указать ФИО")
 	}
 	return nil
 }
@@ -3771,6 +3907,7 @@ type SubmissionService interface {
 	GetByUserID(userID uint) ([]model.Submission, error)
 	GetByAssignment(assignmentID uint) ([]model.Submission, error)
 	GetUserSubmissions(ctx context.Context, userID uint) ([]model.Submission, error)
+	GetByCourse(courseID uint) ([]model.Submission, error)
 }
 
 type submissionService struct {
@@ -4218,6 +4355,24 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	return response, nil
 }
 
+func (s *submissionService) GetByCourse(courseID uint) ([]model.Submission, error) {
+	logger.Log.Infof("Fetching submissions for course %d", courseID)
+
+	var submissions []model.Submission
+	err := s.db.Preload("User").
+		Preload("Assignment").
+		Preload("Assignment.Course").
+		Joins("JOIN assignments ON submissions.assignment_id = assignments.id").
+		Where("assignments.course_id = ?", courseID).
+		Find(&submissions).Error
+	if err != nil {
+		logger.Log.Errorf("Failed to fetch submissions for course %d: %v", courseID, err)
+		return nil, err
+	}
+
+	return submissions, nil
+}
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -4263,13 +4418,14 @@ import (
 	"errors"
 	"fmt"
 
+	"time"
+
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"time"
 )
 
 type UserService interface {
@@ -4279,7 +4435,7 @@ type UserService interface {
 	GetProfile(userID uint) (*model.User, error)
 	GetLeaderboard(courseID uint) ([]model.User, error)
 	UpdateRole(userID, adminID uint, role model.Role) error
-	UpdateProfile(userID uint, username, email string) error
+	UpdateProfile(userID uint, username, email, fullName string) error
 	ListAll() ([]model.User, error)
 	GetAchievements(userID uint) ([]model.UserAchievement, error)
 }
@@ -4510,13 +4666,14 @@ func (s *userService) UpdateRole(userID, adminID uint, role model.Role) error {
 	return nil
 }
 
-func (s *userService) UpdateProfile(userID uint, username, email string) error {
+func (s *userService) UpdateProfile(userID uint, username, email, fullName string) error {
 	user, err := s.repo.FindByID(userID)
 	if err != nil {
 		return err
 	}
 	user.Username = username
 	user.Email = email
+	user.FullName = fullName
 	if err := user.Validate(); err != nil {
 		return err
 	}
@@ -5204,6 +5361,7 @@ type AchievementService interface {
 	AwardAchievements(userID uint, points uint, submissions []model.Submission, courseCount int) ([]model.GlobalAchievement, error)
 	Create(achievement *model.GlobalAchievement, adminID uint) error
 	Update(achievementID uint, achievement *model.GlobalAchievement, adminID uint) error
+	Delete(achievementID uint, adminID uint) error
 	ListAll() ([]model.GlobalAchievement, error)
 }
 
@@ -5319,8 +5477,12 @@ func (s *achievementService) Create(achievement *model.GlobalAchievement, adminI
 		Details:   "Админ создал достижение: " + achievement.Title,
 		CreatedAt: time.Now(),
 	}
-	if err := s.logRepo.Create(log); err != nil {
-		logger.Log.Errorf("Failed to create action log: %v", err)
+	if s.logRepo != nil {
+		if err := s.logRepo.Create(log); err != nil {
+			logger.Log.Errorf("Failed to create action log: %v", err)
+		}
+	} else {
+		logger.Log.Warnf("logRepo is nil, skipping action log creation")
 	}
 	return nil
 }
@@ -5367,8 +5529,12 @@ func (s *achievementService) Update(achievementID uint, achievement *model.Globa
 		Details:   "Админ обновил достижение: " + achievement.Title,
 		CreatedAt: time.Now(),
 	}
-	if err := s.logRepo.Create(log); err != nil {
-		logger.Log.Errorf("Failed to create action log: %v", err)
+	if s.logRepo != nil {
+		if err := s.logRepo.Create(log); err != nil {
+			logger.Log.Errorf("Failed to create action log: %v", err)
+		}
+	} else {
+		logger.Log.Warnf("logRepo is nil, skipping action log creation")
 	}
 	return nil
 }
@@ -5385,10 +5551,59 @@ func (s *achievementService) ListAll() ([]model.GlobalAchievement, error) {
 		Details:   "Запрошен список всех достижений",
 		CreatedAt: time.Now(),
 	}
-	if err := s.logRepo.Create(log); err != nil {
-		logger.Log.Errorf("Failed to create action log: %v", err)
+	if s.logRepo != nil {
+		if err := s.logRepo.Create(log); err != nil {
+			logger.Log.Errorf("Failed to create action log: %v", err)
+		}
+	} else {
+		logger.Log.Warnf("logRepo is nil, skipping action log creation")
 	}
 	return achievements, nil
+}
+
+func (s *achievementService) Delete(achievementID uint, adminID uint) error {
+	logger.Log.Infof("Admin %d deleting achievement %d", adminID, achievementID)
+
+	admin, err := s.userRepo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	var achievement model.GlobalAchievement
+	if err := s.db.First(&achievement, achievementID).Error; err != nil {
+		logger.Log.Errorf("Achievement %d not found: %v", achievementID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("достижение не найдено")
+		}
+		return err
+	}
+
+	// Удаление записи из global_achievements (user_achievements удаляются автоматически благодаря ON DELETE CASCADE)
+	if err := s.db.Delete(&achievement).Error; err != nil {
+		logger.Log.Errorf("Failed to delete achievement %d: %v", achievementID, err)
+		return err
+	}
+
+	logger.Log.Infof("Achievement %d deleted by admin %d", achievementID, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "delete_achievement",
+		Details:   "Админ удалил достижение: " + achievement.Title,
+		CreatedAt: time.Now(),
+	}
+	if s.logRepo != nil {
+		if err := s.logRepo.Create(log); err != nil {
+			logger.Log.Errorf("Failed to create action log: %v", err)
+		}
+	} else {
+		logger.Log.Warnf("logRepo is nil, skipping action log creation")
+	}
+	return nil
 }
 
 
@@ -5533,8 +5748,8 @@ func main() {
 	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
 	subtaskService := service.NewSubtaskService(db.DB)
-	actionLogService := service.NewActionLogService(logRepo, db.DB)               // Добавляем ActionLogService
-	achievementService := service.NewAchievementService(db.DB, userRepo, logRepo) // Добавляем AchievementService
+	actionLogService := service.NewActionLogService(logRepo, db.DB)
+	achievementService := service.NewAchievementService(db.DB, userRepo, logRepo)
 
 	// Настройка CRON для проверки дедлайнов
 	c := cron.New()
@@ -5570,15 +5785,17 @@ func main() {
 			// Админ-маршруты
 			admin := protected.Group("/admin", handler.RoleMiddleware(model.Admin))
 			{
-				admin.GET("/logs", handler.GetActionLogs(actionLogService))                 // Эндпоинт для логов
-				admin.POST("/create-user", handler.AdminRegister(authService, userService)) // Эндпоинт для создания пользователя
+				admin.GET("/logs", handler.GetActionLogs(actionLogService))
+				admin.POST("/create-user", handler.AdminRegister(authService, userService))
 			}
 
 			// Достижения
 			achievements := protected.Group("/achievements")
 			{
-				achievements.GET("", handler.ListAchievements(achievementService))                                        // Получение всех достижений
-				achievements.POST("", handler.RoleMiddleware(model.Admin), handler.CreateAchievement(achievementService)) // Создание достижения
+				achievements.GET("", handler.ListAchievements(achievementService))
+				achievements.POST("", handler.RoleMiddleware(model.Admin), handler.CreateAchievement(achievementService))
+				achievements.PUT("/:id", handler.RoleMiddleware(model.Admin), handler.UpdateAchievement(achievementService))
+				achievements.DELETE("/:id", handler.RoleMiddleware(model.Admin), handler.DeleteAchievement(achievementService))
 			}
 
 			courses := protected.Group("/courses")

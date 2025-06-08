@@ -121,13 +121,13 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 			return
 		}
 
-		// Проверка роли
 		var user model.User
 		if err := db.DB.First(&user, userID).Error; err != nil {
 			logger.Log.Errorf("User %d not found: %v", userID, err)
 			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не найден"})
 			return
 		}
+
 		if user.Role != model.Teacher && user.Role != model.Admin {
 			logger.Log.Warnf("User %d does not have permission to list submissions", userID)
 			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Нет прав для просмотра решений"})
@@ -136,6 +136,7 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 
 		assignmentIDStr := c.Query("assignment_id")
 		userIDStr := c.Query("user_id")
+		courseIDStr := c.Query("course_id")
 
 		var response []map[string]interface{}
 
@@ -156,22 +157,7 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Внутренняя ошибка сервера"})
 				return
 			}
-			// Формируем ответ с дополнительными полями
-			response = make([]map[string]interface{}, len(submissions))
-			for i, sub := range submissions {
-				response[i] = map[string]interface{}{
-					"id":               sub.ID,
-					"user_id":          sub.UserID,
-					"username":         sub.User.Username,
-					"content":          sub.Content,
-					"score":            sub.Grade,
-					"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
-					"assignment_id":    sub.AssignmentID,
-					"assignment_title": sub.Assignment.Title,
-					"course_id":        sub.Assignment.CourseID,
-					"course_title":     sub.Assignment.Course.Title,
-				}
-			}
+			response = makeSubmissionResponse(submissions)
 		} else if userIDStr != "" {
 			userIDQuery, err := strconv.Atoi(userIDStr)
 			if err != nil {
@@ -185,31 +171,50 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Внутренняя ошибка сервера"})
 				return
 			}
-			// Формируем ответ с дополнительными полями
-			response = make([]map[string]interface{}, len(submissions))
-			for i, sub := range submissions {
-				response[i] = map[string]interface{}{
-					"id":               sub.ID,
-					"user_id":          sub.UserID,
-					"username":         sub.User.Username,
-					"content":          sub.Content,
-					"score":            sub.Grade,
-					"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
-					"assignment_id":    sub.AssignmentID,
-					"assignment_title": sub.Assignment.Title,
-					"course_id":        sub.Assignment.CourseID,
-					"course_title":     sub.Assignment.Course.Title,
-				}
+			response = makeSubmissionResponse(submissions)
+		} else if courseIDStr != "" {
+			courseID, err := strconv.Atoi(courseIDStr)
+			if err != nil {
+				logger.Log.Errorf("Invalid course_id: %v", err)
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный course_id"})
+				return
 			}
+			submissions, err := submissionService.GetByCourse(uint(courseID))
+			if err != nil {
+				logger.Log.Errorf("Failed to get submissions for course %d: %v", courseID, err)
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений по курсу"})
+				return
+			}
+			response = makeSubmissionResponse(submissions)
 		} else {
-			logger.Log.Error("Missing assignment_id or user_id")
-			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Требуется assignment_id или user_id"})
+			logger.Log.Error("Missing assignment_id, user_id, or course_id")
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Требуется assignment_id, user_id или course_id"})
 			return
 		}
 
 		logger.Log.Infof("Returning %d submissions", len(response))
 		c.JSON(http.StatusOK, response)
 	}
+}
+
+// Вспомогательная функция для форматирования ответов
+func makeSubmissionResponse(submissions []model.Submission) []map[string]interface{} {
+	response := make([]map[string]interface{}, len(submissions))
+	for i, sub := range submissions {
+		response[i] = map[string]interface{}{
+			"id":               sub.ID,
+			"user_id":          sub.UserID,
+			"username":         sub.User.Username,
+			"content":          sub.Content,
+			"score":            sub.Grade,
+			"submitted_at":     sub.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			"assignment_id":    sub.AssignmentID,
+			"assignment_title": sub.Assignment.Title,
+			"course_id":        sub.Assignment.CourseID,
+			"course_title":     sub.Assignment.Course.Title,
+		}
+	}
+	return response
 }
 
 // GetUserSubmissions возвращает список решений текущего пользователя

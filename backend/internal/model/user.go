@@ -19,6 +19,7 @@ const (
 type User struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Username    string    `gorm:"unique;not null" validate:"required,min=3,max=50" json:"username"`
+	FullName    string    `gorm:"type:varchar(255)" validate:"omitempty,min=5,max=255" json:"full_name"` // Убираем required
 	Email       string    `gorm:"unique;not null" validate:"required,email" json:"email"`
 	Password    string    `gorm:"type:varchar(255);" validate:"omitempty,min=8,max=255" json:"password,omitempty"`
 	Role        Role      `gorm:"type:varchar(50);not null;default:student" validate:"required,oneof=student teacher admin" json:"role"`
@@ -40,6 +41,9 @@ func (u *User) Validate() error {
 	}
 	if u.Role != Student && u.ClassNumber != 0 {
 		return fmt.Errorf("номер класса указывается только для студентов")
+	}
+	if (u.Role == Teacher || u.Role == Admin) && u.FullName == "" {
+		return fmt.Errorf("для учителей и админов необходимо указать ФИО")
 	}
 	return nil
 }

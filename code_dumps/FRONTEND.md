@@ -20,6 +20,11 @@ frontend/
 │   │   ├── achievements
 │   │   │   └── page.tsx
 │   │   ├── admin
+│   │   │   ├── components
+│   │   │   │   ├── AchievementManagement.tsx
+│   │   │   │   ├── ActionLogs.tsx
+│   │   │   │   ├── CreateUserForm.tsx
+│   │   │   │   └── UserRoleForm.tsx
 │   │   │   └── page.tsx
 │   │   ├── auth
 │   │   │   ├── login
@@ -33,7 +38,9 @@ frontend/
 │   │   │   │   │   │   └── page.tsx
 │   │   │   │   │   └── new
 │   │   │   │   │       └── page.tsx
-│   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── submissions
+│   │   │   │       └── page.tsx
 │   │   │   └── page.tsx
 │   │   ├── favicon.ico
 │   │   ├── globals.css
@@ -176,17 +183,17 @@ export function useUser() {
 ║ frontend/src/entities/user/model.ts
 ════════════════════════════════════════════════════════════════════════════════
 
-// src/entities/user/model.ts
 export interface User {
-	id: number;
-	username: string;
-	email: string;
-	role: 'student' | 'teacher' | 'admin';
-	class_number?: number;
-	points: number;
-	created_at: string;
-	updated_at: string;
- }
+  id: number;
+  username: string;
+  email: string;
+  full_name?: string; // Добавляем ФИО
+  role: 'student' | 'teacher' | 'admin';
+  class_number?: number;
+  points: number;
+  created_at: string;
+  updated_at: string;
+}
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -593,7 +600,7 @@ interface Progress {
   completed_assignments: number;
   completion_rate: number | string;
   total_points: number | string;
-  completion_timeline?: { date: string; completed: number }[]; // Новый поле
+  completion_timeline?: { date: string; completed: number }[];
 }
 
 interface Stats {
@@ -601,7 +608,6 @@ interface Stats {
   average_grade: number;
   completion_rate: number;
 }
-
 
 interface ErrorResponse {
   error?: string;
@@ -621,32 +627,31 @@ export default function CoursePage() {
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressError, setProgressError] = useState('');
 
-const [stats, setStats] = useState<Stats | null>(null);
-const [statsLoading, setStatsLoading] = useState(false);
-const [statsError, setStatsError] = useState('');
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState('');
 
-	useEffect(() => {
-  async function fetchStats() {
-    if (!['teacher', 'admin'].includes(user?.role || '')) return;
-    setStatsLoading(true);
-    try {
-      const response = await api.get<Stats>(`/courses/${courseId}/stats`);
-      setStats(response.data);
-      setStatsError('');
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
-      setStatsError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setStatsLoading(false);
+  useEffect(() => {
+    async function fetchStats() {
+      if (!['teacher', 'admin'].includes(user?.role || '')) return;
+      setStatsLoading(true);
+      try {
+        const response = await api.get<Stats>(`/courses/${courseId}/stats`);
+        setStats(response.data);
+        setStatsError('');
+      } catch (err: unknown) {
+        const axiosError = err as AxiosError<ErrorResponse>;
+        const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
+        setStatsError(errorMessage);
+        toast.error(errorMessage);
+      } finally {
+        setStatsLoading(false);
+      }
     }
-  }
-  if (courseId) {
-    fetchStats();
-  }
-}, [courseId, user]);
-
+    if (courseId) {
+      fetchStats();
+    }
+  }, [courseId, user]);
 
   useEffect(() => {
     async function fetchCourse() {
@@ -702,7 +707,6 @@ const [statsError, setStatsError] = useState('');
   const completionRate = progress ? parseFloat(progress.completion_rate.toString()) : 0;
   const totalPoints = progress ? parseFloat(progress.total_points.toString()) : 0;
 
-  // Данные для графика
   const chartData = {
     labels: progress?.completion_timeline?.map((item) => item.date) || [],
     datasets: [
@@ -717,140 +721,288 @@ const [statsError, setStatsError] = useState('');
   };
 
   return (
-  <div className="max-w-5xl mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📘 {course.title}</h1>
+    <div className="max-w-5xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📘 {course.title}</h1>
 
-  <Card className="mb-6">
-    <p className="text-gray-700 mb-2">{course.description}</p>
-    <p className="text-sm text-gray-500">
-      <strong>Преподаватель:</strong> {course.teacher.username}
-    </p>
-  </Card>
-
-  {/* Статистика */}
-  {['teacher', 'admin'].includes(user?.role || '') && (
-    <Card className="mb-6">
-      <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
-      {statsLoading ? (
-        <p className="text-gray-500">Загрузка...</p>
-      ) : statsError ? (
-        <p className="text-red-500">{statsError}</p>
-      ) : stats ? (
-        <div className="grid sm:grid-cols-3 gap-4 text-center">
-          <div className="bg-gray-100 rounded-lg p-4">
-            <p className="text-sm text-gray-600">Студентов на курсе</p>
-            <p className="text-2xl font-bold">{stats.students_count}</p>
-          </div>
-          <div className="bg-gray-100 rounded-lg p-4">
-            <p className="text-sm text-gray-600">Средний балл</p>
-            <p className="text-2xl font-bold">{stats.average_grade.toFixed(2)}</p>
-          </div>
-          <div className="bg-gray-100 rounded-lg p-4">
-            <p className="text-sm text-gray-600">Завершено заданий</p>
-            <p className="text-2xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-gray-500">Нет данных</p>
-      )}
-    </Card>
-  )}
-
-  {/* Прогресс */}
-  {user?.role === 'student' && (
-    <Card className="mb-6">
-      <h2 className="text-xl font-semibold mb-4">📊 Прогресс</h2>
-      {progressLoading ? (
-        <p className="text-gray-500">Загрузка прогресса...</p>
-      ) : progressError ? (
-        <p className="text-red-500">{progressError}</p>
-      ) : progress ? (
-        progress.total_assignments === 0 ? (
-          <p className="text-gray-500">Заданий нет</p>
-        ) : (
-          <>
-            <div className="grid sm:grid-cols-3 gap-4 mb-4 text-center">
-              <div className="bg-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Сдано заданий</p>
-                <p className="text-2xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
-              </div>
-              <div className="bg-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Процент</p>
-                <p className="text-2xl font-bold">{completionRate.toFixed(1)}%</p>
-              </div>
-              <div className="bg-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Баллы</p>
-                <p className="text-2xl font-bold">{totalPoints.toFixed(1)}</p>
-              </div>
-            </div>
-            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
-              <div className="bg-blue-500 h-full" style={{ width: `${completionRate}%` }} />
-            </div>
-            {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
-              <div className="mt-6">
-                <Line data={chartData} options={{ responsive: true, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Динамика выполнения заданий' } }, scales: { y: { beginAtZero: true }, x: { title: { display: true, text: 'Дата' } } } }} />
-              </div>
-            )}
-          </>
-        )
-      ) : (
-        <p className="text-gray-500">Нет данных</p>
-      )}
-    </Card>
-  )}
-
-  {/* Задания */}
-  <div className="flex justify-between items-center mb-4">
-    <h2 className="text-2xl font-semibold">📝 Задания</h2>
-    {(user?.role === 'teacher' || user?.role === 'admin') && (
-      <Link href={`/courses/${courseId}/assignments/new`}>
-        <Button>Создать</Button>
-      </Link>
-    )}
-  </div>
-
-  <div className="space-y-4">
-    {assignments.map((assignment) => (
-      <Card key={assignment.id} className="p-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-semibold">{assignment.title}</h3>
-          <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
-            <Button variant="outline">Открыть</Button>
-          </Link>
-        </div>
-        <p className="mt-2 text-sm text-gray-700">{assignment.description}</p>
-        <p className="mt-2 text-sm text-gray-500">
-          <strong>Макс. балл:</strong> {assignment.max_score}
-        </p>
+      <Card className="mb-6">
+        <p className="text-gray-700 mb-2">{course.description}</p>
         <p className="text-sm text-gray-500">
-          <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
+          <strong>Преподаватель:</strong> {course.teacher.username}
         </p>
       </Card>
-    ))}
-  </div>
 
-  {user?.role === 'admin' && (
-    <Button
-      variant="destructive"
-      className="mt-6"
-      onClick={async () => {
-        if (confirm('Удалить курс?')) {
-          try {
-            await api.delete(`/courses/${courseId}`);
-            toast.success('Курс удалён');
-            window.location.href = '/courses';
-          } catch {
-            toast.error('Ошибка при удалении');
-          }
-        }
-      }}
-    >
-      Удалить курс
-    </Button>
-  )}
-</div>
-);
+      {['teacher', 'admin'].includes(user?.role || '') && (
+        <div className="mb-6 flex justify-end">
+          <Link href={`/courses/${courseId}/submissions`}>
+            <Button>Решения студентов</Button>
+          </Link>
+        </div>
+      )}
 
+      {['teacher', 'admin'].includes(user?.role || '') && (
+        <Card className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
+          {statsLoading ? (
+            <p className="text-gray-500">Загрузка...</p>
+          ) : statsError ? (
+            <p className="text-red-500">{statsError}</p>
+          ) : stats ? (
+            <div className="grid sm:grid-cols-3 gap-4 text-center">
+              <div className="bg-gray-100 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Студентов на курсе</p>
+                <p className="text-2xl font-bold">{stats.students_count}</p>
+              </div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Средний балл</p>
+                <p className="text-2xl font-bold">{stats.average_grade.toFixed(2)}</p>
+              </div>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Завершено заданий</p>
+                <p className="text-2xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500">Нет данных</p>
+          )}
+        </Card>
+      )}
+
+      {user?.role === 'student' && (
+        <Card className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">📊 Прогресс</h2>
+          {progressLoading ? (
+            <p className="text-gray-500">Загрузка прогресса...</p>
+          ) : progressError ? (
+            <p className="text-red-500">{progressError}</p>
+          ) : progress ? (
+            progress.total_assignments === 0 ? (
+              <p className="text-gray-500">Заданий нет</p>
+            ) : (
+              <>
+                <div className="grid sm:grid-cols-3 gap-4 mb-4 text-center">
+                  <div className="bg-gray-100 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Сдано заданий</p>
+                    <p className="text-2xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
+                  </div>
+                  <div className="bg-gray-100 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Процент</p>
+                    <p className="text-2xl font-bold">{completionRate.toFixed(1)}%</p>
+                  </div>
+                  <div className="bg-gray-100 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Баллы</p>
+                    <p className="text-2xl font-bold">{totalPoints.toFixed(1)}</p>
+                  </div>
+                </div>
+                <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+                  <div className="bg-blue-500 h-full" style={{ width: `${completionRate}%` }} />
+                </div>
+                {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
+                  <div className="mt-6">
+                    <Line data={chartData} options={{ responsive: true, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Динамика выполнения заданий' } }, scales: { y: { beginAtZero: true }, x: { title: { display: true, text: 'Дата' } } } }} />
+                  </div>
+                )}
+              </>
+            )
+          ) : (
+            <p className="text-gray-500">Нет данных</p>
+          )}
+        </Card>
+      )}
+
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-semibold">📝 Задания</h2>
+        {(user?.role === 'teacher' || user?.role === 'admin') && (
+          <Link href={`/courses/${courseId}/assignments/new`}>
+            <Button>Создать</Button>
+          </Link>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {assignments.map((assignment) => (
+          <Card key={assignment.id} className="p-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">{assignment.title}</h3>
+              <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+                <Button variant="outline">Открыть</Button>
+              </Link>
+            </div>
+            <p className="mt-2 text-sm text-gray-700">{assignment.description}</p>
+            <p className="mt-2 text-sm text-gray-500">
+              <strong>Макс. балл:</strong> {assignment.max_score}
+            </p>
+            <p className="text-sm text-gray-500">
+              <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
+            </p>
+          </Card>
+        ))}
+      </div>
+
+      {user?.role === 'admin' && (
+        <Button
+          variant="destructive"
+          className="mt-6"
+          onClick={async () => {
+            if (confirm('Удалить курс?')) {
+              try {
+                await api.delete(`/courses/${courseId}`);
+                toast.success('Курс удалён');
+                window.location.href = '/courses';
+              } catch {
+                toast.error('Ошибка при удалении');
+              }
+            }
+          }}
+        >
+          Удалить курс
+        </Button>
+      )}
+    </div>
+  );
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/courses/[id]/submissions/page.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+'use client';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import { useUser } from '@/entities/user/hook';
+import { api } from '@/shared/api';
+import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import toast from 'react-hot-toast';
+import { AxiosError } from 'axios';
+
+interface Submission {
+  id: number;
+  user_id: number;
+  username: string;
+  assignment_id: number;
+  assignment_title: string;
+  course_id: number;
+  course_title: string;
+  content: string;
+  score: number;
+  submitted_at: string;
+}
+
+
+interface ErrorResponse {
+  error?: string;
+}
+
+export default function CourseSubmissionsPage() {
+  const { id: courseId } = useParams();
+  const { user } = useUser();
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [gradeInputs, setGradeInputs] = useState<{ [key: number]: string }>({});
+
+  useEffect(() => {
+    async function fetchSubmissions() {
+      setIsLoading(true);
+      try {
+        const response = await api.get(`/submissions?course_id=${courseId}`);
+        setSubmissions(response.data);
+        setError('');
+      } catch (err: unknown) {
+        const axiosError = err as AxiosError<ErrorResponse>;
+        setError(axiosError.response?.data?.error || 'Ошибка загрузки решений');
+        toast.error(axiosError.response?.data?.error || 'Ошибка загрузки решений');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    if (user && ['teacher', 'admin'].includes(user.role)) {
+      fetchSubmissions();
+    }
+  }, [courseId, user]);
+
+  const handleGradeChange = (submissionId: number, value: string) => {
+    setGradeInputs((prev) => ({ ...prev, [submissionId]: value }));
+  };
+
+  const handleSetGrade = async (submissionId: number) => {
+  const grade = parseFloat(gradeInputs[submissionId]);
+  if (isNaN(grade) || grade < 0 || grade > 5) {
+    toast.error('Оценка должна быть от 0 до 5');
+    return;
+  }
+  try {
+    await api.put(`/submissions/${submissionId}/grade`, { grade });
+    setSubmissions((prev) =>
+      prev.map((sub) =>
+        sub.id === submissionId ? { ...sub, score: grade } : sub
+      )
+    );
+    toast.success('Оценка выставлена');
+  } catch (err: unknown) {
+    const axiosError = err as AxiosError<ErrorResponse>;
+    toast.error(axiosError.response?.data?.error || 'Ошибка при выставлении оценки');
+  }
+};
+
+
+  if (!user || !['teacher', 'admin'].includes(user.role)) {
+    return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
+  }
+
+  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
+  if (error) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
+
+  return (
+    <div className="max-w-5xl mx-auto mt-12 px-4">
+      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📝 Решения студентов</h1>
+      <Card>
+        {submissions.length === 0 ? (
+          <p className="text-center text-gray-500">Решений нет</p>
+        ) : (
+          <table className="w-full table-auto text-sm">
+            <thead>
+              <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
+                <th className="py-2 px-3">Студент</th>
+                <th className="py-2 px-3">Задание</th>
+                <th className="py-2 px-3">Решение</th>
+                <th className="py-2 px-3">Оценка</th>
+                <th className="py-2 px-3">Дата</th>
+                <th className="py-2 px-3">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {submissions.map((submission) => (
+  <tr key={submission.id} className="...">
+    <td className="py-2 px-3">{submission.username}</td>
+    <td className="py-2 px-3">{submission.assignment_title}</td>
+    <td className="py-2 px-3 truncate max-w-xs">{submission.content}</td>
+    <td className="py-2 px-3">
+      <Input
+        type="number"
+        step="0.1"
+        min="0"
+        max="5"
+        value={gradeInputs[submission.id] ?? submission.score.toString()}
+        onChange={(e) => handleGradeChange(submission.id, e.target.value)}
+        className="w-16"
+      />
+    </td>
+    <td className="py-2 px-3">{new Date(submission.submitted_at).toLocaleString()}</td>
+    <td className="py-2 px-3">
+      <Button onClick={() => handleSetGrade(submission.id)}>Сохранить</Button>
+    </td>
+  </tr>
+))}
+
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  );
 }
 
 
@@ -1920,8 +2072,9 @@ export default function RegisterPage() {
   const { setToken } = useAuth();
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState(''); // Добавляем ФИО
   const [password, setPassword] = useState('');
-  const [classNumber, setClassNumber] = useState(''); // 👈
+  const [classNumber, setClassNumber] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1937,14 +2090,19 @@ export default function RegisterPage() {
       setError('Номер класса должен быть от 1 до 11');
       return;
     }
+    if (!fullName.trim()) {
+      setError('ФИО обязательно для заполнения');
+      return;
+    }
 
     try {
       const res = await api.post('/register', {
         email,
         username,
+        full_name: fullName, // Добавляем ФИО
         password,
         role: 'student',
-        class_number: classNumInt, // 👈
+        class_number: classNumInt,
       });
       setToken(res.data.token);
       window.location.href = '/profile';
@@ -1956,33 +2114,36 @@ export default function RegisterPage() {
 
   return (
     <div className="max-w-md mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Регистрация</h1>
-  <Card className="p-6">
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
-        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      </div>
-      <div>
-        <label htmlFor="username" className="block text-sm font-medium mb-1">Имя пользователя</label>
-        <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
-      </div>
-      <div>
-        <label htmlFor="password" className="block text-sm font-medium mb-1">Пароль</label>
-        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-      </div>
-      <div>
-        <label htmlFor="classNumber" className="block text-sm font-medium mb-1">Класс (1–11)</label>
-        <Input id="classNumber" type="number" value={classNumber} onChange={(e) => setClassNumber(e.target.value)} required />
-      </div>
-      <Button type="submit" className="w-full">Зарегистрироваться</Button>
-    </form>
-  </Card>
-</div>
+      <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Регистрация</h1>
+      <Card className="p-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div>
+            <label htmlFor="username" className="block text-sm font-medium mb-1">Имя пользователя</label>
+            <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          </div>
+          <div>
+            <label htmlFor="fullName" className="block text-sm font-medium mb-1">ФИО</label>
+            <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium mb-1">Пароль</label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </div>
+          <div>
+            <label htmlFor="classNumber" className="block text-sm font-medium mb-1">Класс (1–11)</label>
+            <Input id="classNumber" type="number" value={classNumber} onChange={(e) => setClassNumber(e.target.value)} required />
+          </div>
+          <Button type="submit" className="w-full">Зарегистрироваться</Button>
+        </form>
+      </Card>
+    </div>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2029,12 +2190,14 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState(''); // Добавляем ФИО
   const [editError, setEditError] = useState('');
 
   useEffect(() => {
     if (user) {
       setUsername(user.username);
       setEmail(user.email);
+      setFullName(user.full_name || ''); // Устанавливаем ФИО
     }
   }, [user]);
 
@@ -2042,7 +2205,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setEditError('');
     try {
-      await api.put('/users/me', { username, email });
+      await api.put('/users/me', { username, email, full_name: fullName }); // Добавляем ФИО
       await refetch();
       setIsEditing(false);
     } catch (err: unknown) {
@@ -2077,6 +2240,18 @@ export default function ProfilePage() {
             </div>
 
             <div>
+              <label htmlFor="fullName" className="block text-sm font-medium mb-1">
+                ФИО
+              </label>
+              <Input
+                id="fullName"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">
                 Email
               </label>
@@ -2099,6 +2274,7 @@ export default function ProfilePage() {
         ) : (
           <div className="space-y-2 text-gray-800 dark:text-gray-100">
             <p><strong>Имя:</strong> {user.username}</p>
+            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>} {/* Отображаем ФИО */}
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Роль:</strong> {user.role}</p>
             {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}
@@ -2116,7 +2292,6 @@ export default function ProfilePage() {
     </div>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2186,13 +2361,14 @@ export default function AchievementsPage() {
 ║ frontend/src/app/admin/page.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
+// frontend/src/app/admin/page.tsx
 'use client';
-
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
-import { Card } from '@/shared/ui/Card';
-import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
+import { UserRoleForm } from './components/UserRoleForm';
+import { CreateUserForm } from './components/CreateUserForm';
+import { AchievementManagement } from './components/AchievementManagement';
+import { ActionLogs } from './components/ActionLogs';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 
@@ -2236,15 +2412,6 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [formError, setFormError] = useState('');
 
-  const [userId, setUserId] = useState('');
-  const [role, setRole] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState('teacher');
-  const [achTitle, setAchTitle] = useState('');
-  const [achDesc, setAchDesc] = useState('');
-  const [achCondition, setAchCondition] = useState('');
-
   const fetchData = async () => {
     try {
       const [usersRes, achRes, logRes] = await Promise.all([
@@ -2252,8 +2419,6 @@ export default function AdminPage() {
         api.get<ApiAchievement[]>('/achievements'),
         api.get<{ logs: LogEntry[]; total: number }>('/admin/logs'),
       ]);
-      console.log('Achievements response:', achRes.data);
-      // Преобразуем данные API в формат фронтенда
       const transformedAchievements = achRes.data.map((ach) => ({
         id: ach.ID,
         title: ach.Title,
@@ -2263,9 +2428,10 @@ export default function AdminPage() {
       setUsers(usersRes.data || []);
       setAchievements(transformedAchievements || []);
       setLogs(logRes.data.logs || []);
+      setFormError('');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setFormError(axiosError.response?.data?.error || 'Ошибка загрузки');
+      setFormError(axiosError.response?.data?.error || 'Ошибка загрузки данных');
     }
   };
 
@@ -2274,62 +2440,6 @@ export default function AdminPage() {
       fetchData();
     }
   }, [user]);
-
-  const handleUpdateRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.put(`/users/${userId}/role`, { role });
-      fetchData();
-      setUserId('');
-      setRole('');
-    } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Ошибка изменения роли');
-    }
-  };
-
-  const handleRegisterUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.post('/admin/create-user', {
-        email: newUserEmail,
-        password: newUserPassword,
-        role: newUserRole,
-      });
-      fetchData();
-      setNewUserEmail('');
-      setNewUserPassword('');
-    } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Ошибка регистрации');
-    }
-  };
-
-  const handleCreateAchievement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.post('/achievements', {
-        title: achTitle,
-        description: achDesc,
-        condition: achCondition || 'custom',
-      });
-      fetchData();
-      setAchTitle('');
-      setAchDesc('');
-      setAchCondition('');
-    } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Ошибка добавления достижения');
-    }
-  };
-
-  // Список условий для выпадающего меню
-  const conditionOptions = [
-    { value: 'points_50', label: 'Набрать 50 очков' },
-    { value: 'points_100', label: 'Набрать 100 очков' },
-    { value: 'points_500', label: 'Набрать 500 очков' },
-    { value: 'courses_1', label: 'Завершить 1 курс' },
-    { value: 'courses_3', label: 'Записаться на 3 курса' },
-    { value: 'submissions_5', label: 'Сдать 5 заданий' },
-    { value: 'custom', label: 'Произвольное' },
-  ];
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (!user || user.role !== 'admin')
@@ -2340,62 +2450,243 @@ export default function AdminPage() {
       <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
       {formError && <p className="text-red-500 text-sm mb-4 text-center">{formError}</p>}
 
-      <Card className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Изменить роль пользователя</h2>
-        <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
-          <Input
-            type="number"
-            placeholder="ID пользователя"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            required
-          />
-          <Input
-            placeholder="student / teacher / admin"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            required
-          />
-          <Button type="submit" className="sm:col-span-2">
-            Изменить
-          </Button>
-        </form>
-      </Card>
+      <UserRoleForm onSuccess={fetchData} setFormError={setFormError} />
+      <CreateUserForm onSuccess={fetchData} setFormError={setFormError} />
+      <AchievementManagement
+        achievements={achievements}
+        onSuccess={fetchData}
+        setFormError={setFormError}
+      />
+      <ActionLogs logs={logs} />
+    </div>
+  );
+}
 
-      <Card className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Создать нового пользователя</h2>
-        <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
-          <Input
-            type="email"
-            placeholder="Email"
-            value={newUserEmail}
-            onChange={(e) => setNewUserEmail(e.target.value)}
-            required
-          />
-          <Input
-            type="password"
-            placeholder="Пароль"
-            value={newUserPassword}
-            onChange={(e) => setNewUserPassword(e.target.value)}
-            required
-          />
-          <select
-            value={newUserRole}
-            onChange={(e) => setNewUserRole(e.target.value)}
-            className="p-2 border rounded sm:col-span-2"
-          >
-            <option value="teacher">Преподаватель</option>
-            <option value="admin">Администратор</option>
-          </select>
-          <Button type="submit" className="sm:col-span-2">
-            Создать
-          </Button>
-        </form>
-      </Card>
 
-      <Card className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">Добавить достижение</h2>
-        <form onSubmit={handleCreateAchievement} className="grid gap-4">
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/admin/components/UserRoleForm.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+// frontend/src/app/admin/components/UserRoleForm.tsx
+'use client';
+import { useState, FormEvent } from 'react';
+import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import { api } from '@/shared/api';
+import { AxiosError } from 'axios';
+
+interface ErrorResponse {
+  error?: string;
+}
+
+interface UserRoleFormProps {
+  onSuccess: () => void;
+  setFormError: (error: string) => void;
+}
+
+export function UserRoleForm({ onSuccess, setFormError }: UserRoleFormProps) {
+  const [userId, setUserId] = useState('');
+  const [role, setRole] = useState('');
+
+  const handleUpdateRole = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.put(`/users/${userId}/role`, { role });
+      onSuccess();
+      setUserId('');
+      setRole('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      setFormError(axiosError.response?.data?.error || 'Ошибка изменения роли');
+    }
+  };
+
+  return (
+    <Card className="mb-6">
+      <h2 className="text-xl font-semibold mb-4">Изменить роль пользователя</h2>
+      <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
+        <Input
+          type="number"
+          placeholder="ID пользователя"
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+          required
+        />
+        <Input
+          placeholder="student / teacher / admin"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          required
+        />
+        <Button type="submit" className="sm:col-span-2">
+          Изменить
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/admin/components/ActionLogs.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+// frontend/src/app/admin/components/ActionLogs.tsx
+'use client';
+import { Card } from '@/shared/ui/Card';
+
+interface LogEntry {
+  id: number;
+  user_id: number;
+  action: string;
+  details: string;
+  created_at: string;
+}
+
+interface ActionLogsProps {
+  logs: LogEntry[];
+}
+
+export function ActionLogs({ logs }: ActionLogsProps) {
+  return (
+    <Card>
+      <h2 className="text-xl font-semibold mb-4">Действия пользователей</h2>
+      {logs.length === 0 ? (
+        <p className="text-sm text-gray-500">Нет логов</p>
+      ) : (
+        <ul className="text-sm space-y-2 max-h-80 overflow-y-auto">
+          {logs.map((log) => (
+            <li key={log.id}>
+              <span className="font-medium">Пользователь {log.user_id}:</span>{' '}
+              {log.action} ({log.details}){' '}
+              <span className="text-gray-500 text-xs">
+                ({new Date(log.created_at).toLocaleString()})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/admin/components/AchievementManagement.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+// frontend/src/app/admin/components/AchievementManagement.tsx
+'use client';
+import { useState, FormEvent } from 'react';
+import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import { api } from '@/shared/api';
+import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
+
+interface Achievement {
+  id: number;
+  title: string;
+  description: string;
+  condition: string;
+}
+
+interface ErrorResponse {
+  error?: string;
+}
+
+interface AchievementManagementProps {
+  achievements: Achievement[];
+  onSuccess: () => void;
+  setFormError: (error: string) => void;
+}
+
+export function AchievementManagement({
+  achievements,
+  onSuccess,
+  setFormError,
+}: AchievementManagementProps) {
+  const [showForm, setShowForm] = useState(false);
+  const [editAchievement, setEditAchievement] = useState<Achievement | null>(null);
+  const [achTitle, setAchTitle] = useState('');
+  const [achDesc, setAchDesc] = useState('');
+  const [achCondition, setAchCondition] = useState('');
+
+  const conditionOptions = [
+    { value: 'points_50', label: 'Набрать 50 очков' },
+    { value: 'points_100', label: 'Набрать 100 очков' },
+    { value: 'points_500', label: 'Набрать 500 очков' },
+    { value: 'courses_1', label: 'Завершить 1 курс' },
+    { value: 'courses_3', label: 'Записаться на 3 курса' },
+    { value: 'submissions_5', label: 'Сдать 5 заданий' },
+    { value: 'custom', label: 'Произвольное' },
+  ];
+
+  const handleCreateOrUpdateAchievement = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        title: achTitle,
+        description: achDesc,
+        condition: achCondition || 'custom',
+      };
+      if (editAchievement) {
+        await api.put(`/achievements/${editAchievement.id}`, payload);
+        toast.success('Достижение обновлено');
+      } else {
+        await api.post('/achievements', payload);
+        toast.success('Достижение создано');
+      }
+      onSuccess();
+      resetForm();
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка при сохранении достижения';
+      setFormError(errorMsg);
+      toast.error(errorMsg);
+    }
+  };
+
+  const handleEdit = (achievement: Achievement) => {
+    setEditAchievement(achievement);
+    setAchTitle(achievement.title);
+    setAchDesc(achievement.description);
+    setAchCondition(achievement.condition);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Удалить достижение?')) return;
+    try {
+      await api.delete(`/achievements/${id}`);
+      toast.success('Достижение удалено');
+      onSuccess();
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка при удалении достижения';
+      setFormError(errorMsg);
+      toast.error(errorMsg);
+    }
+  };
+
+  const resetForm = () => {
+    setShowForm(false);
+    setEditAchievement(null);
+    setAchTitle('');
+    setAchDesc('');
+    setAchCondition('');
+  };
+
+  return (
+    <Card className="mb-6">
+      <h2 className="text-xl font-semibold mb-4">Управление достижениями</h2>
+      <Button onClick={() => setShowForm(!showForm)} className="mb-4">
+        {showForm ? 'Отменить' : 'Добавить достижение'}
+      </Button>
+      {showForm && (
+        <form onSubmit={handleCreateOrUpdateAchievement} className="grid gap-4 mb-6">
           <Input
             placeholder="Название"
             value={achTitle}
@@ -2421,43 +2712,120 @@ export default function AdminPage() {
               </option>
             ))}
           </select>
-          <Button type="submit">Добавить</Button>
+          <Button type="submit">{editAchievement ? 'Обновить' : 'Добавить'}</Button>
         </form>
-        <div className="mt-4">
-          <h3 className="font-semibold mb-2">Существующие:</h3>
-          {achievements.length === 0 ? (
-            <p className="text-sm text-gray-500">Нет достижений</p>
-          ) : (
-            <ul className="text-sm space-y-1">
-              {achievements.map((ach) => (
-                <li key={ach.id}>
-                  {ach.title} — {ach.description} ({ach.condition})
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-xl font-semibold mb-4">Действия пользователей</h2>
-        {logs.length === 0 ? (
-          <p className="text-sm text-gray-500">Нет логов</p>
+      )}
+      <div>
+        <h3 className="font-semibold mb-2">Существующие достижения:</h3>
+        {achievements.length === 0 ? (
+          <p className="text-sm text-gray-500">Нет достижений</p>
         ) : (
-          <ul className="text-sm space-y-2 max-h-80 overflow-y-auto">
-            {logs.map((log) => (
-              <li key={log.id}>
-                <span className="font-medium">Пользователь {log.user_id}:</span>{' '}
-                {log.action} ({log.details}){' '}
-                <span className="text-gray-500 text-xs">
-                  ({new Date(log.created_at).toLocaleString()})
+          <ul className="text-sm space-y-2">
+            {achievements.map((ach) => (
+              <li key={ach.id} className="flex justify-between items-center">
+                <span>
+                  {ach.title} — {ach.description} ({ach.condition})
                 </span>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleEdit(ach)}
+                    className="bg-blue-600 text-white text-xs px-2 py-1"
+                  >
+                    Редактировать
+                  </Button>
+                  <Button
+                    onClick={() => handleDelete(ach.id)}
+                    className="bg-red-600 text-white text-xs px-2 py-1"
+                  >
+                    Удалить
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
         )}
-      </Card>
-    </div>
+      </div>
+    </Card>
+  );
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/admin/components/CreateUserForm.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+// frontend/src/app/admin/components/CreateUserForm.tsx
+'use client';
+import { useState, FormEvent } from 'react';
+import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import { api } from '@/shared/api';
+import { AxiosError } from 'axios';
+
+interface ErrorResponse {
+  error?: string;
+}
+
+interface CreateUserFormProps {
+  onSuccess: () => void;
+  setFormError: (error: string) => void;
+}
+
+export function CreateUserForm({ onSuccess, setFormError }: CreateUserFormProps) {
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('teacher');
+
+  const handleRegisterUser = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/create-user', {
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+      });
+      onSuccess();
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('teacher');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      setFormError(axiosError.response?.data?.error || 'Ошибка регистрации');
+    }
+  };
+
+  return (
+    <Card className="mb-6">
+      <h2 className="text-xl font-semibold mb-4">Создать нового пользователя</h2>
+      <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
+        <Input
+          type="email"
+          placeholder="Email"
+          value={newUserEmail}
+          onChange={(e) => setNewUserEmail(e.target.value)}
+          required
+        />
+        <Input
+          type="password"
+          placeholder="Пароль"
+          value={newUserPassword}
+          onChange={(e) => setNewUserPassword(e.target.value)}
+          required
+        />
+        <select
+          value={newUserRole}
+          onChange={(e) => setNewUserRole(e.target.value)}
+          className="p-2 border rounded sm:col-span-2"
+        >
+          <option value="teacher">Преподаватель</option>
+          <option value="admin">Администратор</option>
+        </select>
+        <Button type="submit" className="sm:col-span-2">
+          Создать
+        </Button>
+      </form>
+    </Card>
   );
 }
 

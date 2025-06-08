@@ -23,7 +23,7 @@ type AuthService interface {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param user body object true "Данные пользователя" example={"username":"testuser","email":"test@example.com","password":"password123","role":"student","class_number":5}
+// @Param user body object true "Данные пользователя" example={"username":"testuser","email":"test@example.com","password":"password123","role":"student","class_number":5,"full_name":"Иванов Иван Иванович"}
 // @Success 200 {object} map[string]interface{} "message, token"
 // @Failure 400 {object} map[string]string "error"
 // @Failure 500 {object} map[string]string "error"
@@ -31,8 +31,12 @@ type AuthService interface {
 func Register(service AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var input struct {
-			model.User
-			ClassNumber uint `json:"class_number"`
+			Username    string     `json:"username" binding:"required,min=3,max=50"`
+			Email       string     `json:"email" binding:"required,email"`
+			Password    string     `json:"password" binding:"required,min=6"`
+			Role        model.Role `json:"role" binding:"required,oneof=student"`
+			ClassNumber uint       `json:"class_number" binding:"required,gte=1,lte=11"`
+			FullName    string     `json:"full_name" binding:"omitempty,min=5,max=255"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -46,11 +50,12 @@ func Register(service AuthService) gin.HandlerFunc {
 			Password:    input.Password,
 			Role:        input.Role,
 			ClassNumber: input.ClassNumber,
-			Points:      0, // Устанавливаем по умолчанию, как в модели
+			FullName:    input.FullName,
+			Points:      0,
 		}
 
-		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, class_number=%d",
-			user.Username, user.Email, user.Role, user.ClassNumber)
+		logger.Log.Infof("Received registration request: username=%s, email=%s, role=%s, class_number=%d, full_name=%s",
+			user.Username, user.Email, user.Role, user.ClassNumber, user.FullName)
 
 		// Валидация структуры User
 		validate := validator.New()
