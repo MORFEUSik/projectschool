@@ -79,21 +79,25 @@ frontend/
 │   │   └── course
 │   │       └── enroll
 │   │           └── index.tsx
-│   └── shared
-│       ├── api
-│       │   └── index.ts
-│       ├── hooks
-│       │   ├── useAssignments.ts
-│       │   ├── useAuth.tsx
-│       │   ├── useCourses.ts
-│       │   └── useSubmissions.ts
-│       ├── lib
-│       │   └── utils.ts
-│       └── ui
-│           ├── Button.tsx
-│           ├── Card.tsx
-│           ├── Input.tsx
-│           └── QuizForm.tsx
+│   ├── shared
+│   │   ├── api
+│   │   │   └── index.ts
+│   │   ├── constants
+│   │   │   └── avatars.ts
+│   │   ├── hooks
+│   │   │   ├── useAssignments.ts
+│   │   │   ├── useAuth.tsx
+│   │   │   ├── useCourses.ts
+│   │   │   └── useSubmissions.ts
+│   │   ├── lib
+│   │   │   └── utils.ts
+│   │   └── ui
+│   │       ├── Button.tsx
+│   │       ├── Card.tsx
+│   │       ├── Input.tsx
+│   │       └── QuizForm.tsx
+│   └── widgets
+│       └── AvatarModal.tsx
 ├── tailwind.config.js
 └── tsconfig.json
 
@@ -215,7 +219,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             ProjectSchool
           </Link>
           <div className="flex flex-wrap gap-3 text-sm">
-            <NavLink href="/courses" label="Курсы" />
+            <NavLink href="/courses" label="Уроки" />
             <NavLink href="/leaderboard" label="Лидерборд" />
             <NavLink href="/submissions" label="Мои решения" />
             <NavLink href="/profile" label="Профиль" />
@@ -2275,6 +2279,7 @@ export default function LoginPage() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
@@ -2283,6 +2288,8 @@ import { Input } from '@/shared/ui/Input';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 import Link from 'next/link';
+import { AvatarModal } from '@/widgets/AvatarModal';
+import { avatarOptions } from '@/shared/constants/avatars';
 
 interface ErrorResponse {
   error?: string;
@@ -2293,14 +2300,15 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState(''); // Добавляем ФИО
+  const [fullName, setFullName] = useState('');
   const [editError, setEditError] = useState('');
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
       setUsername(user.username);
       setEmail(user.email);
-      setFullName(user.full_name || ''); // Устанавливаем ФИО
+      setFullName(user.full_name || '');
     }
   }, [user]);
 
@@ -2308,13 +2316,17 @@ export default function ProfilePage() {
     e.preventDefault();
     setEditError('');
     try {
-      await api.put('/users/me', { username, email, full_name: fullName }); // Добавляем ФИО
+      await api.put('/users/me', { username, email, full_name: fullName });
       await refetch();
       setIsEditing(false);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       setEditError(axiosError.response?.data?.error || 'Ошибка обновления профиля');
     }
+  };
+
+  const handleAvatarUpdate = async (url: string) => {
+    await refetch();
   };
 
   if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
@@ -2324,6 +2336,18 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl mx-auto mt-12 px-4">
       <h1 className="text-4xl font-extrabold text-center mb-8 text-blue-600">Профиль</h1>
+
+      <Card className="p-6 mb-6">
+        <h2 className="text-xl font-bold mb-4">Аватар</h2>
+        <div className="flex items-center gap-4">
+          <img
+            src={user?.avatar_url || avatarOptions[0]}
+            alt="avatar"
+            className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover"
+          />
+          <Button onClick={() => setAvatarModalOpen(true)}>Выбрать аватар</Button>
+        </div>
+      </Card>
 
       <Card>
         {isEditing ? (
@@ -2377,7 +2401,7 @@ export default function ProfilePage() {
         ) : (
           <div className="space-y-2 text-gray-800 dark:text-gray-100">
             <p><strong>Имя:</strong> {user.username}</p>
-            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>} {/* Отображаем ФИО */}
+            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>}
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Роль:</strong> {user.role}</p>
             {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}
@@ -2392,9 +2416,17 @@ export default function ProfilePage() {
           </div>
         )}
       </Card>
+
+      <AvatarModal
+        isOpen={avatarModalOpen}
+        onClose={() => setAvatarModalOpen(false)}
+        currentAvatar={user?.avatar_url}
+        onAvatarUpdate={handleAvatarUpdate}
+      />
     </div>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -3373,6 +3405,24 @@ export function useCourses(limit: number = 6, offset: number = 0, classNumber?: 
 
 
 ════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/shared/constants/avatars.ts
+════════════════════════════════════════════════════════════════════════════════
+
+export const avatarOptions = [
+  '/avatars/1f803cd5-763c-484c-8db9-8a9e80e22f53.jpg',
+  '/avatars/2467d09c-b0a6-46c9-9c01-eb2cbc29dd85.jpg',
+  '/avatars/27258a85-1e4c-4ab9-b51e-ca6d8ad2e101.jpg',
+  '/avatars/2aa12d4d-321f-4c58-a46b-bfa0f79022b4.jpg',
+  '/avatars/2b1fa314-f37e-439e-be23-681b9cf2bd3e.jpg',
+  '/avatars/4eda9fdf-8d86-473f-8364-34a7c1caefea.jpg',
+  '/avatars/b9341e90-4e5c-4591-8a32-deff4d30c2af.jpg',
+  '/avatars/c9d8ddeb-1b87-4451-9408-ad9672cdf889.jpg',
+  '/avatars/d127a649-3bf3-45d0-b110-c1666c38b470.jpg',
+];
+
+
+
+════════════════════════════════════════════════════════════════════════════════
 ║ frontend/src/shared/ui/Input.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -3844,4 +3894,66 @@ import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/widgets/AvatarModal.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+'use client';
+import { avatarOptions } from '@/shared/constants/avatars';
+import { api } from '@/shared/api';
+import { toast } from 'react-hot-toast';
+import { Dialog } from '@headlessui/react';
+import { useState } from 'react';
+
+export function AvatarModal({ isOpen, onClose, currentAvatar, onAvatarUpdate }: {
+  isOpen: boolean;
+  onClose: () => void;
+  currentAvatar?: string;
+  onAvatarUpdate: (url: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const handleSelect = async (url: string) => {
+    try {
+      setLoading(true);
+      await api.put('/users/me/avatar', { avatar_url: url });
+      toast.success('Аватар обновлён!');
+      onAvatarUpdate(url); // обновляем в родителе
+      onClose();
+    } catch {
+      toast.error('Ошибка при обновлении');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onClose={onClose} className="fixed z-50 inset-0 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 z-50 max-w-xl w-full">
+        <Dialog.Title className="text-xl font-bold mb-4">Выберите аватар</Dialog.Title>
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+          {avatarOptions.map((url) => (
+            <img
+              key={url}
+              src={url}
+              alt="avatar"
+              className={`w-20 h-20 rounded-full object-cover cursor-pointer border transition ${
+                currentAvatar === url ? 'ring-4 ring-blue-500' : 'hover:ring-2 hover:ring-blue-400'
+              }`}
+              onClick={() => handleSelect(url)}
+            />
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button onClick={onClose} disabled={loading} className="text-sm text-gray-600 hover:underline">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
 }

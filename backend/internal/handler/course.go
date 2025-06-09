@@ -42,7 +42,6 @@ func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 		if limit < 1 || offset < 0 {
-			logger.Log.Errorf("Invalid pagination params: limit=%d, offset=%d", limit, offset)
 			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверные параметры пагинации"})
 			return
 		}
@@ -53,20 +52,19 @@ func ListCourses(courseService service.CourseService) gin.HandlerFunc {
 			uid = userID.(uint)
 		}
 
-		// Извлекаем class_number из query-параметров
+		// Обработка class_number
 		classNumber := c.Query("class_number")
+		ctx := c.Request.Context()
 		if classNumber != "" {
-			// Добавляем class_number в контекст для сервиса
-			ctx := context.WithValue(c.Request.Context(), "class_number", classNumber)
-			c.Request = c.Request.WithContext(ctx)
+			ctx = context.WithValue(ctx, "class_number", classNumber)
 		}
 
-		courses, total, err := courseService.List(limit, offset, uid)
+		courses, total, err := courseService.List(ctx, limit, offset, uid)
 		if err != nil {
-			logger.Log.Errorf("Failed to list courses: %v", err)
 			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения курсов"})
 			return
 		}
+
 		c.JSON(http.StatusOK, gin.H{"courses": courses, "total": total})
 	}
 }

@@ -27,7 +27,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             ProjectSchool
           </Link>
           <div className="flex flex-wrap gap-3 text-sm">
-            <NavLink href="/courses" label="Курсы" />
+            <NavLink href="/courses" label="Уроки" />
             <NavLink href="/leaderboard" label="Лидерборд" />
             <NavLink href="/submissions" label="Мои решения" />
             <NavLink href="/profile" label="Профиль" />

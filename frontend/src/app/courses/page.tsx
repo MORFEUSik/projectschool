@@ -27,7 +27,9 @@ export default function CoursesPage() {
   const { user } = useUser();
   const [selectedClassNumber, setSelectedClassNumber] = useState<number | undefined>(undefined);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, selectedClassNumber);
+  const classParam = selectedClassNumber ?? 'all';
+const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, classParam);
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -80,7 +82,7 @@ export default function CoursesPage() {
     const newOffset = (newPage - 1) * limit;
     if (newOffset < 0 || (total && newOffset >= total)) return;
     setPage(newPage);
-    refetch(limit, newOffset, selectedClassNumber);
+    refetch(limit, newOffset, selectedClassNumber ?? 'all');
   };
 
   const subjects = [
