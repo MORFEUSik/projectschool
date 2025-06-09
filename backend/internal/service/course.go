@@ -24,6 +24,7 @@ type CourseService interface {
 	GetStats(courseID uint) (map[string]interface{}, error)
 	GetProgress(userID, courseID uint) (map[string]interface{}, error)
 	CheckDeadlines() error
+	IsEnrolled(userID, courseID uint) (bool, error)
 }
 
 type courseService struct {
@@ -406,4 +407,22 @@ func (s *courseService) CheckDeadlines() error {
 		}
 	}
 	return nil
+}
+
+func (s *courseService) IsEnrolled(userID, courseID uint) (bool, error) {
+	logger.Log.Infof("Checking if user %d is enrolled in course %d", userID, courseID)
+
+	var enrollment model.Enrollment
+	err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Log.Infof("User %d is not enrolled in course %d", userID, courseID)
+			return false, nil
+		}
+		logger.Log.Errorf("Error checking enrollment for user %d in course %d: %v", userID, courseID, err)
+		return false, err
+	}
+
+	logger.Log.Infof("User %d is enrolled in course %d", userID, courseID)
+	return true, nil
 }

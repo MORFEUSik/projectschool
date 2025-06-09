@@ -18,6 +18,9 @@ module.exports = {
         sans: ["Inter", "sans-serif"],
         mono: ["Fira Code", "monospace"],
       },
+      transitionTimingFunction: {
+        "custom-ease": "cubic-bezier(0.4, 0, 0.2, 1)",
+      },
     },
   },
   plugins: [],

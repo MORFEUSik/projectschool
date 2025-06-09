@@ -11,6 +11,7 @@ import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import ConfirmModal from '@/widgets/ConfirmModal';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -59,72 +60,115 @@ export default function CoursePage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState('');
 
-  useEffect(() => {
-    async function fetchStats() {
-      if (!['teacher', 'admin'].includes(user?.role || '')) return;
-      setStatsLoading(true);
-      try {
-        const response = await api.get<Stats>(`/courses/${courseId}/stats`);
-        setStats(response.data);
-        setStatsError('');
-      } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
-        setStatsError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setStatsLoading(false);
-      }
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false); // Состояние для модалки
+
+  // Функция для загрузки данных курса
+  const fetchCourse = async () => {
+    setCourseLoading(true);
+    try {
+      const courseResponse = await api.get<Course>(`/courses/${courseId}`);
+      setCourse(courseResponse.data);
+      setCourseError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки курса';
+      setCourseError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setCourseLoading(false);
     }
-    if (courseId) {
-      fetchStats();
+  };
+
+  // Функция для загрузки прогресса
+  const fetchProgress = async () => {
+    if (user?.role !== 'student') return;
+    setProgressLoading(true);
+    try {
+      const response = await api.get<Progress>(`/courses/${courseId}/progress`);
+      setProgress(response.data);
+      setProgressError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки прогресса';
+      setProgressError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setProgressLoading(false);
     }
-  }, [courseId, user]);
+  };
+
+  // Функция для загрузки статистики
+  const fetchStats = async () => {
+    if (!['teacher', 'admin'].includes(user?.role || '')) return;
+    setStatsLoading(true);
+    try {
+      const response = await api.get<Stats>(`/courses/${courseId}/stats`);
+      setStats(response.data);
+      setStatsError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
+      setStatsError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Проверка, записан ли пользователь
+  const checkEnrollment = async () => {
+    if (user?.role !== 'student' || !courseId) return;
+    try {
+      const res = await api.get(`/courses/${courseId}/is-enrolled`);
+      setIsEnrolled(res.data.enrolled);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка проверки записи');
+      setIsEnrolled(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchCourse() {
-      setCourseLoading(true);
-      try {
-        const courseResponse = await api.get<Course>(`/courses/${courseId}`);
-        setCourse(courseResponse.data);
-      } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        setCourseError(axiosError.response?.data?.error || 'Ошибка загрузки курса');
-        toast.error(axiosError.response?.data?.error || 'Ошибка загрузки курса');
-      } finally {
-        setCourseLoading(false);
-      }
-    }
     if (courseId) {
       fetchCourse();
+      fetchStats();
+      checkEnrollment();
+      fetchProgress();
     } else {
       setCourseLoading(false);
       setCourseError('Курс не найден');
       toast.error('Курс не найден');
     }
-  }, [courseId]);
-
-  useEffect(() => {
-    async function fetchProgress() {
-      if (user?.role !== 'student') return;
-      setProgressLoading(true);
-      try {
-        const response = await api.get<Progress>(`/courses/${courseId}/progress`);
-        setProgress(response.data);
-        setProgressError('');
-      } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки прогресса';
-        setProgressError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setProgressLoading(false);
-      }
-    }
-    if (courseId) {
-      fetchProgress();
-    }
   }, [courseId, user]);
+
+  const handleEnroll = async () => {
+    try {
+      await api.post(`/courses/${courseId}/enroll`);
+      setIsEnrolled(true);
+      toast.success('Вы записались на курс!');
+      // Обновляем данные
+      await Promise.all([fetchCourse(), fetchStats(), fetchProgress(), checkEnrollment()]);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при записи на курс');
+    }
+  };
+
+  const handleUnenroll = async () => {
+    try {
+      await api.delete(`/courses/${courseId}/enroll`);
+      setIsEnrolled(false);
+      toast.success('Вы отписались от курса');
+      // Обновляем данные
+      await Promise.all([fetchCourse(), fetchStats(), fetchProgress(), checkEnrollment()]);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при отписке от курса');
+    } finally {
+      setIsModalOpen(false);
+    }
+  };
 
   if (!courseId) return <div className="text-center mt-8 text-red-500">Курс не найден</div>;
   if (courseLoading || assignmentsLoading) return <div className="text-center mt-8">Загрузка...</div>;
@@ -164,6 +208,30 @@ export default function CoursePage() {
           <strong>Преподаватель:</strong> {course.teacher.username}
         </p>
       </Card>
+
+      {user?.role === 'student' && (
+        <div className="mb-6">
+          {isEnrolled ? (
+            <Button onClick={() => setIsModalOpen(true)} variant="destructive">
+              Отписаться от курса
+            </Button>
+          ) : (
+            <Button onClick={handleEnroll}>
+              Записаться на курс
+            </Button>
+          )}
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={handleUnenroll}
+        title="Подтверждение отписки"
+        message="Вы уверены, что хотите отписаться от этого курса? Ваш прогресс будет сохранён, но вы потеряете доступ к новым заданиям."
+        confirmText="Отписаться"
+        cancelText="Отменить"
+      />
 
       {['teacher', 'admin'].includes(user?.role || '') && (
         <div className="mb-6 flex justify-end">

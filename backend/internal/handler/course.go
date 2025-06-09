@@ -497,3 +497,59 @@ func CheckDeadlines(courseService service.CourseService) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Дедлайны проверены"})
 	}
 }
+
+// IsEnrolled проверяет, записан ли пользователь на курс
+// @Summary Проверить запись на курс
+// @Description Проверяет, записан ли аутентифицированный студент на курс. Требуется JWT-токен. Доступно только для роли: student.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]bool "enrolled"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/is-enrolled [get]
+func IsEnrolled(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+
+		if user.Role != model.Student {
+			logger.Log.Warnf("User %d is not a student", userID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Только студенты могут проверять запись на курс"})
+			return
+		}
+
+		logger.Log.Infof("User %d checking enrollment in course %d", userID, id)
+		isEnrolled, err := courseService.IsEnrolled(userID.(uint), uint(id))
+		if err != nil {
+			logger.Log.Errorf("Failed to check enrollment for user %d in course %d: %v", userID, id, err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка проверки записи"})
+			return
+		}
+
+		logger.Log.Infof("Enrollment status for user %d in course %d: %v", userID, id, isEnrolled)
+		c.JSON(http.StatusOK, gin.H{"enrolled": isEnrolled})
+	}
+}

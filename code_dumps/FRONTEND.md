@@ -433,7 +433,9 @@ export default function CoursesPage() {
   const { user } = useUser();
   const [selectedClassNumber, setSelectedClassNumber] = useState<number | undefined>(undefined);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, selectedClassNumber);
+  const classParam = selectedClassNumber ?? 'all';
+const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, classParam);
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -486,7 +488,7 @@ export default function CoursesPage() {
     const newOffset = (newPage - 1) * limit;
     if (newOffset < 0 || (total && newOffset >= total)) return;
     setPage(newPage);
-    refetch(limit, newOffset, selectedClassNumber);
+    refetch(limit, newOffset, selectedClassNumber ?? 'all');
   };
 
   const subjects = [
@@ -3358,36 +3360,44 @@ interface UseCoursesResult {
   courses: Course[];
   loading: boolean;
   error: string | null;
-  refetch: (limit?: number, offset?: number, classNumber?: number) => Promise<void>;
+  refetch: (limit?: number, offset?: number, classNumber?: number | 'all') => Promise<void>;
   total: number;
 }
 
-export function useCourses(limit: number = 6, offset: number = 0, classNumber?: number): UseCoursesResult {
+export function useCourses(
+  limit: number,
+  offset: number,
+  classNumber?: number | 'all'
+): UseCoursesResult {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const { user } = useUser();
 
-  const fetchCourses = async (newLimit?: number, newOffset?: number, newClassNumber?: number) => {
+  const fetchCourses = async (
+    newLimit?: number,
+    newOffset?: number,
+    newClassNumber?: number | 'all'
+  ) => {
     setLoading(true);
     try {
-      const params: any = {
-        limit: newLimit || limit,
-        offset: newOffset || offset,
+      const params: Record<string, number | string> = {
+        limit: newLimit ?? limit,
+        offset: newOffset ?? offset,
       };
-      // Отправляем class_number, если он указан (включая undefined для "Все классы")
+
+      // 💡 Явно передаём class_number, включая строку 'all'
       if (newClassNumber !== undefined) {
         params.class_number = newClassNumber;
       }
-      console.log('Fetching courses with params:', params); // Для отладки
+
       const response = await api.get('/courses', { params });
       setCourses(response.data.courses);
       setTotal(response.data.total);
       setError(null);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<{ error?: string }>;
-      console.error('Ошибка загрузки курсов:', err);
       setError(axiosError.response?.data?.error || 'Не удалось загрузить курсы');
     } finally {
       setLoading(false);
@@ -3395,13 +3405,13 @@ export function useCourses(limit: number = 6, offset: number = 0, classNumber?: 
   };
 
   useEffect(() => {
-    // Используем classNumber из пропса, если он есть, иначе user.class_number для студентов
-    const initialClassNumber = classNumber !== undefined ? classNumber : (user?.role === 'student' && user?.class_number ? user.class_number : undefined);
-    fetchCourses(limit, offset, initialClassNumber);
+    // ⚠️ Всегда использовать classNumber проп, даже если student
+    fetchCourses(limit, offset, classNumber);
   }, [limit, offset, classNumber, user?.id]);
 
   return { courses, loading, error, refetch: fetchCourses, total };
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
