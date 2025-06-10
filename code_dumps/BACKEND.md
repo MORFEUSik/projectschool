@@ -52,16 +52,18 @@ backend/
 │   │   ├── notification.go
 │   │   ├── submission.go
 │   │   └── user.go
-│   └── service
-│       ├── achievement.go
-│       ├── action_log.go
-│       ├── assignment.go
-│       ├── auth.go
-│       ├── course.go
-│       ├── notification.go
-│       ├── submission.go
-│       ├── subtask.go
-│       └── user.go
+│   ├── service
+│   │   ├── achievement.go
+│   │   ├── action_log.go
+│   │   ├── assignment.go
+│   │   ├── auth.go
+│   │   ├── course.go
+│   │   ├── notification.go
+│   │   ├── submission.go
+│   │   ├── subtask.go
+│   │   └── user.go
+│   └── util
+│       └── log_util.go
 
 ================================================================================
 СОДЕРЖИМОЕ ФАЙЛОВ
@@ -1501,8 +1503,8 @@ func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
-		// Удаляем задание
-		if err := assignmentService.Delete(uint(id)); err != nil {
+		// Удаляем задание, передавая teacherID
+		if err := assignmentService.Delete(uint(id), user.ID); err != nil {
 			logger.Log.Errorf("Failed to delete assignment %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось удалить задание"})
 			return
@@ -2526,7 +2528,7 @@ func GetActionLogs(s service.ActionLogService) gin.HandlerFunc {
 		startDateStr := c.Query("start_date")
 		endDateStr := c.Query("end_date")
 
-		excludeActions := []string{"list_achievements", "list_users"} // Исключаем ненужные действия
+		excludeActions := []string{"list_achievements", "list_users", "get_profile", "get_course", "list_courses"}
 
 		var logs []repository.ActionLogWithUser
 		var total int64
@@ -3224,6 +3226,7 @@ import (
 type UserActionLog struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	UserID    uint      `gorm:"index" json:"user_id"`
+	User      *User     `gorm:"foreignKey:UserID" json:"user"` // Добавляем связь с User
 	Action    string    `gorm:"type:varchar(255)" json:"action"`
 	Details   string    `gorm:"type:text" json:"details"`
 	CreatedAt time.Time `json:"created_at"`
@@ -3627,17 +3630,7 @@ import (
 
 // ActionLogWithUser — структура для возврата логов с данными пользователя
 type ActionLogWithUser struct {
-	ID        uint      `json:"id"`
-	UserID    uint      `json:"user_id"`
-	Action    string    `json:"action"`
-	Details   string    `json:"details"`
-	CreatedAt time.Time `json:"created_at"`
-	User      struct {
-		ID       uint   `json:"id"`
-		Username string `json:"username"`
-		FullName string `json:"full_name"`
-		Role     string `json:"role"`
-	} `json:"user"`
+	model.UserActionLog
 }
 
 type ActionLogRepository interface {
@@ -3662,12 +3655,9 @@ func (r *actionLogRepository) FindAll(limit, offset int, excludeActions []string
 	var logs []ActionLogWithUser
 	var total int64
 
-	query := r.db.Table("user_action_logs").
-		Select("user_action_logs.id, user_action_logs.user_id, user_action_logs.action, user_action_logs.details, user_action_logs.created_at, COALESCE(users.id, 0) as user__id, COALESCE(users.username, '') as user__username, COALESCE(users.full_name, '') as user__full_name, COALESCE(users.role, '') as user__role").
-		Joins("left join users on user_action_logs.user_id = users.id")
-
+	query := r.db.Model(&model.UserActionLog{}).Preload("User")
 	if len(excludeActions) > 0 {
-		query = query.Where("user_action_logs.action NOT IN ?", excludeActions)
+		query = query.Where("action NOT IN ?", excludeActions)
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -3675,9 +3665,9 @@ func (r *actionLogRepository) FindAll(limit, offset int, excludeActions []string
 		return nil, 0, err
 	}
 
-	query = query.Limit(limit).Offset(offset).Order("user_action_logs.created_at desc")
-	if err := query.Scan(&logs).Error; err != nil {
-		logger.Log.Errorf("Failed to scan action logs: %v", err)
+	query = query.Limit(limit).Offset(offset).Order("created_at desc")
+	if err := query.Find(&logs).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch action logs: %v", err)
 		return nil, 0, err
 	}
 
@@ -3693,13 +3683,10 @@ func (r *actionLogRepository) FindByDateRange(startDate, endDate time.Time, excl
 	var logs []ActionLogWithUser
 	var total int64
 
-	query := r.db.Table("user_action_logs").
-		Select("user_action_logs.id, user_action_logs.user_id, user_action_logs.action, user_action_logs.details, user_action_logs.created_at, COALESCE(users.id, 0) as user__id, COALESCE(users.username, '') as user__username, COALESCE(users.full_name, '') as user__full_name, COALESCE(users.role, '') as user__role").
-		Joins("left join users on user_action_logs.user_id = users.id").
-		Where("user_action_logs.created_at BETWEEN ? AND ?", startDate, endDate)
-
+	query := r.db.Model(&model.UserActionLog{}).Preload("User").
+		Where("created_at BETWEEN ? AND ?", startDate, endDate)
 	if len(excludeActions) > 0 {
-		query = query.Where("user_action_logs.action NOT IN ?", excludeActions)
+		query = query.Where("action NOT IN ?", excludeActions)
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -3707,9 +3694,9 @@ func (r *actionLogRepository) FindByDateRange(startDate, endDate time.Time, excl
 		return nil, 0, err
 	}
 
-	query = query.Order("user_action_logs.created_at desc")
-	if err := query.Scan(&logs).Error; err != nil {
-		logger.Log.Errorf("Failed to scan action logs by date range: %v", err)
+	query = query.Order("created_at desc")
+	if err := query.Find(&logs).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch action logs by date range: %v", err)
 		return nil, 0, err
 	}
 
@@ -3719,6 +3706,33 @@ func (r *actionLogRepository) FindByDateRange(startDate, endDate time.Time, excl
 	}
 
 	return logs, total, nil
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ backend/internal/util/log_util.go
+════════════════════════════════════════════════════════════════════════════════
+
+package util
+
+import (
+	"fmt"
+	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+)
+
+func LogUserAction(logRepo repository.ActionLogRepository, userID uint, action, details string) {
+	go func() {
+		err := logRepo.Create(&model.UserActionLog{
+			UserID:  userID,
+			Action:  action,
+			Details: details,
+		})
+		if err != nil {
+			fmt.Printf("Ошибка при логировании действия [%s]: %v\n", action, err)
+		}
+	}()
 }
 
 
@@ -4189,6 +4203,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -4207,7 +4222,7 @@ type submissionService struct {
 	userRepo         repository.UserRepository
 	assignmentRepo   repository.AssignmentRepository
 	notificationRepo repository.NotificationRepository
-	logRepo          repository.ActionLogRepository // Добавляем
+	logRepo          repository.ActionLogRepository
 	db               *gorm.DB
 }
 
@@ -4216,14 +4231,14 @@ func NewSubmissionService(
 	userRepo repository.UserRepository,
 	assignmentRepo repository.AssignmentRepository,
 	notificationRepo repository.NotificationRepository,
-	logRepo repository.ActionLogRepository, // Добавляем
+	logRepo repository.ActionLogRepository,
 ) SubmissionService {
 	return &submissionService{
 		repo:             repo,
 		userRepo:         userRepo,
 		assignmentRepo:   assignmentRepo,
 		notificationRepo: notificationRepo,
-		logRepo:          logRepo, // Добавляем
+		logRepo:          logRepo,
 		db:               db.DB,
 	}
 }
@@ -4288,6 +4303,7 @@ func (s *submissionService) Create(submission *model.Submission) error {
 	}
 
 	logger.Log.Infof("Submission created for user %d, assignment %d", submission.UserID, submission.AssignmentID)
+	util.LogUserAction(s.logRepo, submission.UserID, "submit_assignment", fmt.Sprintf("Сдано задание ID: %d", submission.AssignmentID)) // Исправляем studentID и assignmentID
 	return nil
 }
 
@@ -4391,6 +4407,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		}
 	}
 
+	util.LogUserAction(s.logRepo, userID, "submit_grade", fmt.Sprintf("Выставлена оценка %.1f за submission ID: %d", grade, submissionID)) // Исправляем teacherID
 	return nil
 }
 
@@ -5090,28 +5107,31 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util" // Добавляем импорт
 	"gorm.io/gorm"
 )
 
 type AssignmentService interface {
-	Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error // Обновляем сигнатуру
+	Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
-	Delete(id uint) error
+	Delete(id uint, teacherID uint) error // Обновляем сигнатуру
 }
 
 type assignmentService struct {
 	repo             repository.AssignmentRepository
 	notificationRepo repository.NotificationRepository
 	db               *gorm.DB
+	logRepo          repository.ActionLogRepository // Добавляем поле
 }
 
-func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo repository.NotificationRepository, db *gorm.DB) AssignmentService {
+func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo repository.NotificationRepository, db *gorm.DB, logRepo repository.ActionLogRepository) AssignmentService {
 	return &assignmentService{
 		repo:             repo,
 		notificationRepo: notificationRepo,
 		db:               db,
+		logRepo:          logRepo,
 	}
 }
 
@@ -5158,7 +5178,6 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 			subtasks[i].AssignmentID = assignment.ID
 			subtasks[i].SortOrder = i + 1
 
-			// Привязываем URL файла к подзаданию
 			if fileURL, ok := files[fmt.Sprintf("subtask_image_%d", i)]; ok {
 				subtasks[i].File_url = fileURL
 			}
@@ -5186,6 +5205,7 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 		}
 
 		logger.Log.Infof("Assignment %s created successfully with %d subtasks", assignment.Title, len(subtasks))
+		util.LogUserAction(s.logRepo, assignment.TeacherID, "create_assignment", fmt.Sprintf("Создано задание: %s", assignment.Title)) // Исправляем AuthorID на TeacherID
 		return nil
 	})
 }
@@ -5211,8 +5231,16 @@ func (s *assignmentService) Get(id uint) (*model.Assignment, error) {
 	return s.repo.FindByID(id)
 }
 
-func (s *assignmentService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *assignmentService) Delete(id uint, teacherID uint) error {
+	logger.Log.Infof("Deleting assignment %d by teacher %d", id, teacherID)
+	err := s.repo.Delete(id)
+	if err != nil {
+		logger.Log.Errorf("Failed to delete assignment %d: %v", id, err)
+		return err
+	}
+	logger.Log.Infof("Assignment %d deleted successfully", id)
+	util.LogUserAction(s.logRepo, teacherID, "delete_assignment", fmt.Sprintf("Удалено задание ID: %d", id))
+	return nil
 }
 
 
@@ -5233,6 +5261,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -5286,6 +5315,7 @@ func (s *courseService) Create(course *model.Course) error {
 		return err
 	}
 	logger.Log.Infof("Course %s created successfully", course.Title)
+	util.LogUserAction(s.logRepo, course.TeacherID, "create_course", fmt.Sprintf("Создан курс: %s", course.Title))
 	return nil
 }
 
@@ -5454,6 +5484,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("User %d enrolled in course %d", userID, courseID)
+	util.LogUserAction(s.logRepo, userID, "enroll_course", fmt.Sprintf("Записался на курс ID: %d", courseID))
 	return nil
 }
 
@@ -5499,6 +5530,7 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("User %d unenrolled from course %d", userID, courseID)
+	util.LogUserAction(s.logRepo, userID, "unenroll_course", fmt.Sprintf("Отписался от курса ID: %d", courseID))
 	return nil
 }
 
@@ -5530,6 +5562,7 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("Course %d deleted by user %d", courseID, userID)
+	util.LogUserAction(s.logRepo, userID, "delete_course", fmt.Sprintf("Удалён курс ID: %d", courseID))
 	return nil
 }
 
@@ -5709,11 +5742,13 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -5800,19 +5835,12 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 				}
 				logger.Log.Infof("Assigned achievement %s to user %d", ach.Title, userID)
 				newAchievements = append(newAchievements, ach)
-
-				// Логирование действия
-				log := &model.UserActionLog{
-					UserID:    userID,
-					Action:    "award_achievement",
-					Details:   "Пользователь получил достижение: " + ach.Title,
-					CreatedAt: time.Now(),
-				}
-				if err := s.logRepo.Create(log); err != nil {
-					logger.Log.Errorf("Failed to create action log: %v", err)
-				}
 			}
 		}
+	}
+
+	if len(newAchievements) > 0 {
+		util.LogUserAction(s.logRepo, userID, "award_achievement", fmt.Sprintf("Получено %d новых достижений", len(newAchievements)))
 	}
 
 	return newAchievements, nil
@@ -5842,19 +5870,7 @@ func (s *achievementService) Create(achievement *model.GlobalAchievement, adminI
 	}
 
 	logger.Log.Infof("Achievement %s created by admin %d", achievement.Title, adminID)
-	log := &model.UserActionLog{
-		UserID:    adminID,
-		Action:    "create_achievement",
-		Details:   "Админ создал достижение: " + achievement.Title,
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
+	util.LogUserAction(s.logRepo, adminID, "create_achievement", fmt.Sprintf("Создано достижение: %s", achievement.Title))
 	return nil
 }
 
@@ -5894,42 +5910,8 @@ func (s *achievementService) Update(achievementID uint, achievement *model.Globa
 	}
 
 	logger.Log.Infof("Achievement %d updated by admin %d", achievementID, adminID)
-	log := &model.UserActionLog{
-		UserID:    adminID,
-		Action:    "update_achievement",
-		Details:   "Админ обновил достижение: " + achievement.Title,
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
+	util.LogUserAction(s.logRepo, adminID, "update_achievement", fmt.Sprintf("Обновлено достижение ID: %d", achievementID))
 	return nil
-}
-
-func (s *achievementService) ListAll() ([]model.GlobalAchievement, error) {
-	var achievements []model.GlobalAchievement
-	if err := s.db.Find(&achievements).Error; err != nil {
-		logger.Log.Errorf("Failed to list achievements: %v", err)
-		return nil, err
-	}
-	log := &model.UserActionLog{
-		UserID:    0,
-		Action:    "list_achievements",
-		Details:   "Запрошен список всех достижений",
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
-	return achievements, nil
 }
 
 func (s *achievementService) Delete(achievementID uint, adminID uint) error {
@@ -5954,27 +5936,24 @@ func (s *achievementService) Delete(achievementID uint, adminID uint) error {
 		return err
 	}
 
-	// Удаление записи из global_achievements (user_achievements удаляются автоматически благодаря ON DELETE CASCADE)
 	if err := s.db.Delete(&achievement).Error; err != nil {
 		logger.Log.Errorf("Failed to delete achievement %d: %v", achievementID, err)
 		return err
 	}
 
 	logger.Log.Infof("Achievement %d deleted by admin %d", achievementID, adminID)
-	log := &model.UserActionLog{
-		UserID:    adminID,
-		Action:    "delete_achievement",
-		Details:   "Админ удалил достижение: " + achievement.Title,
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
+	util.LogUserAction(s.logRepo, adminID, "delete_achievement", fmt.Sprintf("Удалено достижение ID: %d", achievementID))
 	return nil
+}
+
+func (s *achievementService) ListAll() ([]model.GlobalAchievement, error) {
+	var achievements []model.GlobalAchievement
+	if err := s.db.Find(&achievements).Error; err != nil {
+		logger.Log.Errorf("Failed to list achievements: %v", err)
+		return nil, err
+	}
+	util.LogUserAction(s.logRepo, 0, "list_achievements", "Запрошен список всех достижений")
+	return achievements, nil
 }
 
 
@@ -6114,7 +6093,7 @@ func main() {
 	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
-	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB)
+	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo) // Добавляем logRepo
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
 	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)

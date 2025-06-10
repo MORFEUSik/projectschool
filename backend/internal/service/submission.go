@@ -12,6 +12,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +31,7 @@ type submissionService struct {
 	userRepo         repository.UserRepository
 	assignmentRepo   repository.AssignmentRepository
 	notificationRepo repository.NotificationRepository
-	logRepo          repository.ActionLogRepository // Добавляем
+	logRepo          repository.ActionLogRepository
 	db               *gorm.DB
 }
 
@@ -39,14 +40,14 @@ func NewSubmissionService(
 	userRepo repository.UserRepository,
 	assignmentRepo repository.AssignmentRepository,
 	notificationRepo repository.NotificationRepository,
-	logRepo repository.ActionLogRepository, // Добавляем
+	logRepo repository.ActionLogRepository,
 ) SubmissionService {
 	return &submissionService{
 		repo:             repo,
 		userRepo:         userRepo,
 		assignmentRepo:   assignmentRepo,
 		notificationRepo: notificationRepo,
-		logRepo:          logRepo, // Добавляем
+		logRepo:          logRepo,
 		db:               db.DB,
 	}
 }
@@ -111,6 +112,7 @@ func (s *submissionService) Create(submission *model.Submission) error {
 	}
 
 	logger.Log.Infof("Submission created for user %d, assignment %d", submission.UserID, submission.AssignmentID)
+	util.LogUserAction(s.logRepo, submission.UserID, "submit_assignment", fmt.Sprintf("Сдано задание ID: %d", submission.AssignmentID)) // Исправляем studentID и assignmentID
 	return nil
 }
 
@@ -214,6 +216,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		}
 	}
 
+	util.LogUserAction(s.logRepo, userID, "submit_grade", fmt.Sprintf("Выставлена оценка %.1f за submission ID: %d", grade, submissionID)) // Исправляем teacherID
 	return nil
 }
 

@@ -10,17 +10,7 @@ import (
 
 // ActionLogWithUser — структура для возврата логов с данными пользователя
 type ActionLogWithUser struct {
-	ID        uint      `json:"id"`
-	UserID    uint      `json:"user_id"`
-	Action    string    `json:"action"`
-	Details   string    `json:"details"`
-	CreatedAt time.Time `json:"created_at"`
-	User      struct {
-		ID       uint   `json:"id"`
-		Username string `json:"username"`
-		FullName string `json:"full_name"`
-		Role     string `json:"role"`
-	} `json:"user"`
+	model.UserActionLog
 }
 
 type ActionLogRepository interface {
@@ -45,12 +35,9 @@ func (r *actionLogRepository) FindAll(limit, offset int, excludeActions []string
 	var logs []ActionLogWithUser
 	var total int64
 
-	query := r.db.Table("user_action_logs").
-		Select("user_action_logs.id, user_action_logs.user_id, user_action_logs.action, user_action_logs.details, user_action_logs.created_at, COALESCE(users.id, 0) as user__id, COALESCE(users.username, '') as user__username, COALESCE(users.full_name, '') as user__full_name, COALESCE(users.role, '') as user__role").
-		Joins("left join users on user_action_logs.user_id = users.id")
-
+	query := r.db.Model(&model.UserActionLog{}).Preload("User")
 	if len(excludeActions) > 0 {
-		query = query.Where("user_action_logs.action NOT IN ?", excludeActions)
+		query = query.Where("action NOT IN ?", excludeActions)
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -58,9 +45,9 @@ func (r *actionLogRepository) FindAll(limit, offset int, excludeActions []string
 		return nil, 0, err
 	}
 
-	query = query.Limit(limit).Offset(offset).Order("user_action_logs.created_at desc")
-	if err := query.Scan(&logs).Error; err != nil {
-		logger.Log.Errorf("Failed to scan action logs: %v", err)
+	query = query.Limit(limit).Offset(offset).Order("created_at desc")
+	if err := query.Find(&logs).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch action logs: %v", err)
 		return nil, 0, err
 	}
 
@@ -76,13 +63,10 @@ func (r *actionLogRepository) FindByDateRange(startDate, endDate time.Time, excl
 	var logs []ActionLogWithUser
 	var total int64
 
-	query := r.db.Table("user_action_logs").
-		Select("user_action_logs.id, user_action_logs.user_id, user_action_logs.action, user_action_logs.details, user_action_logs.created_at, COALESCE(users.id, 0) as user__id, COALESCE(users.username, '') as user__username, COALESCE(users.full_name, '') as user__full_name, COALESCE(users.role, '') as user__role").
-		Joins("left join users on user_action_logs.user_id = users.id").
-		Where("user_action_logs.created_at BETWEEN ? AND ?", startDate, endDate)
-
+	query := r.db.Model(&model.UserActionLog{}).Preload("User").
+		Where("created_at BETWEEN ? AND ?", startDate, endDate)
 	if len(excludeActions) > 0 {
-		query = query.Where("user_action_logs.action NOT IN ?", excludeActions)
+		query = query.Where("action NOT IN ?", excludeActions)
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -90,9 +74,9 @@ func (r *actionLogRepository) FindByDateRange(startDate, endDate time.Time, excl
 		return nil, 0, err
 	}
 
-	query = query.Order("user_action_logs.created_at desc")
-	if err := query.Scan(&logs).Error; err != nil {
-		logger.Log.Errorf("Failed to scan action logs by date range: %v", err)
+	query = query.Order("created_at desc")
+	if err := query.Find(&logs).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch action logs by date range: %v", err)
 		return nil, 0, err
 	}
 

@@ -91,7 +91,7 @@ func main() {
 	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
-	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB)
+	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo) // Добавляем logRepo
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
 	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)

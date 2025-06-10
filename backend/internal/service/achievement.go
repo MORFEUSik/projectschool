@@ -2,11 +2,13 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -93,19 +95,12 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 				}
 				logger.Log.Infof("Assigned achievement %s to user %d", ach.Title, userID)
 				newAchievements = append(newAchievements, ach)
-
-				// Логирование действия
-				log := &model.UserActionLog{
-					UserID:    userID,
-					Action:    "award_achievement",
-					Details:   "Пользователь получил достижение: " + ach.Title,
-					CreatedAt: time.Now(),
-				}
-				if err := s.logRepo.Create(log); err != nil {
-					logger.Log.Errorf("Failed to create action log: %v", err)
-				}
 			}
 		}
+	}
+
+	if len(newAchievements) > 0 {
+		util.LogUserAction(s.logRepo, userID, "award_achievement", fmt.Sprintf("Получено %d новых достижений", len(newAchievements)))
 	}
 
 	return newAchievements, nil
@@ -135,19 +130,7 @@ func (s *achievementService) Create(achievement *model.GlobalAchievement, adminI
 	}
 
 	logger.Log.Infof("Achievement %s created by admin %d", achievement.Title, adminID)
-	log := &model.UserActionLog{
-		UserID:    adminID,
-		Action:    "create_achievement",
-		Details:   "Админ создал достижение: " + achievement.Title,
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
+	util.LogUserAction(s.logRepo, adminID, "create_achievement", fmt.Sprintf("Создано достижение: %s", achievement.Title))
 	return nil
 }
 
@@ -187,42 +170,8 @@ func (s *achievementService) Update(achievementID uint, achievement *model.Globa
 	}
 
 	logger.Log.Infof("Achievement %d updated by admin %d", achievementID, adminID)
-	log := &model.UserActionLog{
-		UserID:    adminID,
-		Action:    "update_achievement",
-		Details:   "Админ обновил достижение: " + achievement.Title,
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
+	util.LogUserAction(s.logRepo, adminID, "update_achievement", fmt.Sprintf("Обновлено достижение ID: %d", achievementID))
 	return nil
-}
-
-func (s *achievementService) ListAll() ([]model.GlobalAchievement, error) {
-	var achievements []model.GlobalAchievement
-	if err := s.db.Find(&achievements).Error; err != nil {
-		logger.Log.Errorf("Failed to list achievements: %v", err)
-		return nil, err
-	}
-	log := &model.UserActionLog{
-		UserID:    0,
-		Action:    "list_achievements",
-		Details:   "Запрошен список всех достижений",
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
-	return achievements, nil
 }
 
 func (s *achievementService) Delete(achievementID uint, adminID uint) error {
@@ -247,25 +196,22 @@ func (s *achievementService) Delete(achievementID uint, adminID uint) error {
 		return err
 	}
 
-	// Удаление записи из global_achievements (user_achievements удаляются автоматически благодаря ON DELETE CASCADE)
 	if err := s.db.Delete(&achievement).Error; err != nil {
 		logger.Log.Errorf("Failed to delete achievement %d: %v", achievementID, err)
 		return err
 	}
 
 	logger.Log.Infof("Achievement %d deleted by admin %d", achievementID, adminID)
-	log := &model.UserActionLog{
-		UserID:    adminID,
-		Action:    "delete_achievement",
-		Details:   "Админ удалил достижение: " + achievement.Title,
-		CreatedAt: time.Now(),
-	}
-	if s.logRepo != nil {
-		if err := s.logRepo.Create(log); err != nil {
-			logger.Log.Errorf("Failed to create action log: %v", err)
-		}
-	} else {
-		logger.Log.Warnf("logRepo is nil, skipping action log creation")
-	}
+	util.LogUserAction(s.logRepo, adminID, "delete_achievement", fmt.Sprintf("Удалено достижение ID: %d", achievementID))
 	return nil
+}
+
+func (s *achievementService) ListAll() ([]model.GlobalAchievement, error) {
+	var achievements []model.GlobalAchievement
+	if err := s.db.Find(&achievements).Error; err != nil {
+		logger.Log.Errorf("Failed to list achievements: %v", err)
+		return nil, err
+	}
+	util.LogUserAction(s.logRepo, 0, "list_achievements", "Запрошен список всех достижений")
+	return achievements, nil
 }

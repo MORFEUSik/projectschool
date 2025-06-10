@@ -418,8 +418,8 @@ func DeleteAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
-		// Удаляем задание
-		if err := assignmentService.Delete(uint(id)); err != nil {
+		// Удаляем задание, передавая teacherID
+		if err := assignmentService.Delete(uint(id), user.ID); err != nil {
 			logger.Log.Errorf("Failed to delete assignment %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось удалить задание"})
 			return

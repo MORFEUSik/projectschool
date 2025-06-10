@@ -9,28 +9,31 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util" // Добавляем импорт
 	"gorm.io/gorm"
 )
 
 type AssignmentService interface {
-	Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error // Обновляем сигнатуру
+	Create(assignment *model.Assignment, subtasks []model.Subtask, files map[string]string) error
 	ListByCourse(courseID uint) ([]model.Assignment, error)
 	ListByUser(userID uint) ([]model.Assignment, error)
 	Get(id uint) (*model.Assignment, error)
-	Delete(id uint) error
+	Delete(id uint, teacherID uint) error // Обновляем сигнатуру
 }
 
 type assignmentService struct {
 	repo             repository.AssignmentRepository
 	notificationRepo repository.NotificationRepository
 	db               *gorm.DB
+	logRepo          repository.ActionLogRepository // Добавляем поле
 }
 
-func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo repository.NotificationRepository, db *gorm.DB) AssignmentService {
+func NewAssignmentService(repo repository.AssignmentRepository, notificationRepo repository.NotificationRepository, db *gorm.DB, logRepo repository.ActionLogRepository) AssignmentService {
 	return &assignmentService{
 		repo:             repo,
 		notificationRepo: notificationRepo,
 		db:               db,
+		logRepo:          logRepo,
 	}
 }
 
@@ -77,7 +80,6 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 			subtasks[i].AssignmentID = assignment.ID
 			subtasks[i].SortOrder = i + 1
 
-			// Привязываем URL файла к подзаданию
 			if fileURL, ok := files[fmt.Sprintf("subtask_image_%d", i)]; ok {
 				subtasks[i].File_url = fileURL
 			}
@@ -105,6 +107,7 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 		}
 
 		logger.Log.Infof("Assignment %s created successfully with %d subtasks", assignment.Title, len(subtasks))
+		util.LogUserAction(s.logRepo, assignment.TeacherID, "create_assignment", fmt.Sprintf("Создано задание: %s", assignment.Title)) // Исправляем AuthorID на TeacherID
 		return nil
 	})
 }
@@ -130,6 +133,14 @@ func (s *assignmentService) Get(id uint) (*model.Assignment, error) {
 	return s.repo.FindByID(id)
 }
 
-func (s *assignmentService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *assignmentService) Delete(id uint, teacherID uint) error {
+	logger.Log.Infof("Deleting assignment %d by teacher %d", id, teacherID)
+	err := s.repo.Delete(id)
+	if err != nil {
+		logger.Log.Errorf("Failed to delete assignment %d: %v", id, err)
+		return err
+	}
+	logger.Log.Infof("Assignment %d deleted successfully", id)
+	util.LogUserAction(s.logRepo, teacherID, "delete_assignment", fmt.Sprintf("Удалено задание ID: %d", id))
+	return nil
 }

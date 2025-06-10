@@ -10,6 +10,7 @@ import (
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -63,6 +64,7 @@ func (s *courseService) Create(course *model.Course) error {
 		return err
 	}
 	logger.Log.Infof("Course %s created successfully", course.Title)
+	util.LogUserAction(s.logRepo, course.TeacherID, "create_course", fmt.Sprintf("Создан курс: %s", course.Title))
 	return nil
 }
 
@@ -231,6 +233,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("User %d enrolled in course %d", userID, courseID)
+	util.LogUserAction(s.logRepo, userID, "enroll_course", fmt.Sprintf("Записался на курс ID: %d", courseID))
 	return nil
 }
 
@@ -276,6 +279,7 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("User %d unenrolled from course %d", userID, courseID)
+	util.LogUserAction(s.logRepo, userID, "unenroll_course", fmt.Sprintf("Отписался от курса ID: %d", courseID))
 	return nil
 }
 
@@ -307,6 +311,7 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("Course %d deleted by user %d", courseID, userID)
+	util.LogUserAction(s.logRepo, userID, "delete_course", fmt.Sprintf("Удалён курс ID: %d", courseID))
 	return nil
 }
 
