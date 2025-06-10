@@ -11,7 +11,7 @@ export function Card({ children, className = '', title, ...props }: CardProps) {
   return (
     <div
       className={clsx(
-        'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-6 transition-all',
+        'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm transition-all',
         className
       )}
       {...props}

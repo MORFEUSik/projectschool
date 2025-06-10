@@ -41,7 +41,9 @@ export default function CoursesPage() {
   const limit = 6;
 
   // Состояние для анимации и пагинации
-  const [hoveredCourseId, setHoveredCourseId] = useState<number | null>(null);
+  const [hoveredCourseId, setHoveredCourseId] = useState<number | null>(null); // Для масштаба
+  const [descriptionCourseId, setDescriptionCourseId] = useState<number | null>(null); // Для описания
+  const [clickedCourseId, setClickedCourseId] = useState<number | null>(null); // Для клика
   const [typedDescriptions, setTypedDescriptions] = useState<Record<number, string>>({});
   const [isPageTransition, setIsPageTransition] = useState(false);
   const hoverTimers = useRef<Map<number, NodeJS.Timeout>>(new Map());
@@ -75,21 +77,21 @@ export default function CoursesPage() {
 
   // Эффект печатания описания
   useEffect(() => {
-    if (hoveredCourseId !== null) {
-      const course = courses.find((c) => c.id === hoveredCourseId);
+    if (descriptionCourseId !== null) {
+      const course = courses.find((c) => c.id === descriptionCourseId);
       if (course) {
         const text = course.description || 'Описание отсутствует';
         let index = 0;
-        setTypedDescriptions((prev) => ({ ...prev, [hoveredCourseId]: '' }));
+        setTypedDescriptions((prev) => ({ ...prev, [descriptionCourseId]: '' }));
 
         const type = () => {
           setTypedDescriptions((prev) => ({
             ...prev,
-            [hoveredCourseId]: text.slice(0, index + 1),
+            [descriptionCourseId]: text.slice(0, index + 1),
           }));
           index++;
           if (index < text.length) {
-            typingTimers.current.set(hoveredCourseId, setTimeout(type, 30));
+            typingTimers.current.set(descriptionCourseId, setTimeout(type, 30));
           }
         };
         type();
@@ -97,8 +99,9 @@ export default function CoursesPage() {
     } else {
       typingTimers.current.forEach((timer) => clearTimeout(timer));
       typingTimers.current.clear();
+      setTypedDescriptions({});
     }
-  }, [hoveredCourseId, courses]);
+  }, [descriptionCourseId, courses]);
 
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,9 +135,10 @@ export default function CoursesPage() {
 
   // Обработчики наведения и ухода курсора
   const handleMouseEnter = (courseId: number) => {
+    setHoveredCourseId(courseId); // Мгновенный масштаб
     const timer = setTimeout(() => {
-      setHoveredCourseId(courseId);
-    }, 1000); // Задержка 1 секунда для описания
+      setDescriptionCourseId(courseId); // Описание через 1с
+    }, 1000);
     hoverTimers.current.set(courseId, timer);
   };
 
@@ -145,6 +149,16 @@ export default function CoursesPage() {
       hoverTimers.current.delete(courseId);
     }
     setHoveredCourseId(null);
+    setDescriptionCourseId(null);
+  };
+
+  // Обработчики клика
+  const handleMouseDown = (courseId: number) => {
+    setClickedCourseId(courseId);
+  };
+
+  const handleMouseUp = () => {
+    setClickedCourseId(null);
   };
 
   const subjects = [
@@ -326,25 +340,31 @@ export default function CoursesPage() {
             <Link href={`/courses/${course.id}`} key={course.id}>
               <Card
                 className={clsx(
-                  'p-6 flex flex-col cursor-pointer hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-600 card-hover-gradient',
+                  'p-6 flex flex-col cursor-pointer card-shadow card-hover-gradient min-h-[auto]',
                   'animate-fade-in-up transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-                  { 'scale-102': hoveredCourseId === course.id, 'scale-100': hoveredCourseId !== course.id },
+                  {
+                    'scale-102': hoveredCourseId === course.id && clickedCourseId !== course.id,
+                    'scale-95': clickedCourseId === course.id,
+                    'scale-100': hoveredCourseId !== course.id && clickedCourseId !== course.id,
+                  },
                   { 'animation-delay-100': index % 2 === 0, 'animation-delay-200': index % 2 === 1 }
                 )}
                 style={{ animationDelay: `${index * 100}ms` }}
                 onMouseEnter={() => handleMouseEnter(course.id)}
                 onMouseLeave={() => handleMouseLeave(course.id)}
+                onMouseDown={() => handleMouseDown(course.id)}
+                onMouseUp={handleMouseUp}
               >
                 <div>
                   <h2 className="text-xl font-bold text-blue-700 mb-2">{course.title}</h2>
                   <div
                     className={clsx(
-                      'text-sm text-gray-600 max-h-16 overflow-hidden transition-all duration-800 ease-[cubic-bezier(0.4,0,0.2,1)]',
-                      hoveredCourseId === course.id ? 'opacity-100 max-h-16' : 'opacity-0 max-h-0'
+                      'text-sm text-gray-600 transition-all duration-1000 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                      descriptionCourseId === course.id ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
                     )}
                     style={{
-                      WebkitMaskImage: hoveredCourseId === course.id ? 'linear-gradient(to right, black 80%, transparent 100%)' : 'none',
-                      maskImage: hoveredCourseId === course.id ? 'linear-gradient(to right, black 80%, transparent 100%)' : 'none',
+                      WebkitMaskImage: descriptionCourseId === course.id ? 'linear-gradient(to right, black 80%, transparent 100%)' : 'none',
+                      maskImage: descriptionCourseId === course.id ? 'linear-gradient(to right, black 80%, transparent 100%)' : 'none',
                     }}
                   >
                     {typedDescriptions[course.id] || ''}

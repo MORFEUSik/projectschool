@@ -34,8 +34,7 @@ frontend/
 │   │   │   ├── components
 │   │   │   │   ├── AchievementManagement.tsx
 │   │   │   │   ├── ActionLogs.tsx
-│   │   │   │   ├── CreateUserForm.tsx
-│   │   │   │   └── UserRoleForm.tsx
+│   │   │   │   └── UserManagement.tsx
 │   │   │   └── page.tsx
 │   │   ├── auth
 │   │   │   ├── login
@@ -97,7 +96,8 @@ frontend/
 │   │       ├── Input.tsx
 │   │       └── QuizForm.tsx
 │   └── widgets
-│       └── AvatarModal.tsx
+│       ├── AvatarModal.tsx
+│       └── ConfirmModal.tsx
 ├── tailwind.config.js
 └── tsconfig.json
 
@@ -274,25 +274,42 @@ import Link from 'next/link';
 
 export default function Home() {
   return (
-    <div className="max-w-4xl mx-auto text-center mt-20 animate-fade-in-up">
-      <h1 className="text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-cyan-400 text-transparent bg-clip-text mb-6">
-        Добро пожаловать в ProjectSchool!
-      </h1>
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4 py-20">
+      <div className="max-w-4xl mx-auto text-center">
+        <h1
+          className="text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text mb-6 animate-fade-in-up"
+          style={{ animationDelay: '100ms' }}
+        >
+          📚 Добро пожаловать в ProjectSchool!
+        </h1>
 
-      <Card className="p-8 shadow-lg rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/60 backdrop-blur">
-        <p className="mb-6 text-lg text-gray-700 dark:text-gray-300">
-          Обучайтесь, выполняйте задания и соревнуйтесь в таблице лидеров!
-        </p>
-        <Link href="/courses">
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full shadow transition duration-200">
-            Перейти к курсам
-          </Button>
-        </Link>
-      </Card>
-    </div>
+        <Card
+          className="p-8 card-shadow card-hover-gradient rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/60 backdrop-blur hover:scale-[1.02] transition-transform duration-300"
+          style={{ animationDelay: '200ms' }}
+        >
+          <p
+            className="mb-6 text-lg text-gray-700 dark:text-gray-300 line-clamp-3 animate-fade-in-up"
+            style={{ animationDelay: '200ms' }}
+          >
+            Обучайтесь новым навыкам, выполняйте практические задания и соревнуйтесь с другими в таблице лидеров!
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+            <Link href="/courses">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full shadow animate-pulse hover:scale-105 transition duration-200">
+                Перейти к курсам
+              </Button>
+            </Link>
+            <Link href="/leaderboard">
+              <Button className="bg-transparent border border-blue-600 text-gray-900 dark:text-gray-900 dark:border-blue-400 hover:bg-blue-600 hover:text-gray-900 dark:hover:text-gray-900 px-6 py-2 rounded-full transition duration-200">
+                Лидерборд
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    </main>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -300,12 +317,17 @@ export default function Home() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState, useEffect } from 'react';
+import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Input } from '@/shared/ui/Input';
 import { Button } from '@/shared/ui/Button';
 import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
+import clsx from 'clsx';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 interface LeaderboardUser {
   id: number;
@@ -318,6 +340,7 @@ interface ErrorResponse {
 }
 
 export default function LeaderboardPage() {
+  const { user } = useUser();
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [courseId, setCourseId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -327,11 +350,16 @@ export default function LeaderboardPage() {
     setIsLoading(true);
     setError('');
     try {
-      const response = await api.get<LeaderboardUser[]>(`/leaderboard${courseId ? `?course_id=${courseId}` : ''}`);
+      const response = await api.get<LeaderboardUser[]>(
+        `/leaderboard${courseId ? `?course_id=${courseId}` : ''}`
+      );
       setUsers(response.data);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Не удалось загрузить таблицу лидеров');
+      const errorMsg = axiosError.response?.data?.error || 'Не удалось загрузить таблицу лидеров';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      console.error('API error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -343,9 +371,17 @@ export default function LeaderboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">🏆 Таблица лидеров</h1>
+      <h1
+        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+        style={{ animationDelay: '100ms' }}
+      >
+        🏆 Таблица лидеров
+      </h1>
 
-      <Card className="mb-6">
+      <Card
+        className="p-6 mb-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '200ms' }}
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -353,41 +389,84 @@ export default function LeaderboardPage() {
           }}
           className="flex flex-col sm:flex-row gap-4 items-center"
         >
-          <Input
-            type="number"
-            placeholder="ID курса (опционально)"
-            value={courseId}
-            onChange={(e) => setCourseId(e.target.value)}
-            className="w-full sm:flex-1"
-          />
-          <Button type="submit">Показать</Button>
+          <div
+            className="relative w-full sm:flex-1 group"
+            data-tooltip="Введите ID курса"
+          >
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+            <Input
+              type="number"
+              placeholder="Введите ID курса"
+              value={courseId}
+              onChange={(e) => setCourseId(e.target.value)}
+              className="pl-10 border-blue-600 dark:bg-gray-700 dark:text-gray-300 focus:ring-blue-600 w-full"
+            />
+            <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+              Введите ID курса
+            </span>
+          </div>
+          <Button
+            type="submit"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full hover:scale-105 transition duration-200"
+          >
+            Показать
+          </Button>
         </form>
       </Card>
 
-      {isLoading && <p className="text-center text-gray-500">Загрузка...</p>}
-      {error && <p className="text-center text-red-500 mb-4">{error}</p>}
+      {error && (
+        <p
+          className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse"
+          style={{ animationDelay: '300ms' }}
+        >
+          {error}
+        </p>
+      )}
 
-      <Card>
-        {users.length === 0 && !isLoading ? (
-          <p className="text-center text-gray-500">Нет данных</p>
+      <Card
+        className="p-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '300ms' }}
+      >
+        {isLoading ? (
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse h-12 w-full bg-gray-200 dark:bg-gray-700 rounded"
+              />
+            ))}
+          </div>
+        ) : users.length === 0 ? (
+          <p className="text-center text-gray-500 dark:text-gray-400">Нет данных</p>
         ) : (
           <table className="w-full table-auto text-sm">
             <thead>
-              <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
-                <th className="py-2 px-3">#</th>
-                <th className="py-2 px-3">Пользователь</th>
-                <th className="py-2 px-3">Баллы</th>
+              <tr className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-600 uppercase">
+                <th className="py-3 px-4 text-left">#</th>
+                <th className="py-3 px-4 text-left">Пользователь</th>
+                <th className="py-3 px-4 text-left">Баллы</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((user, index) => (
+              {users.map((userItem, index) => (
                 <tr
-                  key={user.id}
-                  className="border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  key={userItem.id}
+                  className={clsx(
+                    'border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition animate-fade-in-up',
+                    userItem.id === user?.id && 'bg-blue-50 dark:bg-blue-900'
+                  )}
+                  style={{ animationDelay: `${(index + 1) * 100}ms` }}
                 >
-                  <td className="py-2 px-3 font-medium">{index + 1}</td>
-                  <td className="py-2 px-3">{user.username}</td>
-                  <td className="py-2 px-3 font-semibold text-blue-600 dark:text-blue-400">{user.points}</td>
+                  <td className="py-3 px-4 font-medium">
+                    {index + 1}
+                    {index === 0 && ' 🥇'}
+                    {index === 1 && ' 🥈'}
+                    {index === 2 && ' 🥉'}
+                  </td>
+                  <td className="py-3 px-4 line-clamp-2">{userItem.username}</td>
+                  <td className="py-3 px-4 font-semibold text-blue-600 dark:text-blue-400">
+                    {userItem.points}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -399,22 +478,21 @@ export default function LeaderboardPage() {
 }
 
 
-
 ════════════════════════════════════════════════════════════════════════════════
 ║ frontend/src/app/courses/page.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCourses } from '@/shared/hooks/useCourses';
 import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
-import { EnrollButton } from '@/features/course/enroll';
 import { api } from '@/shared/api';
 import Link from 'next/link';
 import { AxiosError } from 'axios';
+import clsx from 'clsx';
 
 interface Course {
   id: number;
@@ -433,8 +511,9 @@ export default function CoursesPage() {
   const { user } = useUser();
   const [selectedClassNumber, setSelectedClassNumber] = useState<number | undefined>(undefined);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const classParam = selectedClassNumber ?? 'all';
-const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, classParam);
+  const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, classParam);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -445,12 +524,68 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
   const [page, setPage] = useState(1);
   const limit = 6;
 
+  // Состояние для анимации и пагинации
+  const [hoveredCourseId, setHoveredCourseId] = useState<number | null>(null); // Для масштаба
+  const [descriptionCourseId, setDescriptionCourseId] = useState<number | null>(null); // Для описания
+  const [clickedCourseId, setClickedCourseId] = useState<number | null>(null); // Для клика
+  const [typedDescriptions, setTypedDescriptions] = useState<Record<number, string>>({});
+  const [isPageTransition, setIsPageTransition] = useState(false);
+  const hoverTimers = useRef<Map<number, NodeJS.Timeout>>(new Map());
+  const typingTimers = useRef<Map<number, NodeJS.Timeout>>(new Map());
+
   // Устанавливаем начальный класс для студентов
   useEffect(() => {
     if (user?.role === 'student' && user?.class_number && selectedClassNumber === undefined) {
       setSelectedClassNumber(user.class_number);
     }
   }, [user?.class_number, user?.role]);
+
+  // Очистка таймеров при размонтировании
+  useEffect(() => {
+    return () => {
+      hoverTimers.current.forEach((timer) => clearTimeout(timer));
+      hoverTimers.current.clear();
+      typingTimers.current.forEach((timer) => clearTimeout(timer));
+      typingTimers.current.clear();
+    };
+  }, []);
+
+  // Анимация пагинации
+  useEffect(() => {
+    if (!isLoading) {
+      setIsPageTransition(true);
+      const timer = setTimeout(() => setIsPageTransition(false), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [page, isLoading]);
+
+  // Эффект печатания описания
+  useEffect(() => {
+    if (descriptionCourseId !== null) {
+      const course = courses.find((c) => c.id === descriptionCourseId);
+      if (course) {
+        const text = course.description || 'Описание отсутствует';
+        let index = 0;
+        setTypedDescriptions((prev) => ({ ...prev, [descriptionCourseId]: '' }));
+
+        const type = () => {
+          setTypedDescriptions((prev) => ({
+            ...prev,
+            [descriptionCourseId]: text.slice(0, index + 1),
+          }));
+          index++;
+          if (index < text.length) {
+            typingTimers.current.set(descriptionCourseId, setTimeout(type, 30));
+          }
+        };
+        type();
+      }
+    } else {
+      typingTimers.current.forEach((timer) => clearTimeout(timer));
+      typingTimers.current.clear();
+      setTypedDescriptions({});
+    }
+  }, [descriptionCourseId, courses]);
 
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -474,21 +609,40 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
     }
   };
 
-  const handleUnenroll = async (courseId: number) => {
-    try {
-      await api.delete(`/courses/${courseId}/enroll`);
-      await refetch(limit, (page - 1) * limit, selectedClassNumber);
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      alert(axiosError.response?.data?.error || 'Ошибка отмены записи');
-    }
-  };
-
   const handlePageChange = (newPage: number) => {
     const newOffset = (newPage - 1) * limit;
     if (newOffset < 0 || (total && newOffset >= total)) return;
+    setIsPageTransition(true);
     setPage(newPage);
     refetch(limit, newOffset, selectedClassNumber ?? 'all');
+  };
+
+  // Обработчики наведения и ухода курсора
+  const handleMouseEnter = (courseId: number) => {
+    setHoveredCourseId(courseId); // Мгновенный масштаб
+    const timer = setTimeout(() => {
+      setDescriptionCourseId(courseId); // Описание через 1с
+    }, 1000);
+    hoverTimers.current.set(courseId, timer);
+  };
+
+  const handleMouseLeave = (courseId: number) => {
+    const timer = hoverTimers.current.get(courseId);
+    if (timer) {
+      clearTimeout(timer);
+      hoverTimers.current.delete(courseId);
+    }
+    setHoveredCourseId(null);
+    setDescriptionCourseId(null);
+  };
+
+  // Обработчики клика
+  const handleMouseDown = (courseId: number) => {
+    setClickedCourseId(courseId);
+  };
+
+  const handleMouseUp = () => {
+    setClickedCourseId(null);
   };
 
   const subjects = [
@@ -501,13 +655,40 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
     'История',
   ];
 
-  // Фильтруем курсы по предмету
-  const filteredCourses = courses.filter((course) => !selectedSubject || course.subject === selectedSubject);
+  // Иконки для предметов
+  const subjectIcons: Record<string, string> = {
+    Математика: '🧮',
+    'Русский язык': '📖',
+    Физика: '⚛️',
+    Химия: '🧪',
+    Литература: '📚',
+    Биология: '🌱',
+    История: '🏛️',
+  };
 
-  // Формируем сообщение, если курсов нет
+  // Цвета для бейджей предметов
+  const subjectColors: Record<string, string> = {
+    Математика: 'bg-blue-100 text-blue-800',
+    'Русский язык': 'bg-purple-100 text-purple-800',
+    Физика: 'bg-green-100 text-green-800',
+    Химия: 'bg-yellow-100 text-yellow-800',
+    Литература: 'bg-pink-100 text-pink-800',
+    Биология: 'bg-teal-100 text-teal-800',
+    История: 'bg-orange-100 text-orange-800',
+  };
+
+  // Фильтрация курсов
+  const filteredCourses = courses.filter((course: Course) =>
+    (!selectedSubject || course.subject === selectedSubject) &&
+    course.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Сообщение, если курсов нет
   let noCoursesMessage = '';
   if (!isLoading && filteredCourses.length === 0) {
-    if (selectedClassNumber && selectedSubject) {
+    if (searchQuery) {
+      noCoursesMessage = `Нет курсов, соответствующих "${searchQuery}".`;
+    } else if (selectedClassNumber && selectedSubject) {
       noCoursesMessage = `Нет курсов для ${selectedClassNumber}-го класса по предмету "${selectedSubject}".`;
     } else if (selectedClassNumber) {
       noCoursesMessage = `Нет курсов для ${selectedClassNumber}-го класса.`;
@@ -518,23 +699,41 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
     }
   }
 
-  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
   if (error) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
 
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
   return (
     <div className="max-w-5xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📚 Курсы</h1>
+      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8 animate-fade-in-up">📚 Курсы</h1>
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div>
+      {isLoading && (
+        <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden mb-6">
+          <div className="h-full bg-blue-600 animate-progress"></div>
+        </div>
+      )}
+
+      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
+        <div className="w-full sm:w-auto">
+          <label htmlFor="searchQuery" className="block text-sm font-medium mb-1">Поиск по названию</label>
+          <div className="relative">
+            <Input
+              id="searchQuery"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Введите название курса..."
+              className="w-full max-w-xs pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all duration-300"
+            />
+            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+          </div>
+        </div>
+        <div className="w-full sm:w-auto">
           <label htmlFor="classNumberFilter" className="block text-sm font-medium mb-1">Фильтр по классу</label>
           <select
             id="classNumberFilter"
             value={selectedClassNumber ?? ''}
             onChange={(e) => setSelectedClassNumber(e.target.value ? parseInt(e.target.value) : undefined)}
-            className="w-full max-w-xs rounded border p-2 focus:outline-none focus:ring-blue-600"
+            className="w-full max-w-xs rounded-lg border border-gray-300 p-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all duration-300"
           >
             <option value="">Все классы</option>
             {[...Array(11)].map((_, i) => (
@@ -542,13 +741,13 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
             ))}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label htmlFor="subjectFilter" className="block text-sm font-medium mb-1">Фильтр по предмету</label>
           <select
             id="subjectFilter"
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
-            className="w-full max-w-xs rounded border p-2 focus:outline-none focus:ring-blue-600"
+            className="w-full max-w-xs rounded-lg border border-gray-300 p-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all duration-300"
           >
             <option value="">Все предметы</option>
             {subjects.map((subj) => (
@@ -560,14 +759,14 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
 
       {(user?.role === 'teacher' || user?.role === 'admin') && (
         <div className="text-center mb-6">
-          <Button onClick={() => setShowCreateForm(!showCreateForm)}>
+          <Button onClick={() => setShowCreateForm(!showCreateForm)} className="hover:scale-105 transition-transform duration-300">
             {showCreateForm ? 'Отменить' : 'Создать курс'}
           </Button>
         </div>
       )}
 
       {showCreateForm && (
-        <Card className="mb-8">
+        <Card className="mb-8 animate-fade-in-up">
           <form onSubmit={handleCreateCourse} className="space-y-4">
             {formError && <p className="text-red-500 text-sm text-center">{formError}</p>}
             <div>
@@ -581,7 +780,7 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 required
-                className="w-full rounded border p-2 focus:outline-none focus:ring-blue-600"
+                className="w-full rounded-lg border border-gray-300 p-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all duration-300"
               >
                 <option value="">Выберите предмет</option>
                 {subjects.map((subj) => (
@@ -606,51 +805,79 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
               <label htmlFor="description" className="block text-sm font-medium mb-1">Описание</label>
               <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Введите описание" />
             </div>
-            <Button type="submit" className="w-full">Создать курс</Button>
+            <Button type="submit" className="w-full hover:scale-105 transition-transform duration-300">Создать курс</Button>
           </form>
         </Card>
       )}
 
       {noCoursesMessage ? (
-        <p className="text-center text-gray-500 mt-8">{noCoursesMessage}</p>
+        <p className="text-center text-gray-500 mt-8 animate-fade-in-up">{noCoursesMessage}</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {filteredCourses.map((course: Course) => (
-            <Card key={course.id} className="p-6 flex flex-col justify-between">
-              <div>
-                <Link href={`/courses/${course.id}`}>
-                  <h2 className="text-xl font-bold text-blue-700 hover:underline mb-2">{course.title}</h2>
-                </Link>
-                <p className="text-sm text-gray-600 mb-2">{course.description}</p>
-                <p className="text-sm text-gray-400 mb-2">
-                  <strong>Предмет:</strong> {course.subject}
-                </p>
-                <p className="text-sm text-gray-400 mb-2">
-                  <strong>Класс:</strong> {course.class_number}
-                </p>
-                <p className="text-sm text-gray-400">
-                  <strong>Преподаватель:</strong> {course.teacher.username}
-                </p>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <EnrollButton courseId={course.id} />
-                {user?.role === 'student' && (
-                  <Button onClick={() => handleUnenroll(course.id)} variant="destructive">
-                    Отменить запись
-                  </Button>
+        <div
+          className={clsx(
+            'grid grid-cols-1 sm:grid-cols-2 gap-6 transition-opacity duration-500',
+            isPageTransition ? 'opacity-0' : 'opacity-100'
+          )}
+          key={page}
+        >
+          {filteredCourses.map((course: Course, index) => (
+            <Link href={`/courses/${course.id}`} key={course.id}>
+              <Card
+                className={clsx(
+                  'p-6 flex flex-col cursor-pointer card-shadow card-hover-gradient min-h-[auto]',
+                  'animate-fade-in-up transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                  {
+                    'scale-102': hoveredCourseId === course.id && clickedCourseId !== course.id,
+                    'scale-95': clickedCourseId === course.id,
+                    'scale-100': hoveredCourseId !== course.id && clickedCourseId !== course.id,
+                  },
+                  { 'animation-delay-100': index % 2 === 0, 'animation-delay-200': index % 2 === 1 }
                 )}
-              </div>
-            </Card>
+                style={{ animationDelay: `${index * 100}ms` }}
+                onMouseEnter={() => handleMouseEnter(course.id)}
+                onMouseLeave={() => handleMouseLeave(course.id)}
+                onMouseDown={() => handleMouseDown(course.id)}
+                onMouseUp={handleMouseUp}
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-blue-700 mb-2">{course.title}</h2>
+                  <div
+                    className={clsx(
+                      'text-sm text-gray-600 transition-all duration-1000 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                      descriptionCourseId === course.id ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+                    )}
+                    style={{
+                      WebkitMaskImage: descriptionCourseId === course.id ? 'linear-gradient(to right, black 80%, transparent 100%)' : 'none',
+                      maskImage: descriptionCourseId === course.id ? 'linear-gradient(to right, black 80%, transparent 100%)' : 'none',
+                    }}
+                  >
+                    {typedDescriptions[course.id] || ''}
+                  </div>
+                  <p className="text-sm mt-2">
+                    <strong>Предмет:</strong>{' '}
+                    <span className={clsx('inline-block px-2 py-1 rounded-full text-xs font-semibold', subjectColors[course.subject])}>
+                      {subjectIcons[course.subject]} {course.subject}
+                    </span>
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    <strong>Класс:</strong> {course.class_number}
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    <strong>Преподаватель:</strong> {course.teacher.username}
+                  </p>
+                </div>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
 
       {total && total > limit && (
-        <div className="mt-8 flex justify-center items-center gap-4 text-sm">
+        <div className="mt-8 flex justify-center items-center gap-4 text-sm animate-fade-in-up">
           <Button
             onClick={() => handlePageChange(page - 1)}
             disabled={page === 1}
-            className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+            className="bg-gray-200 hover:bg-gray-300 hover:scale-105 disabled:opacity-50 transition-transform duration-300"
           >
             ⬅ Предыдущая
           </Button>
@@ -658,7 +885,7 @@ const { courses, loading: isLoading, refetch, error, total } = useCourses(6, 0, 
           <Button
             onClick={() => handlePageChange(page + 1)}
             disabled={page === totalPages}
-            className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+            className="bg-gray-200 hover:bg-gray-300 hover:scale-105 disabled:opacity-50 transition-transform duration-300"
           >
             Следующая ➡
           </Button>
@@ -685,7 +912,20 @@ import { useAssignments } from '@/shared/hooks/useAssignments';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ChartOptions,
+} from 'chart.js';
+import ConfirmModal from '@/widgets/ConfirmModal';
+import { ArrowRightIcon, PlusIcon, TrashIcon, ChartBarIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import clsx from 'clsx';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -725,87 +965,143 @@ export default function CoursePage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseError, setCourseError] = useState('');
-  
   const [progress, setProgress] = useState<Progress | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressError, setProgressError] = useState('');
-
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState('');
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEnrolling, setIsEnrolling] = useState(false);
+  const [modalAction, setModalAction] = useState<'unenroll' | 'delete'>('unenroll');
+
+  const fetchCourse = async () => {
+    setCourseLoading(true);
+    try {
+      const courseResponse = await api.get(`/courses/${courseId}`);
+      setCourse(courseResponse.data);
+      setCourseError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки курса';
+      setCourseError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setCourseLoading(false);
+    }
+  };
+
+  const fetchProgress = async () => {
+    if (user?.role !== 'student') return;
+    setProgressLoading(true);
+    try {
+      const response = await api.get(`/courses/${courseId}/progress`);
+      setProgress(response.data);
+      setProgressError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки прогресса';
+      setProgressError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setProgressLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    if (!['teacher', 'admin'].includes(user?.role || '')) return;
+    setStatsLoading(true);
+    try {
+      const response = await api.get(`/courses/${courseId}/stats`);
+      setStats(response.data);
+      setStatsError('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
+      setStatsError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const checkEnrollment = async () => {
+    if (user?.role !== 'student' || !courseId) return;
+    try {
+      const res = await api.get(`/courses/${courseId}/is-enrolled`);
+      setIsEnrolled(res.data.enrolled);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка проверки записи');
+      setIsEnrolled(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchStats() {
-      if (!['teacher', 'admin'].includes(user?.role || '')) return;
-      setStatsLoading(true);
-      try {
-        const response = await api.get<Stats>(`/courses/${courseId}/stats`);
-        setStats(response.data);
-        setStatsError('');
-      } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки статистики';
-        setStatsError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setStatsLoading(false);
-      }
-    }
-    if (courseId) {
-      fetchStats();
-    }
-  }, [courseId, user]);
-
-  useEffect(() => {
-    async function fetchCourse() {
-      setCourseLoading(true);
-      try {
-        const courseResponse = await api.get<Course>(`/courses/${courseId}`);
-        setCourse(courseResponse.data);
-      } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        setCourseError(axiosError.response?.data?.error || 'Ошибка загрузки курса');
-        toast.error(axiosError.response?.data?.error || 'Ошибка загрузки курса');
-      } finally {
-        setCourseLoading(false);
-      }
-    }
     if (courseId) {
       fetchCourse();
+      fetchStats();
+      checkEnrollment();
+      fetchProgress();
     } else {
       setCourseLoading(false);
       setCourseError('Курс не найден');
       toast.error('Курс не найден');
     }
-  }, [courseId]);
-
-  useEffect(() => {
-    async function fetchProgress() {
-      if (user?.role !== 'student') return;
-      setProgressLoading(true);
-      try {
-        const response = await api.get<Progress>(`/courses/${courseId}/progress`);
-        setProgress(response.data);
-        setProgressError('');
-      } catch (err: unknown) {
-        const axiosError = err as AxiosError<ErrorResponse>;
-        const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки прогресса';
-        setProgressError(errorMessage);
-        toast.error(errorMessage);
-      } finally {
-        setProgressLoading(false);
-      }
-    }
-    if (courseId) {
-      fetchProgress();
-    }
   }, [courseId, user]);
 
-  if (!courseId) return <div className="text-center mt-8 text-red-500">Курс не найден</div>;
-  if (courseLoading || assignmentsLoading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (courseError) return <div className="text-center mt-8 text-red-500">Ошибка: {courseError}</div>;
-  if (assignmentsError) return <div className="text-center mt-8 text-red-500">Ошибка: {assignmentsError}</div>;
-  if (!course) return <div className="text-center mt-8 text-red-500">Курс не найден</div>;
+  const handleEnroll = async () => {
+    setIsEnrolling(true);
+    try {
+      await api.post(`/courses/${courseId}/enroll`);
+      setIsEnrolled(true);
+      toast.success('Вы записались на курс!');
+      await Promise.all([fetchCourse(), fetchStats(), fetchProgress(), checkEnrollment()]);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при записи на курс');
+    } finally {
+      setIsEnrolling(false);
+    }
+  };
+
+  const handleUnenroll = async () => {
+    try {
+      await api.delete(`/courses/${courseId}/enroll`);
+      setIsEnrolled(false);
+      toast.success('Вы отписались от курса');
+      await Promise.all([fetchCourse(), fetchStats(), fetchProgress(), checkEnrollment()]);
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при отписке от курса');
+    } finally {
+      setIsModalOpen(false);
+    }
+  };
+
+  const handleDeleteCourse = async () => {
+    try {
+      await api.delete(`/courses/${courseId}`);
+      toast.success('Курс удалён');
+      window.location.href = '/courses';
+    } catch {
+      toast.error('Ошибка при удалении');
+    } finally {
+      setIsModalOpen(false);
+    }
+  };
+
+  const openModal = (action: 'unenroll' | 'delete') => {
+    setModalAction(action);
+    setIsModalOpen(true);
+  };
+
+  if (!courseId) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Курс не найден</div>;
+  if (courseLoading || assignmentsLoading) return <div className="text-center mt-8 animate-pulse">Загрузка...</div>;
+  if (courseError) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Ошибка: {courseError}</div>;
+  if (assignmentsError) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Ошибка: {assignmentsError}</div>;
+  if (!course) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Курс не найден</div>;
 
   const completionRate = progress ? parseFloat(progress.completion_rate.toString()) : 0;
   const totalPoints = progress ? parseFloat(progress.total_points.toString()) : 0;
@@ -816,155 +1112,231 @@ export default function CoursePage() {
       {
         label: 'Завершённые задания',
         data: progress?.completion_timeline?.map((item) => item.completed) || [],
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37, 99, 235, 0.2)',
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.3)',
         fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#ffffff',
+        pointBorderColor: '#3b82f6',
+        pointRadius: 5,
+        pointHoverRadius: 8,
       },
     ],
   };
 
+  const chartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top', labels: { color: 'var(--foreground)' } },
+      title: { display: true, text: 'Динамика выполнения заданий', color: 'var(--foreground)', font: { size: 16 } },
+      tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.8)', titleColor: '#fff', bodyColor: '#fff' },
+    },
+    scales: {
+      x: { title: { display: true, text: 'Дата', color: 'var(--foreground)' }, grid: { color: 'rgba(107, 114, 128, 0.1)' } },
+      y: { title: { display: true, text: 'Завершено', color: 'var(--foreground)' }, grid: { color: 'rgba(107, 114, 128, 0.1)' }, beginAtZero: true },
+    },
+    animation: {
+      duration: 2000,
+      easing: 'easeOutQuart' as const,
+    },
+  };
+
   return (
     <div className="max-w-5xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📘 {course.title}</h1>
+      <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-center mb-8 animate-fade-in-up">
+        📘 {course.title}
+      </h1>
 
-      <Card className="mb-6">
-        <p className="text-gray-700 mb-2">{course.description}</p>
-        <p className="text-sm text-gray-500 mb-2">
-          <strong>Предмет:</strong> {course.subject}
-        </p>
-        <p className="text-sm text-gray-500 mb-2">
-          <strong>Класс:</strong> {course.class_number}
-        </p>
-        <p className="text-sm text-gray-500">
-          <strong>Преподаватель:</strong> {course.teacher.username}
-        </p>
+      <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-100">
+        <p className="text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">{course.description}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-500 dark:text-gray-400">
+          <p><strong>Предмет:</strong> {course.subject}</p>
+          <p><strong>Класс:</strong> {course.class_number}</p>
+          <p><strong>Преподаватель:</strong> {course.teacher.username}</p>
+        </div>
       </Card>
 
+      {user?.role === 'student' && (
+        <div className="mb-6 text-center animate-fade-in-up animation-delay-200">
+          {isEnrolled ? (
+            <Button
+              variant="destructive"
+              onClick={() => openModal('unenroll')}
+              className="hover:scale-105 transition-transform duration-300 flex items-center gap-2"
+              disabled={isEnrolling}
+            >
+              <XCircleIcon className="w-5 h-5" /> Отписаться
+            </Button>
+          ) : (
+            <Button
+              onClick={handleEnroll}
+              className="hover:scale-105 transition-transform duration-300 flex items-center gap-2 animate-pulse"
+              disabled={isEnrolling}
+            >
+              {isEnrolling ? 'Запись...' : <><CheckCircleIcon className="w-5 h-5" /> Записаться</>}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={modalAction === 'unenroll' ? handleUnenroll : handleDeleteCourse}
+        title={modalAction === 'unenroll' ? 'Подтверждение отписки' : 'Подтверждение удаления'}
+        message={
+          modalAction === 'unenroll'
+            ? 'Вы уверены, что хотите отписаться? Прогресс сохранится, но доступ к новым заданиям будет закрыт.'
+            : 'Вы уверены, что хотите удалить этот курс? Все данные будут потеряны.'
+        }
+        confirmText={modalAction === 'unenroll' ? 'Отписаться' : 'Удалить'}
+        cancelText="Отменить"
+        className="animate-fade-in-up"
+      />
+
       {['teacher', 'admin'].includes(user?.role || '') && (
-        <div className="mb-6 flex justify-end">
+        <div className="mb-6 flex justify-end animate-fade-in-up animation-delay-200">
           <Link href={`/courses/${courseId}/submissions`}>
-            <Button>Решения студентов</Button>
+            <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
+              <ChartBarIcon className="w-5 h-5" /> Решения студентов
+            </Button>
           </Link>
         </div>
       )}
 
       {['teacher', 'admin'].includes(user?.role || '') && (
-        <Card className="mb-6">
-          <h2 className="text-xl font-semibold mb-4">📈 Статистика курса</h2>
+        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <ChartBarIcon className="w-6 h-6" /> Статистика курса
+          </h2>
           {statsLoading ? (
-            <p className="text-gray-500">Загрузка...</p>
+            <div className="text-center animate-pulse">Загрузка...</div>
           ) : statsError ? (
-            <p className="text-red-500">{statsError}</p>
+            <div className="text-red-500 text-center">{statsError}</div>
           ) : stats ? (
-            <div className="grid sm:grid-cols-3 gap-4 text-center">
-              <div className="bg-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Студентов на курсе</p>
-                <p className="text-2xl font-bold">{stats.students_count}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
               </div>
-              <div className="bg-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Средний балл</p>
-                <p className="text-2xl font-bold">{stats.average_grade.toFixed(2)}</p>
+              <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
               </div>
-              <div className="bg-gray-100 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Завершено заданий</p>
-                <p className="text-2xl font-bold">{stats.completion_rate.toFixed(1)}%</p>
+              <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
               </div>
             </div>
           ) : (
-            <p className="text-gray-500">Нет данных</p>
+            <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
           )}
         </Card>
       )}
 
       {user?.role === 'student' && (
-        <Card className="mb-6">
-          <h2 className="text-xl font-semibold mb-4">📊 Прогресс</h2>
+        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
+            📊 Мой прогресс
+          </h2>
           {progressLoading ? (
-            <p className="text-gray-500">Загрузка прогресса...</p>
+            <div className="text-center animate-pulse">Загрузка...</div>
           ) : progressError ? (
-            <p className="text-red-500">{progressError}</p>
+            <div className="text-red-500 text-center">{progressError}</div>
           ) : progress ? (
             progress.total_assignments === 0 ? (
-              <p className="text-gray-500">Заданий нет</p>
+              <div className="text-center text-gray-500 dark:text-gray-400">Заданий нет</div>
             ) : (
               <>
-                <div className="grid sm:grid-cols-3 gap-4 mb-4 text-center">
-                  <div className="bg-gray-100 rounded-lg p-4">
-                    <p className="text-sm text-gray-600">Сдано заданий</p>
-                    <p className="text-2xl font-bold">{progress.completed_assignments}/{progress.total_assignments}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Сдано заданий</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{progress.completed_assignments}/{progress.total_assignments}</p>
                   </div>
-                  <div className="bg-gray-100 rounded-lg p-4">
-                    <p className="text-sm text-gray-600">Процент</p>
-                    <p className="text-2xl font-bold">{completionRate.toFixed(1)}%</p>
+                  <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Процент</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-300">{completionRate.toFixed(1)}%</p>
                   </div>
-                  <div className="bg-gray-100 rounded-lg p-4">
-                    <p className="text-sm text-gray-600">Баллы</p>
-                    <p className="text-2xl font-bold">{totalPoints.toFixed(1)}</p>
+                  <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Баллы</p>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{totalPoints.toFixed(1)}</p>
                   </div>
                 </div>
-                <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
-                  <div className="bg-blue-500 h-full" style={{ width: `${completionRate}%` }} />
+                <div className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-6">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-1000 ease-custom"
+                    style={{ width: `${completionRate}%` }}
+                  />
+                  <span className="absolute right-2 top-0 text-xs font-medium text-gray-600 dark:text-gray-300">{completionRate.toFixed(1)}%</span>
                 </div>
                 {Array.isArray(progress.completion_timeline) && progress.completion_timeline.length > 0 && (
-                  <div className="mt-6">
-                    <Line data={chartData} options={{ responsive: true, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Динамика выполнения заданий' } }, scales: { y: { beginAtZero: true }, x: { title: { display: true, text: 'Дата' } } } }} />
+                  <div className="mt-8">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl card-shadow">
+                      <Line data={chartData} options={chartOptions} height={200} />
+                    </div>
                   </div>
                 )}
               </>
             )
           ) : (
-            <p className="text-gray-500">Нет данных</p>
+            <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
           )}
         </Card>
       )}
 
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold">📝 Задания</h2>
-        {(user?.role === 'teacher' || user?.role === 'admin') && (
-          <Link href={`/courses/${courseId}/assignments/new`}>
-            <Button>Создать</Button>
-          </Link>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        {assignments.map((assignment) => (
-          <Card key={assignment.id} className="p-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{assignment.title}</h3>
-              <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
-                <Button variant="outline">Открыть</Button>
+      <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+            📝 Задания
+          </h2>
+          {(user?.role === 'teacher' || user?.role === 'admin') && (
+            <Link href={`/courses/${courseId}/assignments/new`}>
+              <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
+                <PlusIcon className="w-5 h-5" /> Создать
+              </Button>
+            </Link>
+          )}
+        </div>
+        {assignments.length === 0 ? (
+          <div className="text-center text-gray-500 dark:text-gray-400">Заданий нет</div>
+        ) : (
+          <div className="space-y-4">
+            {assignments.map((assignment, index) => (
+              <Link href={`/courses/${courseId}/assignments/${assignment.id}`} key={assignment.id}>
+                <Card
+                  className={clsx(
+                    'p-6 card-shadow card-hover-gradient hover:scale-[1.01] transition-all duration-300 animate-fade-in-up',
+                    { 'animation-delay-100': index % 3 === 0, 'animation-delay-200': index % 3 === 1, 'animation-delay-300': index % 3 === 2 }
+                  )}
+                >
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">{assignment.title}</h3>
+                    <Button variant="outline" className="flex items-center gap-2">
+                      Открыть <ArrowRightIcon className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">{assignment.description}</p>
+                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <p><strong>Макс. балл:</strong> {assignment.max_score}</p>
+                    <p><strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}</p>
+                  </div>
+                </Card>
               </Link>
-            </div>
-            <p className="mt-2 text-sm text-gray-700">{assignment.description}</p>
-            <p className="mt-2 text-sm text-gray-500">
-              <strong>Макс. балл:</strong> {assignment.max_score}
-            </p>
-            <p className="text-sm text-gray-500">
-              <strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}
-            </p>
-          </Card>
-        ))}
-      </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {user?.role === 'admin' && (
-        <Button
-          variant="destructive"
-          className="mt-6"
-          onClick={async () => {
-            if (confirm('Удалить курс?')) {
-              try {
-                await api.delete(`/courses/${courseId}`);
-                toast.success('Курс удалён');
-                window.location.href = '/courses';
-              } catch {
-                toast.error('Ошибка при удалении');
-              }
-            }
-          }}
-        >
-          Удалить курс
-        </Button>
+        <div className="text-center animate-fade-in-up animation-delay-300">
+          <Button
+            variant="destructive"
+            onClick={() => openModal('delete')}
+            className="hover:scale-105 transition-transform duration-300 flex items-center gap-2"
+          >
+            <TrashIcon className="w-5 h-5" /> Удалить курс
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -1945,18 +2317,22 @@ export default function CreateAssignmentPage() {
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useState, useEffect } from 'react';
+import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { AxiosError } from 'axios';
+import clsx from 'clsx';
+import { BellIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 
 interface Notification {
   id: number;
   message: string;
-  created_at: string;
   is_read: boolean;
+  created_at: string;
 }
 
 interface ErrorResponse {
@@ -1964,98 +2340,205 @@ interface ErrorResponse {
 }
 
 export default function NotificationsPage() {
+  const { user } = useUser();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const fetchNotifications = async () => {
-    setIsLoading(true);
-    try {
-      const response = await api.get<Notification[]>('/notifications');
-      setNotifications(response.data);
-      setError('');
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Ошибка загрузки уведомлений');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
 
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000); // Polling каждые 30 секунд
-    return () => clearInterval(interval);
-  }, []);
+    async function fetchNotifications() {
+      setIsLoading(true);
+      try {
+        const response = await api.get('/notifications');
+        setNotifications(response.data);
+        setError(null);
+      } catch (err: unknown) {
+        const axiosError = err as AxiosError<ErrorResponse>;
+        const errorMsg = axiosError.response?.data?.error || 'Ошибка загрузки уведомлений';
+        setError(errorMsg);
+        toast.error(errorMsg);
+        console.error('API error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user]);
 
   const markAsRead = async (id: number) => {
     try {
       await api.put(`/notifications/${id}/read`);
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+        prev.map((notif) => (notif.id === id ? { ...notif, is_read: true } : notif))
       );
-      toast.success('Уведомление помечено как прочитанное');
+      toast.success('Уведомление отмечено как прочитанное');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      toast.error(axiosError.response?.data?.error || 'Ошибка пометки уведомления');
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка пометки уведомления';
+      toast.error(errorMsg);
+      console.error('Mark as read error:', err);
     }
   };
 
-  if (isLoading && !notifications.length) {
-    return <div className="text-center mt-8">Загрузка...</div>;
-  }
-  if (error) {
-    return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
+  const filteredNotifications = notifications.filter((notif) => {
+    if (filter === 'unread') return !notif.is_read;
+    if (filter === 'read') return notif.is_read;
+    return true;
+  });
+
+  if (!user) {
+    return (
+      <div className="max-w-3xl mx-auto mt-12 px-4">
+        <h1
+          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+          style={{ animationDelay: '100ms' }}
+        >
+          🔔 Уведомления
+        </h1>
+        <p className="text-center text-gray-600 dark:text-gray-400">
+          Пожалуйста, войдите в систему
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🔔 Уведомления</h1>
+    <div className="max-w-3xl mx-auto mt-12 px-4">
+      <h1
+        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+        style={{ animationDelay: '100ms' }}
+      >
+        🔔 Уведомления
+      </h1>
 
-  {isLoading && !notifications.length && (
-    <p className="text-center text-gray-500">Загрузка...</p>
-  )}
-  {error && <p className="text-center text-red-500">Ошибка: {error}</p>}
-
-  <div className="space-y-4">
-    {notifications.length === 0 ? (
-      <Card className="p-6">
-        <p className="text-center text-gray-500">Нет уведомлений</p>
-      </Card>
-    ) : (
-      notifications.map((notification) => (
-        <Card
-          key={notification.id}
-          className={`p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 border-l-4 transition-all ${
-            notification.is_read
-              ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/40'
-              : 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-          }`}
+      {error && (
+        <p
+          className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse"
+          style={{ animationDelay: '200ms' }}
         >
-          <div className="flex-1">
-            <p className={`text-sm sm:text-base ${notification.is_read ? 'text-gray-500' : 'font-semibold text-blue-800 dark:text-blue-200'}`}>
-              {notification.message}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              {new Date(notification.created_at).toLocaleString()}
-            </p>
-          </div>
+          {error}
+        </p>
+      )}
 
-          {!notification.is_read && (
-            <div className="shrink-0">
-              <Button
-                onClick={() => markAsRead(notification.id)}
-                className="text-sm px-3 py-1"
-              >
-                Прочитано
-              </Button>
-            </div>
-          )}
+      <Card
+        className="p-4 mb-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '200ms' }}
+      >
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Button
+            onClick={() => setFilter('all')}
+            className={clsx(
+              'text-sm',
+              filter === 'all'
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+            )}
+          >
+            Все
+          </Button>
+          <Button
+            onClick={() => setFilter('unread')}
+            className={clsx(
+              'text-sm',
+              filter === 'unread'
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+            )}
+          >
+            Непрочитанные
+          </Button>
+          <Button
+            onClick={() => setFilter('read')}
+            className={clsx(
+              'text-sm',
+              filter === 'read'
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+            )}
+          >
+            Прочитанные
+          </Button>
+        </div>
+      </Card>
+
+      {isLoading && !notifications.length ? (
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <Card
+              key={i}
+              className="p-4 card-shadow dark:bg-gray-800 animate-pulse"
+            >
+              <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-3 w-1/4 bg-gray-200 dark:bg-gray-700 rounded mt-2" />
+            </Card>
+          ))}
+        </div>
+      ) : filteredNotifications.length === 0 ? (
+        <Card
+          className="p-6 text-center card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+          style={{ animationDelay: '200ms' }}
+        >
+          <BellIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+          <p className="text-gray-600 dark:text-gray-400">
+            {filter === 'unread'
+              ? 'Нет непрочитанных уведомлений'
+              : filter === 'read'
+              ? 'Нет прочитанных уведомлений'
+              : 'Нет уведомлений'}
+          </p>
         </Card>
-      ))
-    )}
-  </div>
-</div>
+      ) : (
+        <div className="space-y-4">
+          {filteredNotifications.map((notification, index) => (
+            <Card
+              key={notification.id}
+              className={clsx(
+                'p-4 card-shadow card-hover-gradient dark:bg-gray-800 transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg',
+                notification.is_read ? 'opacity-75' : 'border-l-4 border-blue-600'
+              )}
+              style={{ animationDelay: `${200 + index * 100}ms` }}
+            >
+              <div className="flex items-start gap-3">
+                <BellIcon className="h-6 w-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" />
+                <div className="flex-1">
+                  <p className="text-gray-800 dark:text-gray-200">{notification.message}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {new Date(notification.created_at).toLocaleString('ru-RU', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </span>
+                    <span
+                      className={clsx(
+                        'text-xs px-2 py-1 rounded-full',
+                        notification.is_read
+                          ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                      )}
+                    >
+                      {notification.is_read ? 'Прочитано' : 'Непрочитано'}
+                    </span>
+                  </div>
+                </div>
+                {!notification.is_read && (
+                  <Button
+                    onClick={() => markAsRead(notification.id)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 hover:scale-105 transition-transform duration-200 flex items-center gap-1"
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                    Прочитано
+                  </Button>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2292,9 +2775,22 @@ import { AxiosError } from 'axios';
 import Link from 'next/link';
 import { AvatarModal } from '@/widgets/AvatarModal';
 import { avatarOptions } from '@/shared/constants/avatars';
+import toast from 'react-hot-toast';
+import clsx from 'clsx';
 
 interface ErrorResponse {
   error?: string;
+}
+
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  full_name?: string;
+  avatar_url?: string;
+  role: string;
+  class_number?: string;
+  points: number;
 }
 
 export default function ProfilePage() {
@@ -2321,43 +2817,90 @@ export default function ProfilePage() {
       await api.put('/users/me', { username, email, full_name: fullName });
       await refetch();
       setIsEditing(false);
+      toast.success('Профиль обновлён!');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setEditError(axiosError.response?.data?.error || 'Ошибка обновления профиля');
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка обновления профиля';
+      setEditError(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
   const handleAvatarUpdate = async (url: string) => {
-    await refetch();
+    try {
+      await refetch();
+      toast.success('Аватар обновлён!');
+    } catch (err) {
+      toast.error('Ошибка обновления аватара');
+      console.error('Avatar update error:', err);
+    }
   };
 
-  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (error) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
-  if (!user) return <div className="text-center mt-8">Пользователь не найден</div>;
+  if (isLoading) {
+    return (
+      <div className="text-center mt-12 px-4">
+        <div className="animate-pulse h-24 w-24 rounded-full bg-gray-200 mx-auto mb-4" />
+        <div className="animate-pulse h-6 w-48 bg-gray-200 rounded mx-auto" />
+      </div>
+    );
+  }
+  if (error) {
+    return <div className="text-center mt-12 text-red-500 px-4">Ошибка: {error}</div>;
+  }
+  if (!user) {
+    return <div className="text-center mt-12 px-4">Пользователь не найден</div>;
+  }
 
   return (
     <div className="max-w-2xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-center mb-8 text-blue-600">Профиль</h1>
+      <h1
+        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+        style={{ animationDelay: '100ms' }}
+      >
+        Профиль
+      </h1>
 
-      <Card className="p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Аватар</h2>
+      <Card
+        className="p-6 mb-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '200ms' }}
+      >
+        <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Аватар</h2>
         <div className="flex items-center gap-4">
-          <img
-            src={user?.avatar_url || avatarOptions[0]}
-            alt="avatar"
-            className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover"
-          />
-          <Button onClick={() => setAvatarModalOpen(true)}>Выбрать аватар</Button>
+          {isLoading ? (
+            <div className="animate-pulse h-24 w-24 rounded-full bg-gray-200" />
+          ) : (
+            <img
+              src={user?.avatar_url || avatarOptions[0]}
+              alt="avatar"
+              className="w-24 h-24 rounded-full border-4 border-blue-600 dark:border-blue-400 object-cover hover:scale-105 transition-transform duration-200"
+            />
+          )}
+          <Button
+            onClick={() => setAvatarModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
+          >
+            Выбрать аватар
+          </Button>
         </div>
       </Card>
 
-      <Card>
+      <Card
+        className="p-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '300ms' }}
+      >
         {isEditing ? (
           <form onSubmit={handleEdit} className="space-y-4">
-            {editError && <p className="text-red-500 text-sm">{editError}</p>}
+            {editError && (
+              <p className="bg-red-500 dark:bg-red-600 text-white dark:text-gray-100 p-3 rounded text-sm animate-pulse mx-auto text-center">
+                {editError}
+              </p>
+            )}
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium mb-1">
+              <label
+                htmlFor="username"
+                className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+              >
                 Имя
               </label>
               <Input
@@ -2365,11 +2908,16 @@ export default function ProfilePage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                placeholder="Введите имя"
+                className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
               />
             </div>
 
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium mb-1">
+              <label
+                htmlFor="fullName"
+                className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+              >
                 ФИО
               </label>
               <Input
@@ -2377,11 +2925,16 @@ export default function ProfilePage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
+                placeholder="Иванов Иван Иванович"
+                className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+              >
                 Email
               </label>
               <Input
@@ -2390,29 +2943,79 @@ export default function ProfilePage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                placeholder="example@domain.com"
+                className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
               />
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
-              <Button type="submit">Сохранить</Button>
-              <Button type="button" onClick={() => setIsEditing(false)} variant="outline">
+            <div
+              className="flex flex-col sm:flex-row justify-end gap-3 pt-3 animate-pulse"
+              style={{ animationDelay: '400ms' }}
+            >
+              <Button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+              >
+                Сохранить
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                variant="outline"
+                className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
+              >
                 Отмена
               </Button>
             </div>
           </form>
         ) : (
-          <div className="space-y-2 text-gray-800 dark:text-gray-100">
-            <p><strong>Имя:</strong> {user.username}</p>
-            {user.full_name && <p><strong>ФИО:</strong> {user.full_name}</p>}
-            <p><strong>Email:</strong> {user.email}</p>
-            <p><strong>Роль:</strong> {user.role}</p>
-            {user.role === 'student' && <p><strong>Класс:</strong> {user.class_number}</p>}
-            <p><strong>Баллы:</strong> {user.points}</p>
+          <div className="space-y-4 text-gray-900 dark:text-gray-100">
+            <p>
+              <strong>Имя:</strong> {user.username}
+            </p>
+            {user.full_name && (
+              <p>
+                <strong>ФИО:</strong> {user.full_name}
+              </p>
+            )}
+            <p>
+              <strong>Email:</strong> {user.email}
+            </p>
+            <p
+              className="relative group"
+              data-tooltip="Роль определяет ваш уровень доступа"
+            >
+              <strong>Роль:</strong> {user.role}
+              <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                Роль определяет ваш уровень доступа
+              </span>
+            </p>
+            {user.role === 'student' && (
+              <p>
+                <strong>Класс:</strong> {user.class_number}
+              </p>
+            )}
+            <p>
+              <strong>Баллы:</strong> {user.points}
+            </p>
 
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-end">
-              <Button onClick={() => setIsEditing(true)}>Редактировать профиль</Button>
+            <div
+              className="mt-6 flex flex-col sm:flex-row gap-3 justify-end animate-pulse"
+              style={{ animationDelay: '400ms' }}
+            >
+              <Button
+                onClick={() => setIsEditing(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+              >
+                Редактировать профиль
+              </Button>
               <Link href="/achievements">
-                <Button variant="outline">Мои достижения 🏆</Button>
+                <Button
+                  variant="outline"
+                  className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
+                >
+                  Мои достижения 🏆
+                </Button>
               </Link>
             </div>
           </div>
@@ -2430,16 +3033,18 @@ export default function ProfilePage() {
 }
 
 
-
 ════════════════════════════════════════════════════════════════════════════════
 ║ frontend/src/app/achievements/page.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
 'use client';
+
 import { useEffect, useState } from 'react';
+import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
-import { useUser } from '@/entities/user/hook';
+import toast from 'react-hot-toast';
+import clsx from 'clsx';
 
 interface Achievement {
   title: string;
@@ -2448,7 +3053,7 @@ interface Achievement {
 }
 
 export default function AchievementsPage() {
-  useUser(); // если нужен вызов для авторизации
+  const { user } = useUser(); // Для авторизации
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2458,8 +3063,11 @@ export default function AchievementsPage() {
       try {
         const response = await api.get<Achievement[]>('/users/me/achievements');
         setAchievements(response.data);
-      } catch {
-        setError('Не удалось загрузить достижения');
+      } catch (err: unknown) {
+        const errorMsg = 'Не удалось загрузить достижения';
+        setError(errorMsg);
+        toast.error(errorMsg);
+        console.error('API error:', err);
       } finally {
         setLoading(false);
       }
@@ -2468,52 +3076,138 @@ export default function AchievementsPage() {
     fetchAchievements();
   }, []);
 
-  if (loading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto mt-12 px-4">
+        <h1
+          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+          style={{ animationDelay: '100ms' }}
+        >
+          🏅 Мои достижения
+        </h1>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[...Array(4)].map((_, i) => (
+            <div
+              key={i}
+              className="animate-pulse h-32 w-full bg-gray-200 dark:bg-gray-700 rounded-lg"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto mt-12 px-4">
+        <h1
+          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+          style={{ animationDelay: '100ms' }}
+        >
+          🏅 Мои достижения
+        </h1>
+        <p
+          className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse"
+          style={{ animationDelay: '200ms' }}
+        >
+          {error}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto mt-12 px-4">
-  <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🏅 Мои достижения</h1>
+      <h1
+        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+        style={{ animationDelay: '100ms' }}
+      >
+        🏅 Мои достижения
+      </h1>
 
-  {achievements.length === 0 ? (
-    <p className="text-center text-gray-500">Вы ещё не получили ни одного достижения.</p>
-  ) : (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {achievements.map((ach, index) => (
-        <Card key={index} className="p-5">
-          <h2 className="text-lg font-semibold text-blue-700 dark:text-blue-400">{ach.title}</h2>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">{ach.description}</p>
-          <p className="text-xs text-gray-400">Получено: {new Date(ach.awarded_at).toLocaleString()}</p>
-        </Card>
-      ))}
+      {achievements.length === 0 ? (
+        <p
+          className="text-center text-gray-500 dark:text-gray-400 animate-fade-in-up"
+          style={{ animationDelay: '200ms' }}
+        >
+          Вы ещё не получили ни одного достижения.
+        </p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {achievements.map((ach, index) => {
+            const awardedDate = new Date(ach.awarded_at);
+            const isNew = (Date.now() - awardedDate.getTime()) / (1000 * 60 * 60 * 24) < 7;
+            return (
+              <Card
+                key={index}
+                className={clsx(
+                  'p-5 card-shadow card-hover-gradient dark:bg-gray-800 hover:scale-105 transition-transform duration-200 animate-fade-in-up group',
+                  isNew && 'animate-pulse'
+                )}
+                style={{ animationDelay: `${200 + index * 100}ms` }}
+                data-tooltip={`Получено: ${awardedDate.toLocaleString('ru-RU', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🏅</span>
+                  <div>
+                    <h2 className="text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
+                      {ach.title}
+                    </h2>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-1 line-clamp-2">
+                      {ach.description}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Получено:{' '}
+                      {awardedDate.toLocaleString('ru-RU', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                  Получено: {awardedDate.toLocaleString('ru-RU', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </span>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
-  )}
-</div>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
 ║ frontend/src/app/admin/page.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// frontend/src/app/admin/page.tsx
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
-import { UserRoleForm } from './components/UserRoleForm';
-import { CreateUserForm } from './components/CreateUserForm';
+import { UserManagement } from './components/UserManagement';
 import { AchievementManagement } from './components/AchievementManagement';
 import { ActionLogs } from './components/ActionLogs';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
+import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import clsx from 'clsx';
+import { UserIcon, TrophyIcon, ClipboardIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface User {
   id: number;
   username: string;
   email: string;
   role: string;
+  class_number: number; // Добавлено
 }
 
 interface ApiAchievement {
@@ -2548,6 +3242,8 @@ export default function AdminPage() {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [formError, setFormError] = useState('');
+  const [activeTab, setActiveTab] = useState<'users' | 'achievements' | 'logs'>('users');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -2568,7 +3264,9 @@ export default function AdminPage() {
       setFormError('');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setFormError(axiosError.response?.data?.error || 'Ошибка загрузки данных');
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка загрузки данных';
+      setFormError(errorMsg);
+      console.error('API error:', err);
     }
   };
 
@@ -2578,89 +3276,144 @@ export default function AdminPage() {
     }
   }, [user]);
 
-  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (!user || user.role !== 'admin')
-    return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
+  const tabs = [
+    { id: 'users', label: 'Управление пользователями', icon: UserIcon, component: <UserManagement users={users} onSuccess={fetchData} setFormError={setFormError} /> },
+    { id: 'achievements', label: 'Управление достижениями', icon: TrophyIcon, component: <AchievementManagement achievements={achievements} onSuccess={fetchData} setFormError={setFormError} /> },
+    { id: 'logs', label: 'Логи действий', icon: ClipboardIcon, component: <ActionLogs logs={logs} /> }, // Убрано (logs.length)
+  ] as const;
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto mt-12 px-4">
+        <h1 className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+          🛠 Админ-панель
+        </h1>
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-6 card-shadow dark:bg-gray-800 animate-pulse">
+              <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+              <div className="h-3 w-1/2 bg-gray-200 dark:bg-gray-700 rounded" />
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || user.role !== 'admin') {
+    return (
+      <div className="max-w-7xl mx-auto mt-12 px-4">
+        <h1 className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+          🛠 Админ-панель
+        </h1>
+        <p className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse" style={{ animationDelay: '200ms' }}>
+          Доступ запрещён
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">🛠 Админ-панель</h1>
-      {formError && <p className="text-red-500 text-sm mb-4 text-center">{formError}</p>}
+    <div className="max-w-7xl mx-auto mt-12 px-4 flex flex-col md:flex-row gap-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+      {/* Mobile Sidebar Toggle */}
+      <Button
+        className="md:hidden bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg mb-4 flex items-center gap-2 hover:scale-105 transition-transform duration-200"
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+      >
+        {isSidebarOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
+        Меню
+      </Button>
 
-      <UserRoleForm onSuccess={fetchData} setFormError={setFormError} />
-      <CreateUserForm onSuccess={fetchData} setFormError={setFormError} />
-      <AchievementManagement
-        achievements={achievements}
-        onSuccess={fetchData}
-        setFormError={setFormError}
-      />
-      <ActionLogs logs={logs} />
+      {/* Sidebar */}
+      <Card
+        className={clsx(
+          'w-full md:w-64 card-shadow dark:bg-gray-800 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 transition-transform duration-300',
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          'fixed md:static top-0 left-0 h-full md:h-auto z-40 shadow-xl md:shadow-none p-6'
+        )}
+      >
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-6 flex items-center gap-2">
+          <ClipboardIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          Панель управления
+        </h2>
+        <nav className="space-y-2">
+          {tabs.map((tab, index) => {
+            const Icon = tab.icon;
+            return (
+              <Button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setIsSidebarOpen(false);
+                }}
+                className={clsx(
+                  'w-full flex items-center gap-3 text-left py-3 px-4 rounded-lg transition-transform duration-200 hover:scale-105',
+                  activeTab === tab.id
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 animate-pulse'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600',
+                  'animate-slide-in-left'
+                )}
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <Icon className="h-6 w-6 hover:animate-bounce" />
+                <span className="flex-1">{tab.label}</span>
+              </Button>
+            );
+          })}
+        </nav>
+      </Card>
+
+      {/* Main Content */}
+      <div className="flex-1">
+        <h1
+          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+          style={{ animationDelay: '100ms' }}
+        >
+          🛠 Админ-панель
+        </h1>
+
+        {formError && (
+          <p
+            className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-6 animate-pulse"
+            style={{ animationDelay: '200ms' }}
+          >
+            {formError}
+          </p>
+        )}
+
+        <div className="relative">
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={clsx(
+                'transition-all duration-600 ease-in-out',
+                activeTab === tab.id
+                  ? 'opacity-100 transform translate-x-0'
+                  : 'opacity-0 transform translate-x-10 pointer-events-none absolute top-0 left-0 w-full'
+              )}
+            >
+              <Card
+                className={clsx(
+                  'p-8 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up border-l-4',
+                  tab.id === 'users' && 'border-blue-600',
+                  tab.id === 'achievements' && 'border-yellow-600',
+                  tab.id === 'logs' && 'border-gray-600'
+                )}
+                style={{ animationDelay: '200ms' }}
+              >
+                <h2
+                  className="text-2xl font-semibold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text"
+                  style={{ animationDelay: '300ms' }}
+                >
+                  {tab.label}
+                </h2>
+                {tab.component}
+              </Card>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
-  );
-}
-
-
-════════════════════════════════════════════════════════════════════════════════
-║ frontend/src/app/admin/components/UserRoleForm.tsx
-════════════════════════════════════════════════════════════════════════════════
-
-// frontend/src/app/admin/components/UserRoleForm.tsx
-'use client';
-import { useState, FormEvent } from 'react';
-import { Card } from '@/shared/ui/Card';
-import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
-import { api } from '@/shared/api';
-import { AxiosError } from 'axios';
-
-interface ErrorResponse {
-  error?: string;
-}
-
-interface UserRoleFormProps {
-  onSuccess: () => void;
-  setFormError: (error: string) => void;
-}
-
-export function UserRoleForm({ onSuccess, setFormError }: UserRoleFormProps) {
-  const [userId, setUserId] = useState('');
-  const [role, setRole] = useState('');
-
-  const handleUpdateRole = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.put(`/users/${userId}/role`, { role });
-      onSuccess();
-      setUserId('');
-      setRole('');
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      setFormError(axiosError.response?.data?.error || 'Ошибка изменения роли');
-    }
-  };
-
-  return (
-    <Card className="mb-6">
-      <h2 className="text-xl font-semibold mb-4">Изменить роль пользователя</h2>
-      <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
-        <Input
-          type="number"
-          placeholder="ID пользователя"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          required
-        />
-        <Input
-          placeholder="student / teacher / admin"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          required
-        />
-        <Button type="submit" className="sm:col-span-2">
-          Изменить
-        </Button>
-      </form>
-    </Card>
   );
 }
 
@@ -2669,9 +3422,26 @@ export function UserRoleForm({ onSuccess, setFormError }: UserRoleFormProps) {
 ║ frontend/src/app/admin/components/ActionLogs.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// frontend/src/app/admin/components/ActionLogs.tsx
 'use client';
+
+import { useState, useEffect } from 'react';
 import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import clsx from 'clsx';
+import { UserIcon, PlusIcon, PencilIcon, TrashIcon, AcademicCapIcon, CheckCircleIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, DocumentArrowDownIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { unparse } from 'papaparse';
+import toast from 'react-hot-toast';
+import { api } from '@/shared/api';
+
+interface User {
+  id: number;
+  username: string;
+  full_name: string;
+  role: string;
+}
 
 interface LogEntry {
   id: number;
@@ -2679,32 +3449,766 @@ interface LogEntry {
   action: string;
   details: string;
   created_at: string;
+  user: User | null;
 }
 
-interface ActionLogsProps {
-  logs: LogEntry[];
+type FilterType = 'all' | 'create' | 'update' | 'delete' | 'enroll' | 'submit' | 'achieve';
+
+interface FilterOption {
+  id: FilterType;
+  label: string;
 }
 
-export function ActionLogs({ logs }: ActionLogsProps) {
+export function ActionLogs() {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+
+  const filterOptions: FilterOption[] = [
+    { id: 'all', label: 'Все' },
+    { id: 'create', label: 'Создание' },
+    { id: 'update', label: 'Обновление' },
+    { id: 'delete', label: 'Удаление' },
+    { id: 'enroll', label: 'Курсы' },
+    { id: 'submit', label: 'Оценки' },
+    { id: 'achieve', label: 'Достижения' },
+  ];
+
+  const fetchLogs = async () => {
+    try {
+      let url = '/admin/logs?limit=100';
+      if (startDate && endDate) {
+        url = `/admin/logs?start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}`;
+      }
+      const response = await api.get(url);
+      setLogs(response.data.logs);
+      setTotal(response.data.total);
+    } catch (error) {
+      console.error('Failed to fetch logs:', error);
+      toast.error('Ошибка загрузки логов');
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
+  }, [startDate, endDate]);
+
+  const getActionType = (action: string = '') => {
+    if (action.includes('create'))
+      return { id: 'create', label: 'Создание', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300', icon: PlusIcon };
+    if (action.includes('update'))
+      return { id: 'update', label: 'Обновление', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300', icon: PencilIcon };
+    if (action.includes('delete'))
+      return { id: 'delete', label: 'Удаление', color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300', icon: TrashIcon };
+    if (action.includes('enroll'))
+      return { id: 'enroll', label: 'Запись на курс', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: AcademicCapIcon };
+    if (action.includes('submit'))
+      return { id: 'submit', label: 'Сдача задания', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300', icon: CheckCircleIcon };
+    if (action.includes('achieve'))
+      return { id: 'achieve', label: 'Получение достижения', color: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300', icon: StarIcon };
+    return null;
+  };
+
+  const filteredLogs = logs
+    .filter((log) => {
+      if (!log.action) return false;
+      const actionType = getActionType(log.action);
+      if (!actionType) return false;
+      return filter === 'all' || filter === actionType.id;
+    })
+    .filter((log) => {
+      if (!search) return true;
+      const searchTerm = search.toLowerCase();
+      return (
+        log.user_id.toString().includes(searchTerm) ||
+        (log.details?.toLowerCase() || '').includes(searchTerm) ||
+        (log.user?.username?.toLowerCase() || '').includes(searchTerm) ||
+        (log.user?.full_name?.toLowerCase() || '').includes(searchTerm) ||
+        (log.user?.role?.toLowerCase() || '').includes(searchTerm)
+      );
+    })
+    .filter((log) => {
+      if (!startDate && !endDate) return true;
+      const logDate = new Date(log.created_at);
+      if (isNaN(logDate.getTime())) return false;
+      if (startDate && !endDate) return logDate >= startDate;
+      if (!startDate && endDate) return logDate <= endDate;
+      return logDate >= startDate! && logDate <= endDate!;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.created_at);
+      const dateB = new Date(b.created_at);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+  const totalPages = Math.ceil(filteredLogs.length / pageSize);
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const handleExportCSV = () => {
+    try {
+      const csvData = filteredLogs.map((log) => ({
+        ID: log.id,
+        UserID: log.user_id,
+        Username: log.user?.username || (log.user_id === 0 ? 'Система' : 'Неизвестно'),
+        FullName: log.user?.full_name || (log.user_id === 0 ? 'Система' : 'Неизвестно'),
+        Role: log.user?.role || (log.user_id === 0 ? 'Система' : 'Неизвестно'),
+        Action: getActionType(log.action)?.label || 'Неизвестно',
+        Details: log.details,
+        Date: new Date(log.created_at).toLocaleString('ru-RU'),
+      }));
+      const csv = unparse(csvData, { header: true });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'action_logs.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success('Логи экспортированы в CSV');
+    } catch (error) {
+      console.error('CSV Export Error:', error);
+      toast.error('Ошибка при экспорте CSV');
+    }
+  };
+
   return (
-    <Card>
-      <h2 className="text-xl font-semibold mb-4">Действия пользователей</h2>
-      {logs.length === 0 ? (
-        <p className="text-sm text-gray-500">Нет логов</p>
-      ) : (
-        <ul className="text-sm space-y-2 max-h-80 overflow-y-auto">
-          {logs.map((log) => (
-            <li key={log.id}>
-              <span className="font-medium">Пользователь {log.user_id}:</span>{' '}
-              {log.action} ({log.details}){' '}
-              <span className="text-gray-500 text-xs">
-                ({new Date(log.created_at).toLocaleString()})
+    <div className="space-y-6">
+      <Card className="p-4 card-shadow dark:bg-gray-800">
+        <div className="flex flex-wrap gap-4 justify-center sm:justify-start">
+          <div className="flex flex-wrap gap-2">
+            {filterOptions.map((f) => (
+              <Button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={clsx(
+                  'text-sm px-4 py-2',
+                  filter === f.id
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                )}
+              >
+                {f.label}
+              </Button>
+            ))}
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Input
+              placeholder="Поиск по ID, описанию, нику, ФИО или роли"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-blue-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-300 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-300" />
+          </div>
+          <div className="flex gap-3 w-full sm:w-auto">
+            <div className="relative flex-1">
+              <DatePicker
+                selected={startDate}
+                onChange={(date: Date | null) => setStartDate(date)}
+                placeholderText="Дата с"
+                className="w-full pl-10 pr-4 py-2 border border-blue-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-300 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                dateFormat="dd.MM.yyyy"
+              />
+              <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-300" />
+            </div>
+            <div className="relative flex-1">
+              <DatePicker
+                selected={endDate}
+                onChange={(date: Date | null) => setEndDate(date)}
+                placeholderText="Дата по"
+                className="w-full pl-10 pr-4 py-2 border border-blue-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-300 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                dateFormat="dd.MM.yyyy"
+              />
+              <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-300" />
+            </div>
+          </div>
+          <Button
+            onClick={handleExportCSV}
+            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-md hover:scale-105 transition-transform duration-200"
+          >
+            <DocumentArrowDownIcon className="h-5 w-5" />
+            Экспорт CSV
+          </Button>
+        </div>
+      </Card>
+      <div className="max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+        {paginatedLogs.length === 0 ? (
+          <Card className="p-6 text-center card-shadow dark:bg-gray-800">
+            <DocumentTextIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-300 mb-2" />
+            <p className="text-gray-600 dark:text-gray-300">
+  Нет логов для &quot;{filterOptions.find((f) => f.id === filter)?.label || filter}&quot;. Действия появятся позже!
+</p>
+          </Card>
+        ) : (
+          <ul className="space-y-4">
+            {paginatedLogs.map((log, index) => {
+              const actionType = getActionType(log.action);
+              if (!actionType) return null;
+              const { label, color, icon: ActionIcon } = actionType;
+              return (
+                <li key={log.id}>
+                  <Card
+                    className={clsx(
+                      'p-4 card-shadow dark:bg-gray-800 transition-transform duration-200 hover:scale-[1.01] hover:shadow-lg hover:z-10'
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <UserIcon className="h-6 w-6 text-gray-600 dark:text-gray-300 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium text-gray-800 dark:text-gray-200">
+                              {log.user?.full_name || (log.user_id === 0 ? 'Система' : `Пользователь ${log.user_id}`)}
+                            </span>
+                            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                              (@{log.user?.username || (log.user_id === 0 ? 'system' : 'unknown')})
+                            </span>
+                          </div>
+                          <span className={clsx('text-xs px-2 py-1 rounded-full flex items-center gap-1', color)}>
+                            <ActionIcon className="h-4 w-4" />
+                            {label}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                          <span className="font-medium">Роль:</span> {log.user?.role || (log.user_id === 0 ? 'Система' : 'Неизвестно')}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{log.details}</p>
+                        <div className="mt-2">
+                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-300">
+                            <span>Активность:</span>
+                            <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full">
+                              <div
+                                className="h-full bg-blue-600 rounded-full"
+                                style={{ width: `${Math.min((index + 1) * 20, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500 dark:text-gray-300">
+                          {new Date(log.created_at).toLocaleString('ru-RU', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      {totalPages > 1 && (
+        <Card className="p-4 card-shadow dark:bg-gray-800">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="flex gap-2 items-center">
+              <Button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 p-2 rounded-md"
+              >
+                <ChevronLeftIcon className="h-5 w-5" />
+              </Button>
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Страница {currentPage} из {totalPages} (Всего логов: {total})
               </span>
-            </li>
-          ))}
-        </ul>
+              <Button
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 p-2 rounded-md"
+              >
+                <ChevronRightIcon className="h-5 w-5" />
+              </Button>
+            </div>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(parseInt(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="p-2 border border-blue-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-300"
+            >
+              <option value={5}>5 на странице</option>
+              <option value={10}>10 на странице</option>
+              <option value={50}>50 на странице</option>
+            </select>
+          </div>
+        </Card>
       )}
-    </Card>
+    </div>
+  );
+}
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/app/admin/components/UserManagement.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+'use client';
+
+import { useState, FormEvent } from 'react';
+import { Card } from '@/shared/ui/Card';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import { api } from '@/shared/api';
+import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
+import clsx from 'clsx';
+import { EnvelopeIcon, LockClosedIcon, UserGroupIcon, UserIcon, ShieldCheckIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  class_number: number; // Изменено с class
+}
+
+interface ErrorResponse {
+  error?: string;
+}
+
+interface UserManagementProps {
+  users: User[];
+  onSuccess: () => void;
+  setFormError: (error: string) => void;
+}
+
+export function UserManagement({ users, onSuccess, setFormError }: UserManagementProps) {
+  // Форма создания пользователя
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('teacher');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Форма изменения роли
+  const [userId, setUserId] = useState('');
+  const [role, setRole] = useState('');
+  const [idError, setIdError] = useState('');
+  const [roleError, setRoleError] = useState('');
+
+  // Вкладки и фильтры
+  const [activeForm, setActiveForm] = useState<'create' | 'role'>('create');
+  const [filterRole, setFilterRole] = useState<'all' | 'teacher' | 'student'>('all');
+  const [filterClass, setFilterClass] = useState<number | 'all'>('all');
+
+  // Сортировка
+  const [sortColumn, setSortColumn] = useState<keyof User | 'class_number'>('id');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Заглушка для пользователей
+  const mockUsers: User[] = [
+    { id: 1, username: 'john_doe', email: 'john@example.com', role: 'teacher', class_number: 0 },
+    { id: 2, username: 'jane_smith', email: 'jane@example.com', role: 'student', class_number: 10 },
+    { id: 3, username: 'bob_jones', email: 'bob@example.com', role: 'teacher', class_number: 0 },
+    { id: 4, username: 'alice_brown', email: 'alice@example.com', role: 'student', class_number: 11 },
+    { id: 5, username: 'admin', email: 'admin@example.com', role: 'admin', class_number: 0 },
+  ];
+
+  const filteredUsers = (users.length > 0 ? users : mockUsers)
+    .filter((user) => {
+      if (filterRole === 'all') return true;
+      if (filterRole === user.role) {
+        if (filterRole === 'student' && filterClass !== 'all') {
+          return user.class_number === filterClass;
+        }
+        return true;
+      }
+      return false;
+    })
+    .sort((a, b) => {
+      const aValue = a[sortColumn];
+      const bValue = b[sortColumn];
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  // Валидация создания пользователя
+  const validateCreateForm = () => {
+    let isValid = true;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newUserEmail)) {
+      setEmailError('Введите корректный email');
+      isValid = false;
+    } else {
+      setEmailError('');
+    }
+    if (newUserPassword.length < 6) {
+      setPasswordError('Пароль должен быть не менее 6 символов');
+      isValid = false;
+    } else {
+      setPasswordError('');
+    }
+    return isValid;
+  };
+
+  // Валидация изменения роли
+  const validateRoleForm = () => {
+    let isValid = true;
+    if (!/^\d+$/.test(userId) || parseInt(userId) <= 0) {
+      setIdError('Введите корректный ID (положительное число)');
+      isValid = false;
+    } else {
+      setIdError('');
+    }
+    if (!['student', 'teacher', 'admin'].includes(role.toLowerCase())) {
+      setRoleError('Роль: student, teacher или admin');
+      isValid = false;
+    } else {
+      setRoleError('');
+    }
+    return isValid;
+  };
+
+  // Создание пользователя
+  const handleRegisterUser = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!validateCreateForm()) return;
+
+    try {
+      await api.post('/admin/create-user', {
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+      });
+      toast.success('Пользователь создан');
+      onSuccess();
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('teacher');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка регистрации';
+      setFormError(errorMsg);
+      toast.error(errorMsg);
+      console.error('Create user error:', err);
+    }
+  };
+
+  // Изменение роли
+  const handleUpdateRole = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!validateRoleForm()) return;
+
+    try {
+      await api.put(`/users/${userId}/role`, { role: role.toLowerCase() });
+      toast.success('Роль обновлена');
+      onSuccess();
+      setUserId('');
+      setRole('');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка изменения роли';
+      setFormError(errorMsg);
+      toast.error(errorMsg);
+      console.error('Update role error:', err);
+    }
+  };
+
+  // Сортировка
+  const handleSort = (column: keyof User | 'class_number') => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Вкладки */}
+      <Card className="p-4 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+        <div className="flex gap-2 justify-center">
+          {[
+            { id: 'create', label: 'Создать пользователя' },
+            { id: 'role', label: 'Изменить роль' },
+          ].map((tab) => (
+            <Button
+              key={tab.id}
+              onClick={() => setActiveForm(tab.id as 'create' | 'role')}
+              className={clsx(
+                'text-sm',
+                activeForm === tab.id
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              )}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Формы */}
+      <div className="relative">
+        <div
+          className={clsx(
+            'transition-all duration-600 ease-in-out',
+            activeForm === 'create' ? 'opacity-100 transform translate-x-0' : 'opacity-0 transform translate-x-10 pointer-events-none absolute top-0 left-0 w-full'
+          )}
+        >
+          <Card
+            className="p-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up border-l-4 border-green-600"
+            style={{ animationDelay: '300ms' }}
+          >
+            <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Создать пользователя</h3>
+            <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
+              <div className="relative animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <EnvelopeIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                </div>
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className={clsx(
+                    'pl-10 border-blue-600 dark:bg-gray-800 dark:text-gray-300',
+                    emailError && 'border-red-600'
+                  )}
+                  required
+                />
+                {emailError && <p className="text-red-500 text-xs mt-1">{emailError}</p>}
+              </div>
+              <div className="relative animate-fade-in-up" style={{ animationDelay: '500ms' }}>
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <LockClosedIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                </div>
+                <Input
+                  type="password"
+                  placeholder="Пароль"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className={clsx(
+                    'pl-10 border-blue-600 dark:bg-gray-800 dark:text-gray-300',
+                    passwordError && 'border-red-600'
+                  )}
+                  required
+                />
+                {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
+              </div>
+              <div className="relative sm:col-span-2 animate-fade-in-up" style={{ animationDelay: '600ms' }}>
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <UserGroupIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                </div>
+                <select
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value)}
+                  className="p-3 pl-10 border border-blue-600 rounded-md text-sm dark:bg-gray-800 dark:text-gray-300 w-full"
+                >
+                  <option value="teacher">Преподаватель</option>
+                  <option value="admin">Администратор</option>
+                  <option value="student">Ученик</option>
+                </select>
+              </div>
+              <Button
+                type="submit"
+                className="sm:col-span-2 bg-green-600 hover:bg-green-700 text-white hover:scale-105 transition-transform duration-200 animate-fade-in-up"
+                style={{ animationDelay: '700ms' }}
+              >
+                Создать
+              </Button>
+            </form>
+          </Card>
+        </div>
+        <div
+          className={clsx(
+            'transition-all duration-600 ease-in-out',
+            activeForm === 'role' ? 'opacity-100 transform translate-x-0' : 'opacity-0 transform translate-x-10 pointer-events-none absolute top-0 left-0 w-full'
+          )}
+        >
+          <Card
+            className="p-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up border-l-4 border-blue-600"
+            style={{ animationDelay: '300ms' }}
+          >
+            <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Изменить роль</h3>
+            <form onSubmit={handleUpdateRole} className="grid gap-4 sm:grid-cols-2">
+              <div className="relative animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <UserIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                </div>
+                <Input
+                  type="number"
+                  placeholder="ID пользователя"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  className={clsx(
+                    'pl-10 border-blue-600 dark:bg-gray-800 dark:text-gray-300',
+                    idError && 'border-red-600'
+                  )}
+                  required
+                />
+                {idError && <p className="text-red-500 text-xs mt-1">{idError}</p>}
+              </div>
+              <div className="relative animate-fade-in-up" style={{ animationDelay: '500ms' }}>
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <ShieldCheckIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                </div>
+                <Input
+                  placeholder="student / teacher / admin"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className={clsx(
+                    'pl-10 border-blue-600 dark:bg-gray-800 dark:text-gray-300',
+                    roleError && 'border-red-600'
+                  )}
+                  required
+                />
+                {roleError && <p className="text-red-500 text-xs mt-1">{roleError}</p>}
+              </div>
+              <Button
+                type="submit"
+                className="sm:col-span-2 bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200 animate-fade-in-up"
+                style={{ animationDelay: '600ms' }}
+              >
+                Изменить
+              </Button>
+            </form>
+          </Card>
+        </div>
+      </div>
+
+      {/* Фильтры */}
+      <Card className="p-4 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="flex gap-2">
+            {[
+              { id: 'all', label: 'Все' },
+              { id: 'teacher', label: 'Учитель' },
+              { id: 'student', label: 'Ученик' },
+            ].map((f) => (
+              <Button
+                key={f.id}
+                onClick={() => {
+                  setFilterRole(f.id as 'all' | 'teacher' | 'student');
+                  if (f.id !== 'student') setFilterClass('all');
+                }}
+                className={clsx(
+                  'text-sm',
+                  filterRole === f.id
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600',
+                  'hover:animate-pulse'
+                )}
+              >
+                {f.label}
+              </Button>
+            ))}
+          </div>
+          {filterRole === 'student' && (
+            <div className="relative animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+              <select
+                value={filterClass}
+                onChange={(e) => setFilterClass(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                className="p-2 border border-blue-600 rounded-md text-sm dark:bg-gray-800 dark:text-gray-300"
+              >
+                <option value="all">Все классы</option>
+                {[...Array(11)].map((_, i) => (
+                  <option key={i + 1} value={i + 1}>{i + 1} класс</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <Button
+            onClick={() => {
+              setFilterRole('all');
+              setFilterClass('all');
+              setSortColumn('id');
+              setSortDirection('asc');
+            }}
+            className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 text-sm hover:animate-pulse"
+          >
+            Сбросить
+          </Button>
+        </div>
+      </Card>
+
+      {/* Список пользователей */}
+      <Card className="p-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+        <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Список пользователей</h3>
+        {filteredUsers.length === 0 ? (
+          <div className="text-center py-6 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+            <UserIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+            <p className="text-gray-600 dark:text-gray-400">Нет пользователей по выбранным фильтрам</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-800 dark:text-gray-300">
+              <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('id')}>
+                    ID
+                    {sortColumn === 'id' && (
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                    )}
+                  </th>
+                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('email')}>
+                    Email
+                    {sortColumn === 'email' && (
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                    )}
+                  </th>
+                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('role')}>
+                    Роль
+                    {sortColumn === 'role' && (
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                    )}
+                  </th>
+                  {filterRole === 'student' && (
+                    <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('class_number')}>
+                      Класс
+                      {sortColumn === 'class_number' && (
+                        sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                      )}
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((user, index) => (
+                  <tr
+                    key={user.id}
+                    className="border-b dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 animate-fade-in-up"
+                    style={{ animationDelay: `${400 + index * 100}ms` }}
+                  >
+                    <td className="px-4 py-3">{user.id}</td>
+                    <td className="px-4 py-3">{user.email}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={clsx(
+                          'text-xs px-2 py-1 rounded-full',
+                          user.role === 'student' && 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+                          user.role === 'teacher' && 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+                          user.role === 'admin' && 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
+                        )}
+                      >
+                        {user.role === 'student' ? 'Ученик' : user.role === 'teacher' ? 'Учитель' : 'Админ'}
+                      </span>
+                    </td>
+                    {filterRole === 'student' && (
+                      <td className="px-4 py-3">
+                        {user.class_number > 0 ? `${user.class_number} класс` : 'Не указан'}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -2713,8 +4217,8 @@ export function ActionLogs({ logs }: ActionLogsProps) {
 ║ frontend/src/app/admin/components/AchievementManagement.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-// frontend/src/app/admin/components/AchievementManagement.tsx
 'use client';
+
 import { useState, FormEvent } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
@@ -2722,6 +4226,8 @@ import { Input } from '@/shared/ui/Input';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
+import { TrophyIcon } from '@heroicons/react/24/outline';
 
 interface Achievement {
   id: number;
@@ -2817,152 +4323,105 @@ export function AchievementManagement({
   };
 
   return (
-    <Card className="mb-6">
-      <h2 className="text-xl font-semibold mb-4">Управление достижениями</h2>
-      <Button onClick={() => setShowForm(!showForm)} className="mb-4">
+    <div>
+      <Button
+        onClick={() => setShowForm(!showForm)}
+        className="mb-6 bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200 flex items-center gap-2"
+      >
+        <TrophyIcon className="h-5 w-5" />
         {showForm ? 'Отменить' : 'Добавить достижение'}
       </Button>
       {showForm && (
-        <form onSubmit={handleCreateOrUpdateAchievement} className="grid gap-4 mb-6">
-          <Input
-            placeholder="Название"
-            value={achTitle}
-            onChange={(e) => setAchTitle(e.target.value)}
-            required
-          />
-          <Input
-            placeholder="Описание"
-            value={achDesc}
-            onChange={(e) => setAchDesc(e.target.value)}
-            required
-          />
-          <select
-            value={achCondition}
-            onChange={(e) => setAchCondition(e.target.value)}
-            className="p-2 border rounded-md text-sm"
-            required
-          >
-            <option value="">Выберите условие</option>
-            {conditionOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <Button type="submit">{editAchievement ? 'Обновить' : 'Добавить'}</Button>
-        </form>
+        <Card className="p-6 mb-6 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+          <form onSubmit={handleCreateOrUpdateAchievement} className="grid gap-4">
+            <Input
+              placeholder="Название достижения"
+              value={achTitle}
+              onChange={(e) => setAchTitle(e.target.value)}
+              className="border-blue-600 dark:bg-gray-800 dark:text-gray-300"
+              required
+            />
+            <Input
+              placeholder="Описание"
+              value={achDesc}
+              onChange={(e) => setAchDesc(e.target.value)}
+              className="border-blue-600 dark:bg-gray-800 dark:text-gray-300"
+              required
+            />
+            <select
+              value={achCondition}
+              onChange={(e) => setAchCondition(e.target.value)}
+              className="p-3 border border-blue-600 rounded-md text-sm dark:bg-gray-800 dark:text-gray-300"
+              required
+            >
+              <option value="">Выберите условие</option>
+              {conditionOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="submit"
+              className="bg-green-600 hover:bg-green-700 text-white hover:scale-105 transition-transform duration-200"
+            >
+              {editAchievement ? 'Обновить' : 'Добавить'}
+            </Button>
+          </form>
+        </Card>
       )}
-      <div>
-        <h3 className="font-semibold mb-2">Существующие достижения:</h3>
-        {achievements.length === 0 ? (
-          <p className="text-sm text-gray-500">Нет достижений</p>
-        ) : (
-          <ul className="text-sm space-y-2">
-            {achievements.map((ach) => (
-              <li key={ach.id} className="flex justify-between items-center">
-                <span>
-                  {ach.title} — {ach.description} ({ach.condition})
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleEdit(ach)}
-                    className="bg-blue-600 text-white text-xs px-2 py-1"
-                  >
-                    Редактировать
-                  </Button>
-                  <Button
-                    onClick={() => handleDelete(ach.id)}
-                    className="bg-red-600 text-white text-xs px-2 py-1"
-                  >
-                    Удалить
-                  </Button>
+      {achievements.length === 0 ? (
+        <Card className="p-6 text-center card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+          <TrophyIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+          <p className="text-gray-600 dark:text-gray-400">Нет достижений. Создайте первое!</p>
+        </Card>
+      ) : (
+        <ul className="space-y-4">
+          {achievements.map((ach, index) => (
+            <li
+              key={ach.id}
+              className="animate-fade-in-up"
+              style={{ animationDelay: `${400 + index * 100}ms` }}
+            >
+              <Card
+                className={clsx(
+                  'p-4 card-shadow card-hover-gradient dark:bg-gray-800 transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg'
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <TrophyIcon className="h-6 w-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                        {ach.title}
+                      </h3>
+                      <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 text-xs px-2 py-1 rounded-full">
+                        {conditionOptions.find((opt) => opt.value === ach.condition)?.label || ach.condition}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{ach.description}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleEdit(ach)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 hover:scale-105"
+                    >
+                      Редактировать
+                    </Button>
+                    <Button
+                      onClick={() => handleDelete(ach.id)}
+                      className="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 hover:scale-105"
+                    >
+                      Удалить
+                    </Button>
+                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-
-════════════════════════════════════════════════════════════════════════════════
-║ frontend/src/app/admin/components/CreateUserForm.tsx
-════════════════════════════════════════════════════════════════════════════════
-
-// frontend/src/app/admin/components/CreateUserForm.tsx
-'use client';
-import { useState, FormEvent } from 'react';
-import { Card } from '@/shared/ui/Card';
-import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
-import { api } from '@/shared/api';
-import { AxiosError } from 'axios';
-
-interface ErrorResponse {
-  error?: string;
-}
-
-interface CreateUserFormProps {
-  onSuccess: () => void;
-  setFormError: (error: string) => void;
-}
-
-export function CreateUserForm({ onSuccess, setFormError }: CreateUserFormProps) {
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState('teacher');
-
-  const handleRegisterUser = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.post('/admin/create-user', {
-        email: newUserEmail,
-        password: newUserPassword,
-        role: newUserRole,
-      });
-      onSuccess();
-      setNewUserEmail('');
-      setNewUserPassword('');
-      setNewUserRole('teacher');
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      setFormError(axiosError.response?.data?.error || 'Ошибка регистрации');
-    }
-  };
-
-  return (
-    <Card className="mb-6">
-      <h2 className="text-xl font-semibold mb-4">Создать нового пользователя</h2>
-      <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
-        <Input
-          type="email"
-          placeholder="Email"
-          value={newUserEmail}
-          onChange={(e) => setNewUserEmail(e.target.value)}
-          required
-        />
-        <Input
-          type="password"
-          placeholder="Пароль"
-          value={newUserPassword}
-          onChange={(e) => setNewUserPassword(e.target.value)}
-          required
-        />
-        <select
-          value={newUserRole}
-          onChange={(e) => setNewUserRole(e.target.value)}
-          className="p-2 border rounded sm:col-span-2"
-        >
-          <option value="teacher">Преподаватель</option>
-          <option value="admin">Администратор</option>
-        </select>
-        <Button type="submit" className="sm:col-span-2">
-          Создать
-        </Button>
-      </form>
-    </Card>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -3495,27 +4954,29 @@ export function Button({ children, className = '', variant = 'default', ...props
 ║ frontend/src/shared/ui/Card.tsx
 ════════════════════════════════════════════════════════════════════════════════
 
-import { ReactNode } from 'react';
+import { ReactNode, HTMLAttributes } from 'react';
 import clsx from 'clsx';
 
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
   title?: string;
 }
 
-export function Card({ children, className = '', title }: CardProps) {
+export function Card({ children, className = '', title, ...props }: CardProps) {
   return (
-    <div className={clsx(
-      'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-6 transition-all',
-      className
-    )}>
+    <div
+      className={clsx(
+        'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm transition-all',
+        className
+      )}
+      {...props}
+    >
       {title && <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">{title}</h2>}
       {children}
     </div>
   );
 }
-
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -3965,5 +5426,61 @@ export function AvatarModal({ isOpen, onClose, currentAvatar, onAvatarUpdate }: 
         </div>
       </div>
     </Dialog>
+  );
+}
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+║ frontend/src/widgets/ConfirmModal.tsx
+════════════════════════════════════════════════════════════════════════════════
+
+'use client';
+import { Button } from '@/shared/ui/Button';
+import clsx from 'clsx';
+
+interface ConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  className?: string;
+}
+
+export default function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = 'Подтвердить',
+  cancelText = 'Отменить',
+  className,
+}: ConfirmModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div
+        className={clsx(
+          'bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 card-shadow animate-fade-in-up',
+          className
+        )}
+      >
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">{title}</h2>
+        <p className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose} variant="outline">
+            {cancelText}
+          </Button>
+          <Button onClick={onConfirm} variant="destructive">
+            {confirmText}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

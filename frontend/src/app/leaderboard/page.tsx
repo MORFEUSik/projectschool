@@ -1,10 +1,15 @@
 'use client';
+
 import { useState, useEffect } from 'react';
+import { useUser } from '@/entities/user/hook';
 import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import { Input } from '@/shared/ui/Input';
 import { Button } from '@/shared/ui/Button';
 import { AxiosError } from 'axios';
+import toast from 'react-hot-toast';
+import clsx from 'clsx';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 interface LeaderboardUser {
   id: number;
@@ -17,6 +22,7 @@ interface ErrorResponse {
 }
 
 export default function LeaderboardPage() {
+  const { user } = useUser();
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [courseId, setCourseId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,11 +32,16 @@ export default function LeaderboardPage() {
     setIsLoading(true);
     setError('');
     try {
-      const response = await api.get<LeaderboardUser[]>(`/leaderboard${courseId ? `?course_id=${courseId}` : ''}`);
+      const response = await api.get<LeaderboardUser[]>(
+        `/leaderboard${courseId ? `?course_id=${courseId}` : ''}`
+      );
       setUsers(response.data);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      setError(axiosError.response?.data?.error || 'Не удалось загрузить таблицу лидеров');
+      const errorMsg = axiosError.response?.data?.error || 'Не удалось загрузить таблицу лидеров';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      console.error('API error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -42,9 +53,17 @@ export default function LeaderboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">🏆 Таблица лидеров</h1>
+      <h1
+        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
+        style={{ animationDelay: '100ms' }}
+      >
+        🏆 Таблица лидеров
+      </h1>
 
-      <Card className="mb-6">
+      <Card
+        className="p-6 mb-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '200ms' }}
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -52,41 +71,84 @@ export default function LeaderboardPage() {
           }}
           className="flex flex-col sm:flex-row gap-4 items-center"
         >
-          <Input
-            type="number"
-            placeholder="ID курса (опционально)"
-            value={courseId}
-            onChange={(e) => setCourseId(e.target.value)}
-            className="w-full sm:flex-1"
-          />
-          <Button type="submit">Показать</Button>
+          <div
+            className="relative w-full sm:flex-1 group"
+            data-tooltip="Введите ID курса"
+          >
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+            <Input
+              type="number"
+              placeholder="Введите ID курса"
+              value={courseId}
+              onChange={(e) => setCourseId(e.target.value)}
+              className="pl-10 border-blue-600 dark:bg-gray-700 dark:text-gray-300 focus:ring-blue-600 w-full"
+            />
+            <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+              Введите ID курса
+            </span>
+          </div>
+          <Button
+            type="submit"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full hover:scale-105 transition duration-200"
+          >
+            Показать
+          </Button>
         </form>
       </Card>
 
-      {isLoading && <p className="text-center text-gray-500">Загрузка...</p>}
-      {error && <p className="text-center text-red-500 mb-4">{error}</p>}
+      {error && (
+        <p
+          className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse"
+          style={{ animationDelay: '300ms' }}
+        >
+          {error}
+        </p>
+      )}
 
-      <Card>
-        {users.length === 0 && !isLoading ? (
-          <p className="text-center text-gray-500">Нет данных</p>
+      <Card
+        className="p-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
+        style={{ animationDelay: '300ms' }}
+      >
+        {isLoading ? (
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse h-12 w-full bg-gray-200 dark:bg-gray-700 rounded"
+              />
+            ))}
+          </div>
+        ) : users.length === 0 ? (
+          <p className="text-center text-gray-500 dark:text-gray-400">Нет данных</p>
         ) : (
           <table className="w-full table-auto text-sm">
             <thead>
-              <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
-                <th className="py-2 px-3">#</th>
-                <th className="py-2 px-3">Пользователь</th>
-                <th className="py-2 px-3">Баллы</th>
+              <tr className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-600 uppercase">
+                <th className="py-3 px-4 text-left">#</th>
+                <th className="py-3 px-4 text-left">Пользователь</th>
+                <th className="py-3 px-4 text-left">Баллы</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((user, index) => (
+              {users.map((userItem, index) => (
                 <tr
-                  key={user.id}
-                  className="border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                  key={userItem.id}
+                  className={clsx(
+                    'border-b last:border-none border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition animate-fade-in-up',
+                    userItem.id === user?.id && 'bg-blue-50 dark:bg-blue-900'
+                  )}
+                  style={{ animationDelay: `${(index + 1) * 100}ms` }}
                 >
-                  <td className="py-2 px-3 font-medium">{index + 1}</td>
-                  <td className="py-2 px-3">{user.username}</td>
-                  <td className="py-2 px-3 font-semibold text-blue-600 dark:text-blue-400">{user.points}</td>
+                  <td className="py-3 px-4 font-medium">
+                    {index + 1}
+                    {index === 0 && ' 🥇'}
+                    {index === 1 && ' 🥈'}
+                    {index === 2 && ' 🥉'}
+                  </td>
+                  <td className="py-3 px-4 line-clamp-2">{userItem.username}</td>
+                  <td className="py-3 px-4 font-semibold text-blue-600 dark:text-blue-400">
+                    {userItem.points}
+                  </td>
                 </tr>
               ))}
             </tbody>

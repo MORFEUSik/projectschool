@@ -2444,6 +2444,62 @@ func CheckDeadlines(courseService service.CourseService) gin.HandlerFunc {
 	}
 }
 
+// IsEnrolled проверяет, записан ли пользователь на курс
+// @Summary Проверить запись на курс
+// @Description Проверяет, записан ли аутентифицированный студент на курс. Требуется JWT-токен. Доступно только для роли: student.
+// @Tags courses
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID курса"
+// @Success 200 {object} map[string]bool "enrolled"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/is-enrolled [get]
+func IsEnrolled(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+
+		if user.Role != model.Student {
+			logger.Log.Warnf("User %d is not a student", userID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Только студенты могут проверять запись на курс"})
+			return
+		}
+
+		logger.Log.Infof("User %d checking enrollment in course %d", userID, id)
+		isEnrolled, err := courseService.IsEnrolled(userID.(uint), uint(id))
+		if err != nil {
+			logger.Log.Errorf("Failed to check enrollment for user %d in course %d: %v", userID, id, err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка проверки записи"})
+			return
+		}
+
+		logger.Log.Infof("Enrollment status for user %d in course %d: %v", userID, id, isEnrolled)
+		c.JSON(http.StatusOK, gin.H{"enrolled": isEnrolled})
+	}
+}
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2454,9 +2510,10 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
+	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -2464,16 +2521,42 @@ import (
 // GetActionLogs возвращает список логов действий
 func GetActionLogs(s service.ActionLogService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+		limit := 100 // По умолчанию 100 логов
+		offset := 0
+		startDateStr := c.Query("start_date")
+		endDateStr := c.Query("end_date")
 
-		logs, total, err := s.GetAll(limit, offset)
+		excludeActions := []string{"list_achievements", "list_users"} // Исключаем ненужные действия
+
+		var logs []repository.ActionLogWithUser
+		var total int64
+		var err error
+
+		if startDateStr != "" && endDateStr != "" {
+			startDate, err := time.Parse(time.RFC3339, startDateStr)
+			if err != nil {
+				logger.Log.Errorf("Invalid start_date format: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат start_date"})
+				return
+			}
+			endDate, err := time.Parse(time.RFC3339, endDateStr)
+			if err != nil {
+				logger.Log.Errorf("Invalid end_date format: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат end_date"})
+				return
+			}
+			logs, total, err = s.FindByDateRange(startDate, endDate, excludeActions)
+		} else {
+			logs, total, err = s.GetAll(limit, offset, excludeActions)
+		}
+
 		if err != nil {
 			logger.Log.Errorf("Failed to get action logs: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения логов"})
 			return
 		}
 
+		logger.Log.Infof("Fetched %d action logs, total: %d", len(logs), total)
 		c.JSON(http.StatusOK, gin.H{
 			"logs":  logs,
 			"total": total,
@@ -3535,13 +3618,32 @@ func (r *courseRepository) GetStats(courseID uint) (map[string]interface{}, erro
 package repository
 
 import (
+	"time"
+
+	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"gorm.io/gorm"
 )
 
+// ActionLogWithUser — структура для возврата логов с данными пользователя
+type ActionLogWithUser struct {
+	ID        uint      `json:"id"`
+	UserID    uint      `json:"user_id"`
+	Action    string    `json:"action"`
+	Details   string    `json:"details"`
+	CreatedAt time.Time `json:"created_at"`
+	User      struct {
+		ID       uint   `json:"id"`
+		Username string `json:"username"`
+		FullName string `json:"full_name"`
+		Role     string `json:"role"`
+	} `json:"user"`
+}
+
 type ActionLogRepository interface {
 	Create(log *model.UserActionLog) error
-	FindAll(limit, offset int) ([]model.UserActionLog, int64, error)
+	FindAll(limit, offset int, excludeActions []string) ([]ActionLogWithUser, int64, error)
+	FindByDateRange(startDate, endDate time.Time, excludeActions []string) ([]ActionLogWithUser, int64, error)
 }
 
 type actionLogRepository struct {
@@ -3556,14 +3658,67 @@ func (r *actionLogRepository) Create(log *model.UserActionLog) error {
 	return r.db.Create(log).Error
 }
 
-func (r *actionLogRepository) FindAll(limit, offset int) ([]model.UserActionLog, int64, error) {
-	var logs []model.UserActionLog
+func (r *actionLogRepository) FindAll(limit, offset int, excludeActions []string) ([]ActionLogWithUser, int64, error) {
+	var logs []ActionLogWithUser
 	var total int64
-	if err := r.db.Model(&model.UserActionLog{}).Count(&total).Error; err != nil {
+
+	query := r.db.Table("user_action_logs").
+		Select("user_action_logs.id, user_action_logs.user_id, user_action_logs.action, user_action_logs.details, user_action_logs.created_at, COALESCE(users.id, 0) as user__id, COALESCE(users.username, '') as user__username, COALESCE(users.full_name, '') as user__full_name, COALESCE(users.role, '') as user__role").
+		Joins("left join users on user_action_logs.user_id = users.id")
+
+	if len(excludeActions) > 0 {
+		query = query.Where("user_action_logs.action NOT IN ?", excludeActions)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		logger.Log.Errorf("Failed to count action logs: %v", err)
 		return nil, 0, err
 	}
-	err := r.db.Limit(limit).Offset(offset).Order("created_at desc").Find(&logs).Error // Убрали Preload
-	return logs, total, err
+
+	query = query.Limit(limit).Offset(offset).Order("user_action_logs.created_at desc")
+	if err := query.Scan(&logs).Error; err != nil {
+		logger.Log.Errorf("Failed to scan action logs: %v", err)
+		return nil, 0, err
+	}
+
+	logger.Log.Infof("Fetched %d action logs with %d total", len(logs), total)
+	for _, log := range logs {
+		logger.Log.Debugf("Log ID: %d, UserID: %d, User: %+v", log.ID, log.UserID, log.User)
+	}
+
+	return logs, total, nil
+}
+
+func (r *actionLogRepository) FindByDateRange(startDate, endDate time.Time, excludeActions []string) ([]ActionLogWithUser, int64, error) {
+	var logs []ActionLogWithUser
+	var total int64
+
+	query := r.db.Table("user_action_logs").
+		Select("user_action_logs.id, user_action_logs.user_id, user_action_logs.action, user_action_logs.details, user_action_logs.created_at, COALESCE(users.id, 0) as user__id, COALESCE(users.username, '') as user__username, COALESCE(users.full_name, '') as user__full_name, COALESCE(users.role, '') as user__role").
+		Joins("left join users on user_action_logs.user_id = users.id").
+		Where("user_action_logs.created_at BETWEEN ? AND ?", startDate, endDate)
+
+	if len(excludeActions) > 0 {
+		query = query.Where("user_action_logs.action NOT IN ?", excludeActions)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		logger.Log.Errorf("Failed to count action logs by date range: %v", err)
+		return nil, 0, err
+	}
+
+	query = query.Order("user_action_logs.created_at desc")
+	if err := query.Scan(&logs).Error; err != nil {
+		logger.Log.Errorf("Failed to scan action logs by date range: %v", err)
+		return nil, 0, err
+	}
+
+	logger.Log.Infof("Fetched %d action logs for date range with %d total", len(logs), total)
+	for _, log := range logs {
+		logger.Log.Debugf("Log ID: %d, UserID: %d, User: %+v", log.ID, log.UserID, log.User)
+	}
+
+	return logs, total, nil
 }
 
 
@@ -5092,6 +5247,7 @@ type CourseService interface {
 	GetStats(courseID uint) (map[string]interface{}, error)
 	GetProgress(userID, courseID uint) (map[string]interface{}, error)
 	CheckDeadlines() error
+	IsEnrolled(userID, courseID uint) (bool, error)
 }
 
 type courseService struct {
@@ -5476,6 +5632,24 @@ func (s *courseService) CheckDeadlines() error {
 	return nil
 }
 
+func (s *courseService) IsEnrolled(userID, courseID uint) (bool, error) {
+	logger.Log.Infof("Checking if user %d is enrolled in course %d", userID, courseID)
+
+	var enrollment model.Enrollment
+	err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Log.Infof("User %d is not enrolled in course %d", userID, courseID)
+			return false, nil
+		}
+		logger.Log.Errorf("Error checking enrollment for user %d in course %d: %v", userID, courseID, err)
+		return false, err
+	}
+
+	logger.Log.Infof("User %d is enrolled in course %d", userID, courseID)
+	return true, nil
+}
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -5485,15 +5659,17 @@ func (s *courseService) CheckDeadlines() error {
 package service
 
 import (
+	"time"
+
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"gorm.io/gorm"
-	"time"
 )
 
 type ActionLogService interface {
 	Create(userID uint, action, details string) error
-	GetAll(limit, offset int) ([]model.UserActionLog, int64, error)
+	GetAll(limit, offset int, excludeActions []string) ([]repository.ActionLogWithUser, int64, error)
+	FindByDateRange(startDate, endDate time.Time, excludeActions []string) ([]repository.ActionLogWithUser, int64, error)
 }
 
 type actionLogService struct {
@@ -5515,8 +5691,12 @@ func (s *actionLogService) Create(userID uint, action, details string) error {
 	return s.repo.Create(log)
 }
 
-func (s *actionLogService) GetAll(limit, offset int) ([]model.UserActionLog, int64, error) {
-	return s.repo.FindAll(limit, offset)
+func (s *actionLogService) GetAll(limit, offset int, excludeActions []string) ([]repository.ActionLogWithUser, int64, error) {
+	return s.repo.FindAll(limit, offset, excludeActions)
+}
+
+func (s *actionLogService) FindByDateRange(startDate, endDate time.Time, excludeActions []string) ([]repository.ActionLogWithUser, int64, error) {
+	return s.repo.FindByDateRange(startDate, endDate, excludeActions)
 }
 
 
@@ -5620,6 +5800,17 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 				}
 				logger.Log.Infof("Assigned achievement %s to user %d", ach.Title, userID)
 				newAchievements = append(newAchievements, ach)
+
+				// Логирование действия
+				log := &model.UserActionLog{
+					UserID:    userID,
+					Action:    "award_achievement",
+					Details:   "Пользователь получил достижение: " + ach.Title,
+					CreatedAt: time.Now(),
+				}
+				if err := s.logRepo.Create(log); err != nil {
+					logger.Log.Errorf("Failed to create action log: %v", err)
+				}
 			}
 		}
 	}
@@ -5994,6 +6185,7 @@ func main() {
 					courseGroup.DELETE("", handler.RoleMiddleware(model.Teacher, model.Admin), handler.DeleteCourse(courseService))
 					courseGroup.GET("/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
 					courseGroup.GET("/progress", handler.RoleMiddleware(model.Student), handler.GetCourseProgress(courseService))
+					courseGroup.GET("/is-enrolled", handler.RoleMiddleware(model.Student), handler.IsEnrolled(courseService))
 				}
 			}
 

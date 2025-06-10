@@ -93,6 +93,17 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 				}
 				logger.Log.Infof("Assigned achievement %s to user %d", ach.Title, userID)
 				newAchievements = append(newAchievements, ach)
+
+				// Логирование действия
+				log := &model.UserActionLog{
+					UserID:    userID,
+					Action:    "award_achievement",
+					Details:   "Пользователь получил достижение: " + ach.Title,
+					CreatedAt: time.Now(),
+				}
+				if err := s.logRepo.Create(log); err != nil {
+					logger.Log.Errorf("Failed to create action log: %v", err)
+				}
 			}
 		}
 	}

@@ -1,8 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    "./src/**/*.{js,ts,jsx,tsx}", // сканирует все твои компоненты
-  ],
+  content: ["./src/**/*.{js,ts,jsx,tsx}"],
+  darkMode: "media",
   theme: {
     extend: {
       animation: {
