@@ -9,21 +9,30 @@ import clsx from 'clsx';
 import { motion } from 'framer-motion';
 
 interface Achievement {
-  title: string;
-  description: string;
-  awarded_at: string;
+  ID: number;
+  Title: string;
+  Description: string;
+  ConditionType: string;
+  Threshold: number;
+}
+
+interface UserAchievement {
+  UserID: number;
+  AchievementID: number;
+  AwardedAt: string;
+  Achievement: Achievement;
 }
 
 export default function AchievementsPage() {
   const { user } = useUser(); // Для авторизации
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [achievements, setAchievements] = useState<UserAchievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchAchievements() {
       try {
-        const response = await api.get<Achievement[]>('/users/me/achievements');
+        const response = await api.get<UserAchievement[]>('/users/me/achievements');
         setAchievements(response.data);
       } catch (err: unknown) {
         const errorMsg = 'Не удалось загрузить достижения';
@@ -41,14 +50,14 @@ export default function AchievementsPage() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto mt-12 px-4">
-		  <motion.h1
-			  initial={{ opacity: 0, y: 20 }}
-			  animate={{ opacity: 1, y: 0 }}
-			  transition={{ duration: 0.5, delay: 0.1 }}
-			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
-			>
-			 🏅 Мои достижения
-			</motion.h1>  
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+        >
+          🏅 Мои достижения
+        </motion.h1>
         <div className="grid gap-4 sm:grid-cols-2">
           {[...Array(4)].map((_, i) => (
             <div
@@ -64,14 +73,14 @@ export default function AchievementsPage() {
   if (error) {
     return (
       <div className="max-w-3xl mx-auto mt-12 px-4">
-		  <motion.h1
-			  initial={{ opacity: 0, y: 20 }}
-			  animate={{ opacity: 1, y: 0 }}
-			  transition={{ duration: 0.5, delay: 0.1 }}
-			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
-			>
-			 🏅 Мои достижения
-			</motion.h1>  
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+        >
+          🏅 Мои достижения
+        </motion.h1>
         <p
           className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse"
           style={{ animationDelay: '200ms' }}
@@ -84,12 +93,14 @@ export default function AchievementsPage() {
 
   return (
     <div className="max-w-3xl mx-auto mt-12 px-4">
-      <h1
-        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-        style={{ animationDelay: '100ms' }}
+      <motion.h1
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
       >
         🏅 Мои достижения
-      </h1>
+      </motion.h1>
 
       {achievements.length === 0 ? (
         <p
@@ -101,7 +112,7 @@ export default function AchievementsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {achievements.map((ach, index) => {
-            const awardedDate = new Date(ach.awarded_at);
+            const awardedDate = new Date(ach.AwardedAt);
             const isNew = (Date.now() - awardedDate.getTime()) / (1000 * 60 * 60 * 24) < 7;
             return (
               <Card
@@ -120,10 +131,10 @@ export default function AchievementsPage() {
                   <span className="text-2xl">🏅</span>
                   <div>
                     <h2 className="text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
-                      {ach.title}
+                      {ach.Achievement.Title}
                     </h2>
                     <p className="text-sm text-gray-700 dark:text-gray-300 mb-1 line-clamp-2">
-                      {ach.description}
+                      {ach.Achievement.Description}
                     </p>
                     <p className="text-xs text-gray-400">
                       Получено:{' '}

@@ -553,3 +553,26 @@ func IsEnrolled(courseService service.CourseService) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"enrolled": isEnrolled})
 	}
 }
+
+func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userIDStr := c.Query("userID")
+		userID, err := strconv.ParseUint(userIDStr, 10, 32)
+		if err != nil {
+			logger.Log.Errorf("Invalid userID: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный userID"})
+			return
+		}
+
+		// Получаем курсы, на которые записан пользователь
+		courses, err := courseService.GetEnrolledCourses(uint(userID))
+		if err != nil {
+			logger.Log.Errorf("Failed to fetch enrolled courses for user %d: %v", userID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		logger.Log.Infof("Fetched %d enrolled courses for user %d", len(courses), userID)
+		c.JSON(http.StatusOK, gin.H{"courses": courses})
+	}
+}

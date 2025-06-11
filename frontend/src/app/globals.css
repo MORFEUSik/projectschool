@@ -22,22 +22,43 @@
 html,
 body {
   height: 100%;
+  min-height: 100dvh; /* Динамическая высота viewport */
   margin: 0;
+  overflow-x: hidden; /* Предотвращаем горизонтальный скролл */
 }
 
 body {
   background: linear-gradient(
-    to bottom right,
-    #e0f2fe,
-    #f9fafb,
-    #f3e8ff
-  ); /* Светлая тема с голубым и фиолетовым оттенком */
+    135deg,
+    #a5b4fc 0%,
+    #fef3c7 25%,
+    #f9a8d4 50%,
+    #93c5fd 75%,
+    #a5b4fc 100%
+  ); /* Светлая тема: переливающийся градиент с индиго, жёлтым, розовым и голубым */
   background-attachment: fixed;
+  background-size: 100% 300%; /* Удлинённый градиент для плавности */
+  background-repeat: no-repeat;
+  background-position: 0% 0%; /* Начальная позиция */
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
   display: flex;
   flex-direction: column;
   position: relative;
+  animation: shimmer 25s ease-in-out infinite; /* Переливающаяся анимация */
+}
+
+/* Переливающаяся анимация */
+@keyframes shimmer {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 0% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
 }
 
 /* Добавляем тонкий шум для текстуры */
@@ -47,9 +68,9 @@ body::before {
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
+  height: 100dvh; /* Полная высота */
   background-image: url("/images/noise.svg");
-  opacity: 0.1; /* Увеличили opacity для видимости */
+  opacity: 0.2; /* Ещё чуть заметнее */
   pointer-events: none;
   z-index: -1;
 }
@@ -58,21 +79,50 @@ body::before {
 @media (prefers-color-scheme: dark) {
   body {
     background: linear-gradient(
-      to bottom right,
-      #0f172a,
-      #1e293b,
-      #2e1065
-    ); /* Темная тема с глубокими синими и фиолетовыми тонами */
+      135deg,
+      #1e3a8a 0%,
+      #3b0764 25%,
+      #6b21a8 50%,
+      #1e40af 75%,
+      #1e3a8a 100%
+    ); /* Тёмная тема: переливающийся градиент с синим, пурпурным и фиолетовым */
+    background-attachment: fixed;
+    background-size: 100% 300%;
+    background-repeat: no-repeat;
+    background-position: 0% 0%;
+    animation: shimmer 25s ease-in-out infinite;
   }
 }
 
 /* Принудительное применение темы через атрибут data-theme */
 [data-theme="light"] {
-  background: linear-gradient(to bottom right, #e0f2fe, #f9fafb, #f3e8ff);
+  background: linear-gradient(
+    135deg,
+    #a5b4fc 0%,
+    #fef3c7 25%,
+    #f9a8d4 50%,
+    #93c5fd 75%,
+    #a5b4fc 100%
+  );
+  background-size: 100% 300%;
+  background-repeat: no-repeat;
+  background-position: 0% 0%;
+  animation: shimmer 25s ease-in-out infinite;
 }
 
 [data-theme="dark"] {
-  background: linear-gradient(to bottom right, #0f172a, #1e293b, #2e1065);
+  background: linear-gradient(
+    135deg,
+    #1e3a8a 0%,
+    #3b0764 25%,
+    #6b21a8 50%,
+    #1e40af 75%,
+    #1e3a8a 100%
+  );
+  background-size: 100% 300%;
+  background-repeat: no-repeat;
+  background-position: 0% 0%;
+  animation: shimmer 25s ease-in-out infinite;
 }
 
 /* Глобальный контейнер */
@@ -88,6 +138,26 @@ body::before {
 
 .card:hover {
   @apply transform scale-105 shadow-xl;
+}
+
+/* Прозрачные карточки для профиля */
+.card-transparent {
+  @apply bg-white/20 dark:bg-gray-900/20 backdrop-blur-lg rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-transparent:hover {
+  @apply transform scale-105 shadow-xl;
+}
+
+/* Карточки с минимальным масштабированием */
+.card-subtle {
+  @apply bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-subtle:hover {
+  @apply transform scale-[1.005] shadow-xl;
 }
 
 /* Плавные переходы для интерактивных элементов */
@@ -153,4 +223,20 @@ a,
 .card-shadow:hover {
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Анимация появления */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
 }

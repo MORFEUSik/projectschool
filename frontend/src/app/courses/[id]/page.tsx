@@ -243,47 +243,44 @@ export default function CoursePage() {
   return (
     <div className="max-w-5xl mx-auto mt-12 px-4">
       <motion.h1
-  initial={{ opacity: 0, y: 20 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.5, delay: 0.1 }}
-  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
->
-  📚 {course.title}
-</motion.h1>
-
-
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+      >
+        📚 {course.title}
+      </motion.h1>
 
       <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-100">
         <p className="text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">{course.description}</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-500 dark:text-gray-400">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-500 dark:text-gray-400 mb-4">
           <p><strong>Предмет:</strong> {course.subject}</p>
           <p><strong>Класс:</strong> {course.class_number}</p>
           <p><strong>Преподаватель:</strong> {course.teacher.username}</p>
         </div>
+        {user?.role === 'student' && (
+          <div className="flex justify-start animate-fade-in-up animation-delay-200">
+            {isEnrolled ? (
+              <Button
+                variant="destructive"
+                onClick={() => openModal('unenroll')}
+                className="hover:scale-105 transition-transform duration-300 flex items-center gap-2"
+                disabled={isEnrolling}
+              >
+                <XCircleIcon className="w-5 h-5" /> Отписаться
+              </Button>
+            ) : (
+              <Button
+                onClick={handleEnroll}
+                className="hover:scale-105 transition-transform duration-300 flex items-center gap-2 animate-pulse"
+                disabled={isEnrolling}
+              >
+                {isEnrolling ? 'Запись...' : <><CheckCircleIcon className="w-5 h-5" /> Записаться</>}
+              </Button>
+            )}
+          </div>
+        )}
       </Card>
-
-      {user?.role === 'student' && (
-        <div className="mb-6 text-center animate-fade-in-up animation-delay-200">
-          {isEnrolled ? (
-            <Button
-              variant="destructive"
-              onClick={() => openModal('unenroll')}
-              className="hover:scale-105 transition-transform duration-300 flex items-center gap-2"
-              disabled={isEnrolling}
-            >
-              <XCircleIcon className="w-5 h-5" /> Отписаться
-            </Button>
-          ) : (
-            <Button
-              onClick={handleEnroll}
-              className="hover:scale-105 transition-transform duration-300 flex items-center gap-2 animate-pulse"
-              disabled={isEnrolling}
-            >
-              {isEnrolling ? 'Запись...' : <><CheckCircleIcon className="w-5 h-5" /> Записаться</>}
-            </Button>
-          )}
-        </div>
-      )}
 
       <ConfirmModal
         isOpen={isModalOpen}
@@ -301,44 +298,43 @@ export default function CoursePage() {
       />
 
       {['teacher', 'admin'].includes(user?.role || '') && (
-        <div className="mb-6 flex justify-end animate-fade-in-up animation-delay-200">
+  <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
+    <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+      <ChartBarIcon className="w-6 h-6" /> Статистика урока
+    </h2>
+    {statsLoading ? (
+      <div className="text-center animate-pulse">Загрузка...</div>
+    ) : statsError ? (
+      <div className="text-red-500 text-center">{statsError}</div>
+    ) : stats ? (
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
+          </div>
+          <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
+          </div>
+          <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
+            <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
+          </div>
+        </div>
+        <div className="flex justify-end">
           <Link href={`/courses/${courseId}/submissions`}>
             <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
               <ChartBarIcon className="w-5 h-5" /> Решения студентов
             </Button>
           </Link>
         </div>
-      )}
-
-      {['teacher', 'admin'].includes(user?.role || '') && (
-        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-            <ChartBarIcon className="w-6 h-6" /> Статистика урока
-          </h2>
-          {statsLoading ? (
-            <div className="text-center animate-pulse">Загрузка...</div>
-          ) : statsError ? (
-            <div className="text-red-500 text-center">{statsError}</div>
-          ) : stats ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
-              </div>
-              <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
-              </div>
-              <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
-                <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
-          )}
-        </Card>
-      )}
+      </>
+    ) : (
+      <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
+    )}
+  </Card>
+)}
 
       {user?.role === 'student' && (
         <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">

@@ -127,8 +127,15 @@ export default function CourseSubmissionsPage() {
       transition={{ duration: 0.5 }}
       className="container mt-8"
     >
-      <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Решения студентов</h1>
-      <Card className="p-6">
+      <motion.h1
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+      >
+        Решения студентов
+      </motion.h1>
+      <Card className="p-6 card-shadow card-subtle animate-fade-in-up">
         {submissions.length === 0 ? (
           <p className="text-center text-gray-500 dark:text-gray-400">Решений нет</p>
         ) : (
@@ -171,10 +178,10 @@ export default function CourseSubmissionsPage() {
                           <span
                             className={`text-sm px-2 py-1 rounded ${
                               submission.score >= 4
-                                ? 'bg-green-100 text-green-800'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
                                 : submission.score >= 3
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-red-100 text-red-800'
+                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
                             }`}
                           >
                             {submission.score.toFixed(1)}
@@ -190,7 +197,7 @@ export default function CourseSubmissionsPage() {
                       <td className="py-3 px-4">
                         <Button
                           onClick={() => handleSetGrade(submission.id)}
-                          className="hover:scale-105 transition transform"
+                          className="hover:scale-105 transition-transform duration-200"
                         >
                           Сохранить
                         </Button>

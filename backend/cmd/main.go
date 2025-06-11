@@ -119,6 +119,7 @@ func main() {
 		// Защищённые маршруты
 		protected := api.Group("", handler.AuthMiddleware())
 		{
+			protected.GET("/enrollments", handler.GetEnrolledCourses(courseService))
 			protected.GET("/users", handler.ListUsers(userService))
 			protected.POST("/assignments/upload", handler.UploadFile())
 			protected.GET("/users/me", handler.GetProfile(userService))

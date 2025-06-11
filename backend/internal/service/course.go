@@ -26,6 +26,7 @@ type CourseService interface {
 	GetProgress(userID, courseID uint) (map[string]interface{}, error)
 	CheckDeadlines() error
 	IsEnrolled(userID, courseID uint) (bool, error)
+	GetEnrolledCourses(userID uint) ([]model.Course, error)
 }
 
 type courseService struct {
@@ -430,4 +431,33 @@ func (s *courseService) IsEnrolled(userID, courseID uint) (bool, error) {
 
 	logger.Log.Infof("User %d is enrolled in course %d", userID, courseID)
 	return true, nil
+}
+
+func (s *courseService) GetEnrolledCourses(userID uint) ([]model.Course, error) {
+	logger.Log.Infof("Fetching enrolled courses for user %d", userID)
+
+	var enrollments []model.Enrollment
+	if err := s.db.Where("user_id = ?", userID).Find(&enrollments).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch enrollments for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	var courseIDs []uint
+	for _, e := range enrollments {
+		courseIDs = append(courseIDs, e.CourseID)
+	}
+
+	if len(courseIDs) == 0 {
+		logger.Log.Infof("No enrollments found for user %d", userID)
+		return []model.Course{}, nil
+	}
+
+	var courses []model.Course
+	if err := s.db.Preload("Teacher").Where("id IN ?", courseIDs).Find(&courses).Error; err != nil {
+		logger.Log.Errorf("Failed to fetch courses for user %d: %v", userID, err)
+		return nil, err
+	}
+
+	logger.Log.Infof("Fetched %d enrolled courses for user %d", len(courses), userID)
+	return courses, nil
 }
