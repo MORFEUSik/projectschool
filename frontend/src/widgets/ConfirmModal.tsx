@@ -1,13 +1,15 @@
 'use client';
+
 import { Button } from '@/shared/ui/Button';
 import clsx from 'clsx';
+import React from 'react'; // Явный импорт React
 
 interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: string | React.JSX.Element; // Явное использование React.JSX.Element
   confirmText?: string;
   cancelText?: string;
   className?: string;
@@ -34,12 +36,18 @@ export default function ConfirmModal({
         )}
       >
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">{title}</h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
+        <div className="text-gray-600 dark:text-gray-300 mb-6">{message}</div>
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button
+            onClick={onClose}
+            className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+          >
             {cancelText}
           </Button>
-          <Button onClick={onConfirm} variant="destructive">
+          <Button
+            onClick={onConfirm}
+            className="bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
+          >
             {confirmText}
           </Button>
         </div>

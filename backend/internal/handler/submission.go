@@ -182,7 +182,7 @@ func ListSubmissions(submissionService service.SubmissionService) gin.HandlerFun
 			submissions, err := submissionService.GetByCourse(uint(courseID))
 			if err != nil {
 				logger.Log.Errorf("Failed to get submissions for course %d: %v", courseID, err)
-				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений по курсу"})
+				error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка получения решений по уроку"})
 				return
 			}
 			response = makeSubmissionResponse(submissions)
@@ -219,7 +219,7 @@ func makeSubmissionResponse(submissions []model.Submission) []map[string]interfa
 
 // GetUserSubmissions возвращает список решений текущего пользователя
 // @Summary Получить решения текущего пользователя
-// @Description Возвращает список всех решений аутентифицированного пользователя с информацией о заданиях и курсах.
+// @Description Возвращает список всех решений аутентифицированного пользователя с информацией о заданиях и уроках.
 // @Tags submissions
 // @Accept json
 // @Produce json

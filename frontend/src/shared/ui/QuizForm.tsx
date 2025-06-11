@@ -5,6 +5,8 @@ import { api } from '@/shared/api';
 import toast from 'react-hot-toast';
 import { AxiosError } from 'axios';
 import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '@/shared/ui/Button';
 
 interface Subtask {
   id: number;
@@ -46,15 +48,10 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<number, string>>({});
   const [currentSubtaskIndex, setCurrentSubtaskIndex] = useState(0);
-  const [tempAnswer, setTempAnswer] = useState<Record<number, string>>({}); // Временный ответ для текстовых подзаданий
-  const [skipped, setSkipped] = useState<Record<number, boolean>>({}); // Флаг пропуска подзадания
+  const [tempAnswer, setTempAnswer] = useState<Record<number, string>>({});
+  const [skipped, setSkipped] = useState<Record<number, boolean>>({});
 
-  console.log('QuizForm props:', { assignmentId, subtasks });
-  console.log('Normalized subtasks in QuizForm:', subtasks);
-
-  // Инициализация состояния
   useEffect(() => {
-    // Временная очистка localStorage
     subtasks.forEach((subtask) => {
       const subtaskId = subtask.id ?? subtask.ID ?? 0;
       localStorage.removeItem(`quiz_${assignmentId}_${subtaskId}`);
@@ -84,12 +81,11 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   }, [assignmentId, subtasks]);
 
   if (!Array.isArray(subtasks) || subtasks.length === 0) {
-    console.warn('QuizForm: subtasks is empty or not an array');
-    return <div>Нет вопросов для квиза</div>;
+    return <div className="text-center text-gray-700 dark:text-gray-200">Нет вопросов для квиза</div>;
   }
 
   const handleChange = async (subtaskId: number, answer: string) => {
-    const normalizedAnswer = answer.trimEnd(); // Убираем пробелы с конца
+    const normalizedAnswer = answer.trimEnd();
 
     try {
       const response = await api.post(`/assignments/${assignmentId}/check-subtask`, {
@@ -117,7 +113,6 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
         toast.success('Правильный ответ!');
       }
 
-      // Сохраняем в localStorage
       localStorage.setItem(
         `quiz_${assignmentId}_${subtaskId}`,
         JSON.stringify({
@@ -130,7 +125,6 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<{ error?: string }>;
       toast.error(axiosErr.response?.data?.error || 'Ошибка при проверке ответа');
-      console.error('Check answer error:', err);
     }
   };
 
@@ -167,14 +161,20 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const handleNext = () => {
     const subtaskId = subtasks[currentSubtaskIndex].id ?? subtasks[currentSubtaskIndex].ID ?? 0;
     const inputType = subtasks[currentSubtaskIndex].input_type ?? subtasks[currentSubtaskIndex].InputType ?? 'multiple_choice';
-    
+
     if (inputType === 'multiple_choice' && !answers[subtaskId]?.answer && !skipped[subtaskId]) {
       toast.error('Пожалуйста, выберите ответ перед переходом к следующему вопросу');
       return;
     }
-    
+
     if (currentSubtaskIndex < subtasks.length - 1) {
       setCurrentSubtaskIndex(currentSubtaskIndex + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentSubtaskIndex > 0) {
+      setCurrentSubtaskIndex(currentSubtaskIndex - 1);
     }
   };
 
@@ -199,15 +199,11 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
       };
     });
 
-    console.log('Submitting quiz payload:', { answers: payload });
-
     setIsSubmitting(true);
     try {
       const response = await api.post(`/assignments/${assignmentId}/submit-quiz`, { answers: payload });
-      console.log('Quiz response:', response.data);
       toast.success('Ответы отправлены!');
       onSubmit(response.data);
-      // Очищаем localStorage
       subtasks.forEach((subtask) => {
         const subtaskId = subtask.id ?? subtask.ID ?? 0;
         localStorage.removeItem(`quiz_${assignmentId}_${subtaskId}`);
@@ -215,7 +211,6 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
     } catch (err: unknown) {
       const axiosErr = err as AxiosError<{ error?: string }>;
       toast.error(axiosErr.response?.data?.error || 'Ошибка при отправке');
-      console.error('Submission error:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -233,18 +228,16 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
   const fileUrl = currentSubtask.file_url ?? currentSubtask.File_url;
 
   if (!currentSubtask || !subtaskId) {
-    console.error('Invalid subtask data:', currentSubtask);
     return (
-      <div className="text-red-500">
+      <div className="text-red-500 text-center">
         Ошибка: некорректные данные вопроса. Обратитесь к преподавателю.
       </div>
     );
   }
 
   if (inputType === 'multiple_choice' && !options.length) {
-    console.error(`Subtask ${subtaskId} has invalid options:`, currentSubtask);
     return (
-      <div className="text-red-500">
+      <div className="text-red-500 text-center">
         Ошибка: отсутствуют варианты ответа для вопроса (ID: {subtaskId}). Обратитесь к преподавателю.
       </div>
     );
@@ -256,114 +249,141 @@ export function QuizForm({ assignmentId, subtasks, onSubmit }: QuizFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="mb-4">
-        <p className="font-semibold mb-2">
-          {currentSubtaskIndex + 1}. {question} ({currentSubtaskIndex + 1}/{subtasks.length})
-        </p>
-        {fileUrl && !imageErrors[subtaskId] && (
-          <div className="mt-2 mb-4">
-            {fileUrl.endsWith('.pdf') ? (
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Просмотреть PDF
-              </a>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentSubtaskIndex}
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.3 }}
+          className="mb-4"
+        >
+          <p className="font-semibold mb-2 text-gray-800 dark:text-white">
+            {currentSubtaskIndex + 1}. {question} ({currentSubtaskIndex + 1}/{subtasks.length})
+          </p>
+          {fileUrl && !imageErrors[subtaskId] && (
+            <div className="mt-2 mb-4">
+              {fileUrl.endsWith('.pdf') ? (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-700 transition hover:scale-105 inline-block"
+                >
+                  Просмотреть PDF
+                </a>
+              ) : (
+                <>
+                  <Image
+                    src={fileUrl}
+                    alt={`Subtask ${currentSubtaskIndex + 1} image`}
+                    width={300}
+                    height={300}
+                    className="rounded-lg shadow-md"
+                    onError={() =>
+                      setImageErrors((prev) => ({
+                        ...prev,
+                        [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
+                      }))
+                    }
+                  />
+                  {imageErrors[subtaskId] && <p className="text-red-500 text-sm mt-2">{imageErrors[subtaskId]}</p>}
+                </>
+              )}
+            </div>
+          )}
+          <div className="space-y-2">
+            {inputType === 'multiple_choice' ? (
+              options.map((option: string, i: number) => {
+                const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
+                return (
+                  <label key={i} className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      name={`subtask-${subtaskId}`}
+                      value={option}
+                      checked={answers[subtaskId]?.answer === option}
+                      onChange={() => handleChange(subtaskId, option)}
+                      disabled={isCorrect === true}
+                      className={`accent-blue-600 h-4 w-4 ${
+                        isOptionIncorrect ? 'border-red-500 bg-red-100' : ''
+                      }`}
+                    />
+                    <span className={isOptionIncorrect ? 'text-red-600' : 'text-gray-700 dark:text-gray-200'}>
+                      {option}
+                    </span>
+                  </label>
+                );
+              })
             ) : (
               <>
-                <Image
-                  src={fileUrl}
-                  alt={`Subtask ${currentSubtaskIndex + 1} image`}
-                  width={300}
-                  height={300}
-                  className="rounded"
-                  onError={() =>
-                    setImageErrors((prev) => ({
-                      ...prev,
-                      [subtaskId]: `Ошибка загрузки изображения для вопроса ${currentSubtaskIndex + 1}`,
-                    }))
-                  }
+                <input
+                  type="text"
+                  value={tempAnswer[subtaskId] || ''}
+                  onChange={(e) => setTempAnswer((prev) => ({ ...prev, [subtaskId]: e.target.value }))}
+                  disabled={isCorrect === true || attempts >= 3 || skipped[subtaskId]}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white/80 dark:bg-gray-800/80 p-3 focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+                  placeholder="Введите ответ"
                 />
-                {imageErrors[subtaskId] && <p className="text-red-500 text-sm">{imageErrors[subtaskId]}</p>}
+                {!isCorrect && attempts < 3 && !skipped[subtaskId] && (
+                  <div className="flex space-x-2 mt-2">
+                    <Button
+                      type="button"
+                      onClick={() => handleConfirmTextAnswer(subtaskId)}
+                      disabled={isSubmitting}
+                      className="hover:scale-105 transition transform"
+                    >
+                      Подтвердить ответ
+                    </Button>
+                    {attempts > 0 && (
+                      <Button
+                        type="button"
+                        onClick={() => handleSkip(subtaskId)}
+                        variant="outline"
+                        className="hover:scale-105 transition transform"
+                      >
+                        Пропустить
+                      </Button>
+                    )}
+                  </div>
+                )}
               </>
             )}
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Попытки: {attempts}{inputType === 'text_input' ? ' / 3' : ''}
+            </p>
           </div>
-        )}
-        <div className="space-y-2">
-          {inputType === 'multiple_choice' ? (
-            options.map((option: string, i: number) => {
-              const isOptionIncorrect = incorrectOptionsForSubtask.includes(option);
-              return (
-                <label key={i} className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    name={`subtask-${subtaskId}`}
-                    value={option}
-                    checked={answers[subtaskId]?.answer === option}
-                    onChange={() => handleChange(subtaskId, option)}
-                    disabled={isCorrect === true}
-                    className={`accent-blue-600 ${isOptionIncorrect ? 'border-red-500 bg-red-100' : ''}`}
-                  />
-                  <span className={isOptionIncorrect ? 'text-red-600' : ''}>{option}</span>
-                </label>
-              );
-            })
-          ) : (
-            <>
-              <input
-                type="text"
-                value={tempAnswer[subtaskId] || ''}
-                onChange={(e) => setTempAnswer((prev) => ({ ...prev, [subtaskId]: e.target.value }))}
-                disabled={isCorrect === true || attempts >= 3 || skipped[subtaskId]}
-                className="w-full border rounded px-3 py-2"
-                placeholder="Введите ответ"
-              />
-              {!isCorrect && attempts < 3 && !skipped[subtaskId] && (
-                <div className="flex space-x-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmTextAnswer(subtaskId)}
-                    disabled={isSubmitting}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:bg-gray-400"
-                  >
-                    Подтвердить ответ
-                  </button>
-                  {attempts > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => handleSkip(subtaskId)}
-                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg"
-                    >
-                      Пропустить
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          <p className="text-sm text-gray-500 mt-1">Попытки: {attempts}{inputType === 'text_input' ? ' / 3' : ''}</p>
-        </div>
-      </div>
+        </motion.div>
+      </AnimatePresence>
       <div className="flex space-x-4">
+        {currentSubtaskIndex > 0 && (
+          <Button
+            type="button"
+            onClick={handlePrev}
+            disabled={isSubmitting}
+            variant="outline"
+            className="hover:scale-105 transition transform"
+          >
+            Назад
+          </Button>
+        )}
         {currentSubtaskIndex < subtasks.length - 1 ? (
-          <button
+          <Button
             type="button"
             onClick={handleNext}
             disabled={isSubmitting}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+            className="hover:scale-105 transition transform"
           >
             Далее
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
             type="submit"
             disabled={isSubmitting}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+            className="hover:scale-105 transition transform"
           >
             {isSubmitting ? 'Отправка...' : 'Завершить тест'}
-          </button>
+          </Button>
         )}
       </div>
     </form>

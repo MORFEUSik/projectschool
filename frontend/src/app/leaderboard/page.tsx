@@ -9,6 +9,8 @@ import { Button } from '@/shared/ui/Button';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+
+import { motion } from 'framer-motion';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 interface LeaderboardUser {
@@ -53,12 +55,17 @@ export default function LeaderboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto mt-12 px-4">
-      <h1
-        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-        style={{ animationDelay: '100ms' }}
-      >
-        🏆 Таблица лидеров
-      </h1>
+
+		<motion.h1
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5, delay: 0.1 }}
+  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+>
+  🏆 Таблица лидеров
+</motion.h1>
+
+      
 
       <Card
         className="p-6 mb-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"
@@ -73,18 +80,18 @@ export default function LeaderboardPage() {
         >
           <div
             className="relative w-full sm:flex-1 group"
-            data-tooltip="Введите ID курса"
+            data-tooltip="Введите ID урока"
           >
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
             <Input
               type="number"
-              placeholder="Введите ID курса"
+              placeholder="Введите ID урока"
               value={courseId}
               onChange={(e) => setCourseId(e.target.value)}
               className="pl-10 border-blue-600 dark:bg-gray-700 dark:text-gray-300 focus:ring-blue-600 w-full"
             />
             <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-              Введите ID курса
+              Введите ID урока
             </span>
           </div>
           <Button

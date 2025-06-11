@@ -12,6 +12,7 @@ import { AvatarModal } from '@/widgets/AvatarModal';
 import { avatarOptions } from '@/shared/constants/avatars';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
 
 interface ErrorResponse {
   error?: string;
@@ -88,12 +89,14 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-2xl mx-auto mt-12 px-4">
-      <h1
-        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-        style={{ animationDelay: '100ms' }}
-      >
-        Профиль
-      </h1>
+      <motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			  Профиль
+			</motion.h1>  
 
       <Card
         className="p-6 mb-6 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up"

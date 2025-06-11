@@ -12,12 +12,12 @@ import (
 
 // GetLeaderboard возвращает таблицу лидеров
 // @Summary Получить таблицу лидеров
-// @Description Возвращает топ-10 пользователей по баллам, опционально для конкретного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Description Возвращает топ-10 пользователей по баллам, опционально для конкретного урока. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags leaderboard
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param course_id query int false "ID курса для фильтрации"
+// @Param course_id query int false "ID урока для фильтрации"
 // @Success 200 {array} model.User
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
@@ -32,7 +32,7 @@ func GetLeaderboard(userService service.UserService) gin.HandlerFunc {
 			id, err := strconv.Atoi(courseIDStr)
 			if err != nil || id < 1 {
 				logger.Log.Errorf("Invalid course_id: %s", courseIDStr)
-				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID урока"})
 				return
 			}
 			courseID = uint(id)

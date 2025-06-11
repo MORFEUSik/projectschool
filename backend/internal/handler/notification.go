@@ -14,12 +14,12 @@ import (
 
 // GetNotifications возвращает уведомления пользователя
 // @Summary Получить уведомления
-// @Description Возвращает список уведомлений пользователя. Если указан courseId, возвращает уведомления, связанные с курсом. Требуется JWT-токен.
+// @Description Возвращает список уведомлений пользователя. Если указан courseId, возвращает уведомления, связанные с уроком. Требуется JWT-токен.
 // @Tags notifications
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param courseId query int false "ID курса (опционально)"
+// @Param courseId query int false "ID урока (опционально)"
 // @Success 200 {array} model.Notification
 // @Failure 400 {object} error.APIError
 // @Failure 401 {object} error.APIError
@@ -40,7 +40,7 @@ func GetNotifications(notificationService service.NotificationService) gin.Handl
 			id, err := strconv.Atoi(courseIDStr)
 			if err != nil {
 				logger.Log.Warnf("Invalid course ID: %v", err)
-				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+				error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID урока"})
 				return
 			}
 			courseID = uint(id)
@@ -57,12 +57,12 @@ func GetNotifications(notificationService service.NotificationService) gin.Handl
 		if courseID != 0 {
 			var filteredNotifications []model.Notification
 			for _, notification := range notifications {
-				// Проверяем, связано ли уведомление с курсом через Assignment
+				// Проверяем, связано ли уведомление с уроком через Assignment
 				var assignment model.Assignment
 				if err := db.DB.Joins("JOIN submissions ON submissions.assignment_id = assignments.id").
 					Where("submissions.user_id = ? AND assignments.course_id = ?", userID, courseID).
 					First(&assignment).Error; err == nil {
-					// Если уведомление связано с заданием курса, добавляем его
+					// Если уведомление связано с заданием урока, добавляем его
 					if notification.Message != "" { // Можно уточнить фильтрацию по тексту уведомления
 						filteredNotifications = append(filteredNotifications, notification)
 					}

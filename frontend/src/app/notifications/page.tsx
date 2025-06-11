@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { AxiosError } from 'axios';
 import clsx from 'clsx';
 import { BellIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { motion } from 'framer-motion';
 
 interface Notification {
   id: number;
@@ -74,12 +75,15 @@ export default function NotificationsPage() {
   if (!user) {
     return (
       <div className="max-w-3xl mx-auto mt-12 px-4">
-        <h1
-          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-          style={{ animationDelay: '100ms' }}
-        >
-          🔔 Уведомления
-        </h1>
+
+			<motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			  🔔 Уведомления
+			</motion.h1>        
         <p className="text-center text-gray-600 dark:text-gray-400">
           Пожалуйста, войдите в систему
         </p>
@@ -89,12 +93,14 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-3xl mx-auto mt-12 px-4">
-      <h1
-        className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-        style={{ animationDelay: '100ms' }}
-      >
-        🔔 Уведомления
-      </h1>
+      <motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			  🔔 Уведомления
+			</motion.h1> 
 
       {error && (
         <p

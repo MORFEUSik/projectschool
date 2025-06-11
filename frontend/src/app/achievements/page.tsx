@@ -6,6 +6,7 @@ import { api } from '@/shared/api';
 import { Card } from '@/shared/ui/Card';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
 
 interface Achievement {
   title: string;
@@ -40,12 +41,14 @@ export default function AchievementsPage() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto mt-12 px-4">
-        <h1
-          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-          style={{ animationDelay: '100ms' }}
-        >
-          🏅 Мои достижения
-        </h1>
+		  <motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			 🏅 Мои достижения
+			</motion.h1>  
         <div className="grid gap-4 sm:grid-cols-2">
           {[...Array(4)].map((_, i) => (
             <div
@@ -61,12 +64,14 @@ export default function AchievementsPage() {
   if (error) {
     return (
       <div className="max-w-3xl mx-auto mt-12 px-4">
-        <h1
-          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-          style={{ animationDelay: '100ms' }}
-        >
-          🏅 Мои достижения
-        </h1>
+		  <motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			 🏅 Мои достижения
+			</motion.h1>  
         <p
           className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse"
           style={{ animationDelay: '200ms' }}

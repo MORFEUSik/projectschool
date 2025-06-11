@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useUser } from '@/entities/user/hook';
@@ -8,6 +9,7 @@ import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import toast from 'react-hot-toast';
 import { AxiosError } from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Submission {
   id: number;
@@ -21,7 +23,6 @@ interface Submission {
   score: number;
   submitted_at: string;
 }
-
 
 interface ErrorResponse {
   error?: string;
@@ -60,79 +61,148 @@ export default function CourseSubmissionsPage() {
   };
 
   const handleSetGrade = async (submissionId: number) => {
-  const grade = parseFloat(gradeInputs[submissionId]);
-  if (isNaN(grade) || grade < 0 || grade > 5) {
-    toast.error('Оценка должна быть от 0 до 5');
-    return;
-  }
-  try {
-    await api.put(`/submissions/${submissionId}/grade`, { grade });
-    setSubmissions((prev) =>
-      prev.map((sub) =>
-        sub.id === submissionId ? { ...sub, score: grade } : sub
-      )
-    );
-    toast.success('Оценка выставлена');
-  } catch (err: unknown) {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    toast.error(axiosError.response?.data?.error || 'Ошибка при выставлении оценки');
-  }
-};
-
+    const grade = parseFloat(gradeInputs[submissionId]);
+    if (isNaN(grade) || grade < 0 || grade > 5) {
+      toast.error('Оценка должна быть от 0 до 5');
+      return;
+    }
+    try {
+      await api.put(`/submissions/${submissionId}/grade`, { grade });
+      setSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === submissionId ? { ...sub, score: grade } : sub
+        )
+      );
+      toast.success('Оценка выставлена');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при выставлении оценки');
+    }
+  };
 
   if (!user || !['teacher', 'admin'].includes(user.role)) {
-    return <div className="text-center mt-8 text-red-500">Доступ запрещён</div>;
+    return (
+      <div className="container text-center mt-8 text-red-500">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Доступ запрещён
+        </motion.div>
+      </div>
+    );
   }
 
-  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (error) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
+  if (isLoading)
+    return (
+      <div className="container text-center mt-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Загрузка...
+        </motion.div>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="container text-center mt-8 text-red-500">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Ошибка: {error}
+        </motion.div>
+      </div>
+    );
 
   return (
-    <div className="max-w-5xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📝 Решения студентов</h1>
-      <Card>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="container mt-8"
+    >
+      <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Решения студентов</h1>
+      <Card className="p-6">
         {submissions.length === 0 ? (
-          <p className="text-center text-gray-500">Решений нет</p>
+          <p className="text-center text-gray-500 dark:text-gray-400">Решений нет</p>
         ) : (
-          <table className="w-full table-auto text-sm">
-            <thead>
-              <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
-                <th className="py-2 px-3">Студент</th>
-                <th className="py-2 px-3">Задание</th>
-                <th className="py-2 px-3">Решение</th>
-                <th className="py-2 px-3">Оценка</th>
-                <th className="py-2 px-3">Дата</th>
-                <th className="py-2 px-3">Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {submissions.map((submission) => (
-  <tr key={submission.id} className="...">
-    <td className="py-2 px-3">{submission.username}</td>
-    <td className="py-2 px-3">{submission.assignment_title}</td>
-    <td className="py-2 px-3 truncate max-w-xs">{submission.content}</td>
-    <td className="py-2 px-3">
-      <Input
-        type="number"
-        step="0.1"
-        min="0"
-        max="5"
-        value={gradeInputs[submission.id] ?? submission.score.toString()}
-        onChange={(e) => handleGradeChange(submission.id, e.target.value)}
-        className="w-16"
-      />
-    </td>
-    <td className="py-2 px-3">{new Date(submission.submitted_at).toLocaleString()}</td>
-    <td className="py-2 px-3">
-      <Button onClick={() => handleSetGrade(submission.id)}>Сохранить</Button>
-    </td>
-  </tr>
-))}
-
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto text-sm text-gray-700 dark:text-gray-200">
+              <thead>
+                <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 uppercase">
+                  <th className="py-3 px-4">Студент</th>
+                  <th className="py-3 px-4">Задание</th>
+                  <th className="py-3 px-4">Решение</th>
+                  <th className="py-3 px-4">Оценка</th>
+                  <th className="py-3 px-4">Дата</th>
+                  <th className="py-3 px-4">Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence>
+                  {submissions.map((submission, idx) => (
+                    <motion.tr
+                      key={submission.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: idx * 0.05 }}
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <td className="py-3 px-4">{submission.username}</td>
+                      <td className="py-3 px-4">{submission.assignment_title}</td>
+                      <td className="py-3 px-4 truncate max-w-xs">{submission.content}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="5"
+                            value={gradeInputs[submission.id] ?? submission.score.toString()}
+                            onChange={(e) => handleGradeChange(submission.id, e.target.value)}
+                            className="w-16"
+                          />
+                          <span
+                            className={`text-sm px-2 py-1 rounded ${
+                              submission.score >= 4
+                                ? 'bg-green-100 text-green-800'
+                                : submission.score >= 3
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {submission.score.toFixed(1)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {new Date(submission.submitted_at).toLocaleString('ru-RU', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Button
+                          onClick={() => handleSetGrade(submission.id)}
+                          className="hover:scale-105 transition transform"
+                        >
+                          Сохранить
+                        </Button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
-    </div>
+    </motion.div>
   );
 }

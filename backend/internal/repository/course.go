@@ -57,7 +57,7 @@ func (r *courseRepository) GetStats(courseID uint) (map[string]interface{}, erro
 		return nil, err
 	}
 
-	// Сколько заданий у курса
+	// Сколько заданий у урока
 	if err := r.db.Model(&model.Assignment{}).
 		Where("course_id = ?", courseID).
 		Count(&assignmentsCount).Error; err != nil {
@@ -82,7 +82,7 @@ func (r *courseRepository) GetStats(courseID uint) (map[string]interface{}, erro
 		return nil, err
 	}
 
-	// Общий процент завершения курса
+	// Общий процент завершения урока
 	var completionRate float64 = 0
 	if studentsCount > 0 && assignmentsCount > 0 {
 		totalPossible := float64(studentsCount * assignmentsCount)

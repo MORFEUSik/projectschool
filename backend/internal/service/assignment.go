@@ -97,7 +97,7 @@ func (s *assignmentService) Create(assignment *model.Assignment, subtasks []mode
 				for _, e := range enrollments {
 					notification := &model.Notification{
 						UserID:    e.UserID,
-						Message:   fmt.Sprintf("Новое задание в курсе %s: %s", course.Title, assignment.Title),
+						Message:   fmt.Sprintf("Новое задание в уроке %s: %s", course.Title, assignment.Title),
 						IsRead:    false,
 						CreatedAt: time.Now(),
 					}

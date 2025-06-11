@@ -12,7 +12,7 @@ export function Button({ children, className = '', variant = 'default', ...props
 
   const variants = {
     default: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
-    outline: 'border border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500',
+    outline: 'border border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 focus:ring-blue-500',
     destructive: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
   };
 

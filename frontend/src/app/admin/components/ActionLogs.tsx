@@ -1,16 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Input } from '@/shared/ui/Input';
 import clsx from 'clsx';
-import { UserIcon, PlusIcon, PencilIcon, TrashIcon, AcademicCapIcon, CheckCircleIcon, StarIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, DocumentArrowDownIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import {
+  UserIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  AcademicCapIcon,
+  CheckCircleIcon,
+  StarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CalendarIcon,
+  DocumentArrowDownIcon,
+  DocumentTextIcon,
+} from '@heroicons/react/24/outline';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { unparse } from 'papaparse';
 import toast from 'react-hot-toast';
-import { api } from '@/shared/api';
 
 interface User {
   id: number;
@@ -25,7 +37,7 @@ interface LogEntry {
   action: string;
   details: string;
   created_at: string;
-  user: User | null;
+  user?: User | null; // Сделали user необязательным
 }
 
 type FilterType = 'all' | 'create' | 'update' | 'delete' | 'enroll' | 'submit' | 'achieve';
@@ -35,46 +47,27 @@ interface FilterOption {
   label: string;
 }
 
-export function ActionLogs() {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+interface ActionLogsProps {
+  logs: LogEntry[];
+}
+
+export default function ActionLogs({ logs }: ActionLogsProps) {
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [total, setTotal] = useState(0);
 
   const filterOptions: FilterOption[] = [
     { id: 'all', label: 'Все' },
     { id: 'create', label: 'Создание' },
     { id: 'update', label: 'Обновление' },
     { id: 'delete', label: 'Удаление' },
-    { id: 'enroll', label: 'Курсы' },
+    { id: 'enroll', label: 'урокы' },
     { id: 'submit', label: 'Оценки' },
     { id: 'achieve', label: 'Достижения' },
   ];
-
-  const fetchLogs = async () => {
-    try {
-      let url = '/admin/logs?limit=100';
-      if (startDate && endDate) {
-        url = `/admin/logs?start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}`;
-      }
-      const response = await api.get(url);
-      setLogs(response.data.logs);
-      setTotal(response.data.total);
-    } catch (error) {
-      console.error('Failed to fetch logs:', error);
-      toast.error('Ошибка загрузки логов');
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, [startDate, endDate]);
 
   const getActionType = (action: string = '') => {
     if (action.includes('create'))
@@ -84,7 +77,7 @@ export function ActionLogs() {
     if (action.includes('delete'))
       return { id: 'delete', label: 'Удаление', color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300', icon: TrashIcon };
     if (action.includes('enroll'))
-      return { id: 'enroll', label: 'Запись на курс', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: AcademicCapIcon };
+      return { id: 'enroll', label: 'Запись на урок', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: AcademicCapIcon };
     if (action.includes('submit'))
       return { id: 'submit', label: 'Сдача задания', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300', icon: CheckCircleIcon };
     if (action.includes('achieve'))
@@ -219,8 +212,8 @@ export function ActionLogs() {
           <Card className="p-6 text-center card-shadow dark:bg-gray-800">
             <DocumentTextIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-300 mb-2" />
             <p className="text-gray-600 dark:text-gray-300">
-  Нет логов для &quot;{filterOptions.find((f) => f.id === filter)?.label || filter}&quot;. Действия появятся позже!
-</p>
+              Нет логов для &quot;{filterOptions.find((f) => f.id === filter)?.label || filter}&quot;. Действия появятся позже!
+            </p>
           </Card>
         ) : (
           <ul className="space-y-4">
@@ -294,7 +287,7 @@ export function ActionLogs() {
                 <ChevronLeftIcon className="h-5 w-5" />
               </Button>
               <span className="text-sm text-gray-700 dark:text-gray-300">
-                Страница {currentPage} из {totalPages} (Всего логов: {total})
+                Страница {currentPage} из {totalPages} (Всего логов: {filteredLogs.length})
               </span>
               <Button
                 onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}

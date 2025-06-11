@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
-import { UserManagement } from './components/UserManagement';
-import { AchievementManagement } from './components/AchievementManagement';
-import { ActionLogs } from './components/ActionLogs';
+import UserManagement from './components/UserManagement'; // Исправлен импорт
+import AchievementManagement from './components/AchievementManagement';
+import ActionLogs from './components/ActionLogs'; // Исправлен импорт
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 import { Card } from '@/shared/ui/Card';
@@ -17,7 +17,7 @@ interface User {
   username: string;
   email: string;
   role: string;
-  class_number: number; // Добавлено
+  class_number: number;
 }
 
 interface ApiAchievement {
@@ -89,7 +89,7 @@ export default function AdminPage() {
   const tabs = [
     { id: 'users', label: 'Управление пользователями', icon: UserIcon, component: <UserManagement users={users} onSuccess={fetchData} setFormError={setFormError} /> },
     { id: 'achievements', label: 'Управление достижениями', icon: TrophyIcon, component: <AchievementManagement achievements={achievements} onSuccess={fetchData} setFormError={setFormError} /> },
-    { id: 'logs', label: 'Логи действий', icon: ClipboardIcon, component: <ActionLogs logs={logs} /> }, // Убрано (logs.length)
+    { id: 'logs', label: 'Логи действий', icon: ClipboardIcon, component: <ActionLogs logs={logs} /> },
   ] as const;
 
   if (isLoading) {
@@ -125,7 +125,6 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-7xl mx-auto mt-12 px-4 flex flex-col md:flex-row gap-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      {/* Mobile Sidebar Toggle */}
       <Button
         className="md:hidden bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg mb-4 flex items-center gap-2 hover:scale-105 transition-transform duration-200"
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -134,7 +133,6 @@ export default function AdminPage() {
         Меню
       </Button>
 
-      {/* Sidebar */}
       <Card
         className={clsx(
           'w-full md:w-64 card-shadow dark:bg-gray-800 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 transition-transform duration-300',
@@ -173,7 +171,6 @@ export default function AdminPage() {
         </nav>
       </Card>
 
-      {/* Main Content */}
       <div className="flex-1">
         <h1
           className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"

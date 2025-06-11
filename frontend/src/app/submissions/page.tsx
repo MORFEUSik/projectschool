@@ -4,6 +4,7 @@ import { useUser } from '@/entities/user/hook';
 import { Card } from '@/shared/ui/Card';
 import Link from 'next/link';
 import { parseISO, format } from 'date-fns';
+import { motion } from 'framer-motion';
 
 interface Submission {
   id: number;
@@ -34,7 +35,16 @@ export default function SubmissionsPage() {
 
   return (
     <div className="max-w-5xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-blue-600 text-center mb-8">📄 Мои решения</h1>
+
+		<motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			  📄 Мои решения
+			</motion.h1>  
+
 
       <Card>
         {submissions.length === 0 ? (
@@ -45,7 +55,7 @@ export default function SubmissionsPage() {
               <thead>
                 <tr className="text-left border-b border-gray-200 dark:border-gray-600 text-gray-500 uppercase">
                   <th className="py-2 px-3">Задание</th>
-                  <th className="py-2 px-3">Курс</th>
+                  <th className="py-2 px-3">урок</th>
                   <th className="py-2 px-3">Оценка</th>
                   <th className="py-2 px-3">Дата отправки</th>
                 </tr>

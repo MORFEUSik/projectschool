@@ -10,6 +10,7 @@ import { useAssignments } from '@/shared/hooks/useAssignments';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { Line } from 'react-chartjs-2';
+import { motion } from 'framer-motion';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -82,7 +83,7 @@ export default function CoursePage() {
       setCourseError('');
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки курса';
+      const errorMessage = axiosError.response?.data?.error || 'Ошибка загрузки урока';
       setCourseError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -144,8 +145,8 @@ export default function CoursePage() {
       fetchProgress();
     } else {
       setCourseLoading(false);
-      setCourseError('Курс не найден');
-      toast.error('Курс не найден');
+      setCourseError('урок не найден');
+      toast.error('урок не найден');
     }
   }, [courseId, user]);
 
@@ -154,11 +155,11 @@ export default function CoursePage() {
     try {
       await api.post(`/courses/${courseId}/enroll`);
       setIsEnrolled(true);
-      toast.success('Вы записались на курс!');
+      toast.success('Вы записались на урок!');
       await Promise.all([fetchCourse(), fetchStats(), fetchProgress(), checkEnrollment()]);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      toast.error(axiosError.response?.data?.error || 'Ошибка при записи на курс');
+      toast.error(axiosError.response?.data?.error || 'Ошибка при записи на урок');
     } finally {
       setIsEnrolling(false);
     }
@@ -168,11 +169,11 @@ export default function CoursePage() {
     try {
       await api.delete(`/courses/${courseId}/enroll`);
       setIsEnrolled(false);
-      toast.success('Вы отписались от курса');
+      toast.success('Вы отписались от урока');
       await Promise.all([fetchCourse(), fetchStats(), fetchProgress(), checkEnrollment()]);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
-      toast.error(axiosError.response?.data?.error || 'Ошибка при отписке от курса');
+      toast.error(axiosError.response?.data?.error || 'Ошибка при отписке от урока');
     } finally {
       setIsModalOpen(false);
     }
@@ -181,7 +182,7 @@ export default function CoursePage() {
   const handleDeleteCourse = async () => {
     try {
       await api.delete(`/courses/${courseId}`);
-      toast.success('Курс удалён');
+      toast.success('урок удалён');
       window.location.href = '/courses';
     } catch {
       toast.error('Ошибка при удалении');
@@ -195,11 +196,11 @@ export default function CoursePage() {
     setIsModalOpen(true);
   };
 
-  if (!courseId) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Курс не найден</div>;
+  if (!courseId) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">урок не найден</div>;
   if (courseLoading || assignmentsLoading) return <div className="text-center mt-8 animate-pulse">Загрузка...</div>;
   if (courseError) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Ошибка: {courseError}</div>;
   if (assignmentsError) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Ошибка: {assignmentsError}</div>;
-  if (!course) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">Курс не найден</div>;
+  if (!course) return <div className="text-center mt-8 text-red-500 animate-fade-in-up">урок не найден</div>;
 
   const completionRate = progress ? parseFloat(progress.completion_rate.toString()) : 0;
   const totalPoints = progress ? parseFloat(progress.total_points.toString()) : 0;
@@ -241,9 +242,16 @@ export default function CoursePage() {
 
   return (
     <div className="max-w-5xl mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-center mb-8 animate-fade-in-up">
-        📘 {course.title}
-      </h1>
+      <motion.h1
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5, delay: 0.1 }}
+  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+>
+  📚 {course.title}
+</motion.h1>
+
+
 
       <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-100">
         <p className="text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">{course.description}</p>
@@ -285,7 +293,7 @@ export default function CoursePage() {
         message={
           modalAction === 'unenroll'
             ? 'Вы уверены, что хотите отписаться? Прогресс сохранится, но доступ к новым заданиям будет закрыт.'
-            : 'Вы уверены, что хотите удалить этот курс? Все данные будут потеряны.'
+            : 'Вы уверены, что хотите удалить этот урок? Все данные будут потеряны.'
         }
         confirmText={modalAction === 'unenroll' ? 'Отписаться' : 'Удалить'}
         cancelText="Отменить"
@@ -305,7 +313,7 @@ export default function CoursePage() {
       {['teacher', 'admin'].includes(user?.role || '') && (
         <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-            <ChartBarIcon className="w-6 h-6" /> Статистика курса
+            <ChartBarIcon className="w-6 h-6" /> Статистика урока
           </h2>
           {statsLoading ? (
             <div className="text-center animate-pulse">Загрузка...</div>
@@ -432,7 +440,7 @@ export default function CoursePage() {
             onClick={() => openModal('delete')}
             className="hover:scale-105 transition-transform duration-300 flex items-center gap-2"
           >
-            <TrashIcon className="w-5 h-5" /> Удалить курс
+            <TrashIcon className="w-5 h-5" /> Удалить урок
           </Button>
         </div>
       )}

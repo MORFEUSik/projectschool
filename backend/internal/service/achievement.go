@@ -52,30 +52,27 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 	var newAchievements []model.GlobalAchievement
 	for _, ach := range globalAchievements {
 		conditionMet := false
-		switch ach.Condition {
-		case "points_50":
-			conditionMet = points >= 50
-		case "points_100":
-			conditionMet = points >= 100
-		case "courses_1":
-			conditionMet = courseCount >= 1
-		case "courses_3":
-			conditionMet = courseCount >= 3
-		case "submissions_5":
-			if len(submissions) >= 5 {
+		switch ach.ConditionType {
+		case "points":
+			conditionMet = points >= ach.Threshold
+		case "courses":
+			conditionMet = uint(courseCount) >= ach.Threshold
+		case "submissions":
+			if len(submissions) >= int(ach.Threshold) {
 				count := 0
 				for _, sub := range submissions {
 					if sub.Grade >= 4.0 {
 						count++
-						if count >= 5 {
+						if uint(count) >= ach.Threshold {
 							conditionMet = true
 							break
 						}
-					} else {
-						count = 0
 					}
 				}
 			}
+		default:
+			logger.Log.Warnf("Unknown achievement condition type: %s", ach.ConditionType)
+			continue
 		}
 
 		if conditionMet {
@@ -119,9 +116,9 @@ func (s *achievementService) Create(achievement *model.GlobalAchievement, adminI
 		return errors.New("недостаточно прав")
 	}
 
-	if achievement.Title == "" || achievement.Condition == "" {
-		logger.Log.Errorf("Achievement title or condition cannot be empty")
-		return errors.New("название или условие достижения не может быть пустым")
+	if achievement.Title == "" || achievement.ConditionType == "" || achievement.Threshold == 0 {
+		logger.Log.Errorf("Achievement title, condition type, or threshold cannot be empty")
+		return errors.New("название, тип условия или порог не могут быть пустыми")
 	}
 
 	if err := s.db.Create(achievement).Error; err != nil {
@@ -156,14 +153,15 @@ func (s *achievementService) Update(achievementID uint, achievement *model.Globa
 		return err
 	}
 
-	if achievement.Title == "" || achievement.Condition == "" {
-		logger.Log.Errorf("Achievement title or condition cannot be empty")
-		return errors.New("название или условие достижения не может быть пустым")
+	if achievement.Title == "" || achievement.ConditionType == "" || achievement.Threshold == 0 {
+		logger.Log.Errorf("Achievement title, condition type, or threshold cannot be empty")
+		return errors.New("название, тип условия или порог не могут быть пустыми")
 	}
 
 	existing.Title = achievement.Title
 	existing.Description = achievement.Description
-	existing.Condition = achievement.Condition
+	existing.ConditionType = achievement.ConditionType
+	existing.Threshold = achievement.Threshold
 	if err := s.db.Save(&existing).Error; err != nil {
 		logger.Log.Errorf("Failed to update achievement %d: %v", achievementID, err)
 		return err

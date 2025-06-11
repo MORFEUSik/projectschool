@@ -16,9 +16,9 @@ export function EnrollButton({ courseId }: EnrollButtonProps) {
     setIsLoading(true);
     try {
       await api.post(`/courses/${courseId}/enroll`);
-      alert('Вы записаны на курс!');
+      alert('Вы записаны на урок!');
     } catch {
-      setError('Не удалось записаться на курс');
+      setError('Не удалось записаться на урок');
     } finally {
       setIsLoading(false);
     }

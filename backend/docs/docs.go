@@ -22,7 +22,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Создает новое задание для курса. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
+                "description": "Создает новое задание для урока. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -184,7 +184,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает список всех курсов с пагинацией. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
+                "description": "Возвращает список всех уроков с пагинацией. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -194,7 +194,7 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Получить список курсов",
+                "summary": "Получить список уроков",
                 "parameters": [
                     {
                         "type": "integer",
@@ -256,7 +256,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Создает новый курс. TeacherID устанавливается автоматически из токена авторизации. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
+                "description": "Создает новый урок. TeacherID устанавливается автоматически из токена авторизации. Требуется JWT-токен. Доступно только для ролей: teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -266,10 +266,10 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Создать курс",
+                "summary": "Создать урок",
                 "parameters": [
                     {
-                        "description": "Данные курса",
+                        "description": "Данные урока",
                         "name": "course",
                         "in": "body",
                         "required": true,
@@ -280,7 +280,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "message, course\" example={\"message\":\"Курс создан\",\"course\":{\"id\":1,\"title\":\"Math 101\",\"description\":\"Introduction to Mathematics\",\"teacher\":{\"id\":1,\"username\":\"teacher1\",\"email\":\"teacher1@example.com\",\"role\":\"teacher\",\"points\":0,\"created_at\":\"2025-04-18T12:00:00Z\",\"updated_at\":\"2025-04-18T12:00:00Z\"},\"created_at\":\"2025-04-18T12:00:00Z\",\"updated_at\":\"2025-04-18T12:00:00Z\"}}",
+                        "description": "message, course\" example={\"message\":\"урок создан\",\"course\":{\"id\":1,\"title\":\"Math 101\",\"description\":\"Introduction to Mathematics\",\"teacher\":{\"id\":1,\"username\":\"teacher1\",\"email\":\"teacher1@example.com\",\"role\":\"teacher\",\"points\":0,\"created_at\":\"2025-04-18T12:00:00Z\",\"updated_at\":\"2025-04-18T12:00:00Z\"},\"created_at\":\"2025-04-18T12:00:00Z\",\"updated_at\":\"2025-04-18T12:00:00Z\"}}",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -320,7 +320,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает данные курса по его ID. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
+                "description": "Возвращает данные урока по его ID. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -330,11 +330,11 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Получить курс",
+                "summary": "Получить урок",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса",
+                        "description": "ID урока",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -391,7 +391,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Удаляет курс. Требуется JWT-токен. Доступно только для преподавателя курса или админа.",
+                "description": "Удаляет урок. Требуется JWT-токен. Доступно только для преподавателя урока или админа.",
                 "consumes": [
                     "application/json"
                 ],
@@ -401,11 +401,11 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Удалить курс",
+                "summary": "Удалить урок",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса",
+                        "description": "ID урока",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -461,7 +461,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает список заданий для указанного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
+                "description": "Возвращает список заданий для указанного урока. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -475,7 +475,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса",
+                        "description": "ID урока",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -528,7 +528,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Записывает аутентифицированного студента на курс. Требуется JWT-токен. Доступно только для роли: student.",
+                "description": "Записывает аутентифицированного студента на урок. Требуется JWT-токен. Доступно только для роли: student.",
                 "consumes": [
                     "application/json"
                 ],
@@ -538,11 +538,11 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Записаться на курс",
+                "summary": "Записаться на урок",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса",
+                        "description": "ID урока",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -590,7 +590,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Отменяет запись аутентифицированного студента на курс. Требуется JWT-токен. Доступно только для роли: student.",
+                "description": "Отменяет запись аутентифицированного студента на урок. Требуется JWT-токен. Доступно только для роли: student.",
                 "consumes": [
                     "application/json"
                 ],
@@ -600,11 +600,11 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Отменить запись на курс",
+                "summary": "Отменить запись на урок",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса",
+                        "description": "ID урока",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -660,7 +660,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает статистику курса (количество студентов, средняя оценка, процент завершения). Требуется JWT-токен. Доступно для ролей: teacher, admin.",
+                "description": "Возвращает статистику урока (количество студентов, средняя оценка, процент завершения). Требуется JWT-токен. Доступно для ролей: teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -670,11 +670,11 @@ const docTemplate = `{
                 "tags": [
                     "courses"
                 ],
-                "summary": "Получить статистику курса",
+                "summary": "Получить статистику урока",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса",
+                        "description": "ID урока",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -728,7 +728,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает топ-10 пользователей по баллам, опционально для конкретного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
+                "description": "Возвращает топ-10 пользователей по баллам, опционально для конкретного урока. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.",
                 "consumes": [
                     "application/json"
                 ],
@@ -742,7 +742,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "ID курса для фильтрации",
+                        "description": "ID урока для фильтрации",
                         "name": "course_id",
                         "in": "query"
                     }

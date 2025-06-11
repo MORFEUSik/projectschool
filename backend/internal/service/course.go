@@ -64,12 +64,12 @@ func (s *courseService) Create(course *model.Course) error {
 		return err
 	}
 	logger.Log.Infof("Course %s created successfully", course.Title)
-	util.LogUserAction(s.logRepo, course.TeacherID, "create_course", fmt.Sprintf("Создан курс: %s", course.Title))
+	util.LogUserAction(s.logRepo, course.TeacherID, "create_course", fmt.Sprintf("Создан урок: %s", course.Title))
 	return nil
 }
 
 func (s *courseService) List(ctx context.Context, limit, offset int, userID uint) ([]model.Course, int, error) {
-	logger.Log.Infof("Получение курсов с лимитом %d, смещением %d для пользователя %d", limit, offset, userID)
+	logger.Log.Infof("Получение уроков с лимитом %d, смещением %d для пользователя %d", limit, offset, userID)
 	var courses []model.Course
 	var total int64
 
@@ -108,18 +108,18 @@ func (s *courseService) List(ctx context.Context, limit, offset int, userID uint
 	}
 
 	if err := query.Count(&total).Error; err != nil {
-		logger.Log.Errorf("Ошибка при подсчёте курсов: %v", err)
+		logger.Log.Errorf("Ошибка при подсчёте уроков: %v", err)
 		return nil, 0, err
 	}
 
 	query = query.Order("subject ASC, class_number ASC, created_at DESC")
 
 	if err := query.Limit(limit).Offset(offset).Find(&courses).Error; err != nil {
-		logger.Log.Errorf("Ошибка при получении курсов: %v", err)
+		logger.Log.Errorf("Ошибка при получении уроков: %v", err)
 		return nil, 0, err
 	}
 
-	logger.Log.Infof("Получено %d курсов из %d всего", len(courses), total)
+	logger.Log.Infof("Получено %d уроков из %d всего", len(courses), total)
 	return courses, int(total), nil
 }
 
@@ -130,7 +130,7 @@ func (s *courseService) Get(id uint) (*model.Course, error) {
 	if err != nil {
 		logger.Log.Errorf("Failed to fetch course %d: %v", id, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("курс не найден")
+			return nil, errors.New("урок не найден")
 		}
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("курс не найден")
+			return errors.New("урок не найден")
 		}
 		return err
 	}
@@ -171,14 +171,14 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 
 	if user.Role != model.Student {
 		logger.Log.Warnf("User %d is not a student", userID)
-		return errors.New("только студенты могут записываться на курсы")
+		return errors.New("только студенты могут записываться на урокы")
 	}
 
 	var enrollment model.Enrollment
 	err = s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error
 	if err == nil {
 		logger.Log.Warnf("User %d already enrolled in course %d", userID, courseID)
-		return errors.New("пользователь уже записан на курс")
+		return errors.New("пользователь уже записан на урок")
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Log.Errorf("Error checking enrollment: %v", err)
@@ -197,7 +197,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 
 	notification := &model.Notification{
 		UserID:    userID,
-		Message:   fmt.Sprintf("Вы записались на курс: %s", course.Title),
+		Message:   fmt.Sprintf("Вы записались на урок: %s", course.Title),
 		IsRead:    false,
 		CreatedAt: time.Now(),
 	}
@@ -233,7 +233,7 @@ func (s *courseService) Enroll(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("User %d enrolled in course %d", userID, courseID)
-	util.LogUserAction(s.logRepo, userID, "enroll_course", fmt.Sprintf("Записался на курс ID: %d", courseID))
+	util.LogUserAction(s.logRepo, userID, "enroll_course", fmt.Sprintf("Записался на урок ID: %d", courseID))
 	return nil
 }
 
@@ -244,7 +244,7 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("курс не найден")
+			return errors.New("урок не найден")
 		}
 		return err
 	}
@@ -260,7 +260,7 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 
 	if user.Role != model.Student {
 		logger.Log.Warnf("User %d is not a student", userID)
-		return errors.New("только студенты могут отменять запись на курсы")
+		return errors.New("только студенты могут отменять запись на урокы")
 	}
 
 	var enrollment model.Enrollment
@@ -268,7 +268,7 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	if err != nil {
 		logger.Log.Errorf("Enrollment not found for user %d in course %d: %v", userID, courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("пользователь не записан на курс")
+			return errors.New("пользователь не записан на урок")
 		}
 		return err
 	}
@@ -279,7 +279,7 @@ func (s *courseService) Unenroll(userID, courseID uint) error {
 	}
 
 	logger.Log.Infof("User %d unenrolled from course %d", userID, courseID)
-	util.LogUserAction(s.logRepo, userID, "unenroll_course", fmt.Sprintf("Отписался от курса ID: %d", courseID))
+	util.LogUserAction(s.logRepo, userID, "unenroll_course", fmt.Sprintf("Отписался от урока ID: %d", courseID))
 	return nil
 }
 
@@ -289,7 +289,7 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	course, err := s.repo.FindByID(courseID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("курс не найден")
+			return errors.New("урок не найден")
 		}
 		return err
 	}
@@ -303,15 +303,15 @@ func (s *courseService) Delete(userID, courseID uint) error {
 	}
 
 	if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
-		return errors.New("нет прав для удаления курса")
+		return errors.New("нет прав для удаления урока")
 	}
 
 	if err := s.repo.Delete(courseID); err != nil {
-		return fmt.Errorf("ошибка при удалении курса: %w", err)
+		return fmt.Errorf("ошибка при удалении урока: %w", err)
 	}
 
 	logger.Log.Infof("Course %d deleted by user %d", courseID, userID)
-	util.LogUserAction(s.logRepo, userID, "delete_course", fmt.Sprintf("Удалён курс ID: %d", courseID))
+	util.LogUserAction(s.logRepo, userID, "delete_course", fmt.Sprintf("Удалён урок ID: %d", courseID))
 	return nil
 }
 
@@ -322,7 +322,7 @@ func (s *courseService) GetStats(courseID uint) (map[string]interface{}, error) 
 	if err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("курс не найден")
+			return nil, errors.New("урок не найден")
 		}
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 	if err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&enrollment).Error; err != nil {
 		logger.Log.Errorf("User %d not enrolled in course %d: %v", userID, courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("пользователь не записан на курс")
+			return nil, fmt.Errorf("пользователь не записан на урок")
 		}
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 	if err := s.db.Preload("Assignments.Submissions").First(&course, courseID).Error; err != nil {
 		logger.Log.Errorf("Course %d not found: %v", courseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("курс не найден")
+			return nil, fmt.Errorf("урок не найден")
 		}
 		return nil, err
 	}
@@ -402,7 +402,7 @@ func (s *courseService) CheckDeadlines() error {
 			continue
 		}
 		for _, enrollment := range enrollments {
-			msg := fmt.Sprintf("Дедлайн задания '%s' на курсе '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123))
+			msg := fmt.Sprintf("Дедлайн задания '%s' на уроке '%s' приближается (%s)!", assignment.Title, assignment.Course.Title, assignment.DueDate.Format(time.RFC1123))
 			_ = s.notificationRepo.Create(&model.Notification{
 				UserID:    enrollment.UserID,
 				Message:   msg,

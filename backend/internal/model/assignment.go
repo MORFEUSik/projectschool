@@ -9,8 +9,8 @@ import (
 
 type Assignment struct {
 	ID          uint         `gorm:"primaryKey" json:"id" swaggertype:"integer" example:"1" description:"Уникальный идентификатор задания"`
-	CourseID    uint         `gorm:"not null" validate:"required" json:"course_id" swaggertype:"integer" example:"1" description:"ID курса, к которому относится задание"`
-	Course      Course       `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"course" validate:"-" description:"Информация о курсе"` // Добавлен validate:"-"
+	CourseID    uint         `gorm:"not null" validate:"required" json:"course_id" swaggertype:"integer" example:"1" description:"ID урока, к которому относится задание"`
+	Course      Course       `gorm:"foreignKey:CourseID;constraint:OnDelete:CASCADE" json:"course" validate:"-" description:"Информация о уроке"` // Добавлен validate:"-"
 	Title       string       `gorm:"not null" validate:"required,min=3,max=100" json:"title" swaggertype:"string" example:"Test Assignment" description:"Название задания (обязательное, 3-100 символов)"`
 	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Test Description" description:"Описание задания (опциональное)"`
 	Type        string       `gorm:"type:varchar(32);not null;default:'text'" json:"type"`

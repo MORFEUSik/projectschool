@@ -1,15 +1,16 @@
 package model
 
 import (
-	"github.com/go-playground/validator/v10"
 	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 type Notification struct {
 	ID        uint      `gorm:"primaryKey" json:"id" swaggertype:"integer" example:"1" description:"Уникальный идентификатор уведомления"`
 	UserID    uint      `gorm:"not null;index" validate:"required" json:"-" description:"ID пользователя"`
 	User      User      `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-" description:"Пользователь"`
-	Message   string    `gorm:"type:text;not null" validate:"required" json:"message" swaggertype:"string" example:"Новое задание в курсе Math 101" description:"Текст уведомления"`
+	Message   string    `gorm:"type:text;not null" validate:"required" json:"message" swaggertype:"string" example:"Новое задание в уроке Math 101" description:"Текст уведомления"`
 	IsRead    bool      `gorm:"default:false" json:"is_read" swaggertype:"boolean" example:"false" description:"Прочитано ли уведомление"`
 	CreatedAt time.Time `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата создания уведомления"`
 }

@@ -55,7 +55,7 @@ export function useCourses(
       setError(null);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<{ error?: string }>;
-      setError(axiosError.response?.data?.error || 'Не удалось загрузить курсы');
+      setError(axiosError.response?.data?.error || 'Не удалось загрузить урокы');
     } finally {
       setLoading(false);
     }

@@ -78,7 +78,7 @@ func (s *submissionService) Create(submission *model.Submission) error {
 	if err != nil {
 		logger.Log.Errorf("User %d not enrolled in course %d: %v", submission.UserID, assignment.CourseID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("пользователь не записан на курс")
+			return errors.New("пользователь не записан на урок")
 		}
 		return err
 	}

@@ -27,34 +27,29 @@ interface AchievementManagementProps {
   setFormError: (error: string) => void;
 }
 
-export function AchievementManagement({
-  achievements,
-  onSuccess,
-  setFormError,
-}: AchievementManagementProps) {
+export default function AchievementManagement({ achievements, onSuccess, setFormError }: AchievementManagementProps) {
   const [showForm, setShowForm] = useState(false);
   const [editAchievement, setEditAchievement] = useState<Achievement | null>(null);
   const [achTitle, setAchTitle] = useState('');
   const [achDesc, setAchDesc] = useState('');
   const [achCondition, setAchCondition] = useState('');
-
-  const conditionOptions = [
-    { value: 'points_50', label: 'Набрать 50 очков' },
-    { value: 'points_100', label: 'Набрать 100 очков' },
-    { value: 'points_500', label: 'Набрать 500 очков' },
-    { value: 'courses_1', label: 'Завершить 1 курс' },
-    { value: 'courses_3', label: 'Записаться на 3 курса' },
-    { value: 'submissions_5', label: 'Сдать 5 заданий' },
-    { value: 'custom', label: 'Произвольное' },
-  ];
+  const [localFormError, setLocalFormError] = useState('');
 
   const handleCreateOrUpdateAchievement = async (e: FormEvent) => {
     e.preventDefault();
+    if (!achTitle || !achDesc || !achCondition) {
+      const errorMsg = 'Заполните все поля';
+      setLocalFormError(errorMsg);
+      setFormError(errorMsg);
+      toast.error(errorMsg);
+      return;
+    }
+
     try {
       const payload = {
         title: achTitle,
         description: achDesc,
-        condition: achCondition || 'custom',
+        condition: achCondition,
       };
       if (editAchievement) {
         await api.put(`/achievements/${editAchievement.id}`, payload);
@@ -68,6 +63,7 @@ export function AchievementManagement({
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       const errorMsg = axiosError.response?.data?.error || 'Ошибка при сохранении достижения';
+      setLocalFormError(errorMsg);
       setFormError(errorMsg);
       toast.error(errorMsg);
     }
@@ -90,6 +86,7 @@ export function AchievementManagement({
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       const errorMsg = axiosError.response?.data?.error || 'Ошибка при удалении достижения';
+      setLocalFormError(errorMsg);
       setFormError(errorMsg);
       toast.error(errorMsg);
     }
@@ -101,6 +98,7 @@ export function AchievementManagement({
     setAchTitle('');
     setAchDesc('');
     setAchCondition('');
+    setLocalFormError('');
   };
 
   return (
@@ -112,8 +110,9 @@ export function AchievementManagement({
         <TrophyIcon className="h-5 w-5" />
         {showForm ? 'Отменить' : 'Добавить достижение'}
       </Button>
+      {localFormError && <p className="text-red-500 mb-4">{localFormError}</p>}
       {showForm && (
-        <Card className="p-6 mb-6 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+        <Card className="p-6 mb-4 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
           <form onSubmit={handleCreateOrUpdateAchievement} className="grid gap-4">
             <Input
               placeholder="Название достижения"
@@ -129,19 +128,13 @@ export function AchievementManagement({
               className="border-blue-600 dark:bg-gray-800 dark:text-gray-300"
               required
             />
-            <select
+            <Input
+              placeholder="Условие (например, 'Набрать 100 баллов')"
               value={achCondition}
               onChange={(e) => setAchCondition(e.target.value)}
-              className="p-3 border border-blue-600 rounded-md text-sm dark:bg-gray-800 dark:text-gray-300"
+              className="border-blue-600 dark:bg-gray-800 dark:text-gray-300"
               required
-            >
-              <option value="">Выберите условие</option>
-              {conditionOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            />
             <Button
               type="submit"
               className="bg-green-600 hover:bg-green-700 text-white hover:scale-105 transition-transform duration-200"
@@ -177,7 +170,7 @@ export function AchievementManagement({
                         {ach.title}
                       </h3>
                       <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 text-xs px-2 py-1 rounded-full">
-                        {conditionOptions.find((opt) => opt.value === ach.condition)?.label || ach.condition}
+                        {ach.condition}
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">{ach.description}</p>

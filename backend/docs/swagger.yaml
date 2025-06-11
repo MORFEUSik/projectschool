@@ -18,7 +18,7 @@ definitions:
         minLength: 3
         type: string
     required:
-    - title
+      - title
     type: object
   model.Assignment:
     properties:
@@ -42,7 +42,7 @@ definitions:
         minimum: 0
         type: integer
       teacher:
-        $ref: '#/definitions/model.User'
+        $ref: "#/definitions/model.User"
       title:
         example: Test Assignment
         maxLength: 100
@@ -52,10 +52,10 @@ definitions:
         example: "2025-04-18T12:00:00Z"
         type: string
     required:
-    - course_id
-    - due_date
-    - max_score
-    - title
+      - course_id
+      - due_date
+      - max_score
+      - title
     type: object
   model.Course:
     properties:
@@ -69,7 +69,7 @@ definitions:
         example: 1
         type: integer
       teacher:
-        $ref: '#/definitions/model.User'
+        $ref: "#/definitions/model.User"
       title:
         example: Math 101
         maxLength: 100
@@ -79,22 +79,22 @@ definitions:
         example: "2025-04-18T12:00:00Z"
         type: string
     required:
-    - title
+      - title
     type: object
   model.Role:
     enum:
-    - student
-    - teacher
-    - admin
+      - student
+      - teacher
+      - admin
     type: string
     x-enum-varnames:
-    - Student
-    - Teacher
-    - Admin
+      - Student
+      - Teacher
+      - Admin
   model.Submission:
     properties:
       assignment:
-        $ref: '#/definitions/model.Assignment'
+        $ref: "#/definitions/model.Assignment"
       assignmentID:
         type: integer
       content:
@@ -108,12 +108,12 @@ definitions:
       updatedAt:
         type: string
       user:
-        $ref: '#/definitions/model.User'
+        $ref: "#/definitions/model.User"
       userID:
         type: integer
     required:
-    - assignmentID
-    - userID
+      - assignmentID
+      - userID
     type: object
   model.User:
     properties:
@@ -131,11 +131,11 @@ definitions:
         type: integer
       role:
         allOf:
-        - $ref: '#/definitions/model.Role'
+          - $ref: "#/definitions/model.Role"
         enum:
-        - student
-        - teacher
-        - admin
+          - student
+          - teacher
+          - admin
       updated_at:
         type: string
       username:
@@ -143,10 +143,10 @@ definitions:
         minLength: 3
         type: string
     required:
-    - email
-    - password
-    - role
-    - username
+      - email
+      - password
+      - role
+      - username
     type: object
 host: localhost:8080
 info:
@@ -158,18 +158,19 @@ paths:
   /assignments:
     post:
       consumes:
-      - application/json
-      description: 'Создает новое задание для курса. Требуется JWT-токен. Доступно
-        только для ролей: teacher, admin.'
+        - application/json
+      description:
+        "Создает новое задание для урока. Требуется JWT-токен. Доступно
+        только для ролей: teacher, admin."
       parameters:
-      - description: Данные задания
-        in: body
-        name: assignment
-        required: true
-        schema:
-          $ref: '#/definitions/model.Assignment'
+        - description: Данные задания
+          in: body
+          name: assignment
+          required: true
+          schema:
+            $ref: "#/definitions/model.Assignment"
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message, assignment
@@ -201,32 +202,33 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Создать задание
       tags:
-      - assignments
+        - assignments
   /assignments/{id}/submit:
     post:
       consumes:
-      - application/json
-      description: 'Отправляет решение для задания. Требуется JWT-токен. Доступно
-        только для роли: student.'
+        - application/json
+      description:
+        "Отправляет решение для задания. Требуется JWT-токен. Доступно
+        только для роли: student."
       parameters:
-      - description: ID задания
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Содержимое решения
-        in: body
-        name: submission
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
+        - description: ID задания
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: Содержимое решения
+          in: body
+          name: submission
+          required: true
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message, submission
@@ -258,35 +260,36 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Отправить решение
       tags:
-      - submissions
+        - submissions
   /courses:
     get:
       consumes:
-      - application/json
-      description: 'Возвращает список всех курсов с пагинацией. Требуется JWT-токен.
-        Доступно для ролей: student, teacher, admin.'
+        - application/json
+      description:
+        "Возвращает список всех уроков с пагинацией. Требуется JWT-токен.
+        Доступно для ролей: student, teacher, admin."
       parameters:
-      - default: 10
-        description: Лимит записей
-        in: query
-        name: limit
-        type: integer
-      - default: 0
-        description: Смещение
-        in: query
-        name: offset
-        type: integer
+        - default: 10
+          description: Лимит записей
+          in: query
+          name: limit
+          type: integer
+        - default: 0
+          description: Смещение
+          in: query
+          name: offset
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.Course'
+              $ref: "#/definitions/model.Course"
             type: array
         "400":
           description: error
@@ -307,28 +310,30 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
-      summary: Получить список курсов
+        - BearerAuth: []
+      summary: Получить список уроков
       tags:
-      - courses
+        - courses
     post:
       consumes:
-      - application/json
-      description: 'Создает новый курс. TeacherID устанавливается автоматически из
+        - application/json
+      description:
+        "Создает новый урок. TeacherID устанавливается автоматически из
         токена авторизации. Требуется JWT-токен. Доступно только для ролей: teacher,
-        admin.'
+        admin."
       parameters:
-      - description: Данные курса
-        in: body
-        name: course
-        required: true
-        schema:
-          $ref: '#/definitions/handler.CreateCourseInput'
+        - description: Данные урока
+          in: body
+          name: course
+          required: true
+          schema:
+            $ref: "#/definitions/handler.CreateCourseInput"
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
-          description: message, course" example={"message":"Курс создан","course":{"id":1,"title":"Math
+          description:
+            message, course" example={"message":"урок создан","course":{"id":1,"title":"Math
             101","description":"Introduction to Mathematics","teacher":{"id":1,"username":"teacher1","email":"teacher1@example.com","role":"teacher","points":0,"created_at":"2025-04-18T12:00:00Z","updated_at":"2025-04-18T12:00:00Z"},"created_at":"2025-04-18T12:00:00Z","updated_at":"2025-04-18T12:00:00Z"}}
           schema:
             additionalProperties: true
@@ -336,38 +341,39 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
       security:
-      - BearerAuth: []
-      summary: Создать курс
+        - BearerAuth: []
+      summary: Создать урок
       tags:
-      - courses
+        - courses
   /courses/{id}:
     delete:
       consumes:
-      - application/json
-      description: Удаляет курс. Требуется JWT-токен. Доступно только для преподавателя
-        курса или админа.
+        - application/json
+      description:
+        Удаляет урок. Требуется JWT-токен. Доступно только для преподавателя
+        урока или админа.
       parameters:
-      - description: ID курса
-        in: path
-        name: id
-        required: true
-        type: integer
+        - description: ID урока
+          in: path
+          name: id
+          required: true
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message
@@ -378,46 +384,47 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
       security:
-      - BearerAuth: []
-      summary: Удалить курс
+        - BearerAuth: []
+      summary: Удалить урок
       tags:
-      - courses
+        - courses
     get:
       consumes:
-      - application/json
-      description: 'Возвращает данные курса по его ID. Требуется JWT-токен. Доступно
-        для ролей: student, teacher, admin.'
+        - application/json
+      description:
+        "Возвращает данные урока по его ID. Требуется JWT-токен. Доступно
+        для ролей: student, teacher, admin."
       parameters:
-      - description: ID курса
-        in: path
-        name: id
-        required: true
-        type: integer
+        - description: ID урока
+          in: path
+          name: id
+          required: true
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.Course'
+            $ref: "#/definitions/model.Course"
         "400":
           description: error
           schema:
@@ -443,30 +450,31 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
-      summary: Получить курс
+        - BearerAuth: []
+      summary: Получить урок
       tags:
-      - courses
+        - courses
   /courses/{id}/assignments:
     get:
       consumes:
-      - application/json
-      description: 'Возвращает список заданий для указанного курса. Требуется JWT-токен.
-        Доступно для ролей: student, teacher, admin.'
+        - application/json
+      description:
+        "Возвращает список заданий для указанного урока. Требуется JWT-токен.
+        Доступно для ролей: student, teacher, admin."
       parameters:
-      - description: ID курса
-        in: path
-        name: id
-        required: true
-        type: integer
+        - description: ID урока
+          in: path
+          name: id
+          required: true
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.Assignment'
+              $ref: "#/definitions/model.Assignment"
             type: array
         "400":
           description: error
@@ -487,24 +495,25 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Получить список заданий
       tags:
-      - assignments
+        - assignments
   /courses/{id}/enroll:
     delete:
       consumes:
-      - application/json
-      description: 'Отменяет запись аутентифицированного студента на курс. Требуется
-        JWT-токен. Доступно только для роли: student.'
+        - application/json
+      description:
+        "Отменяет запись аутентифицированного студента на урок. Требуется
+        JWT-токен. Доступно только для роли: student."
       parameters:
-      - description: ID курса
-        in: path
-        name: id
-        required: true
-        type: integer
+        - description: ID урока
+          in: path
+          name: id
+          required: true
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message
@@ -515,41 +524,42 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
       security:
-      - BearerAuth: []
-      summary: Отменить запись на курс
+        - BearerAuth: []
+      summary: Отменить запись на урок
       tags:
-      - courses
+        - courses
     post:
       consumes:
-      - application/json
-      description: 'Записывает аутентифицированного студента на курс. Требуется JWT-токен.
-        Доступно только для роли: student.'
+        - application/json
+      description:
+        "Записывает аутентифицированного студента на урок. Требуется JWT-токен.
+        Доступно только для роли: student."
       parameters:
-      - description: ID курса
-        in: path
-        name: id
-        required: true
-        type: integer
+        - description: ID урока
+          in: path
+          name: id
+          required: true
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message
@@ -560,38 +570,39 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
       security:
-      - BearerAuth: []
-      summary: Записаться на курс
+        - BearerAuth: []
+      summary: Записаться на урок
       tags:
-      - courses
+        - courses
   /courses/{id}/stats:
     get:
       consumes:
-      - application/json
-      description: 'Возвращает статистику курса (количество студентов, средняя оценка,
-        процент завершения). Требуется JWT-токен. Доступно для ролей: teacher, admin.'
+        - application/json
+      description:
+        "Возвращает статистику урока (количество студентов, средняя оценка,
+        процент завершения). Требуется JWT-токен. Доступно для ролей: teacher, admin."
       parameters:
-      - description: ID курса
-        in: path
-        name: id
-        required: true
-        type: integer
+        - description: ID урока
+          in: path
+          name: id
+          required: true
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: students_count, average_grade, completion_rate
@@ -601,47 +612,48 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
       security:
-      - BearerAuth: []
-      summary: Получить статистику курса
+        - BearerAuth: []
+      summary: Получить статистику урока
       tags:
-      - courses
+        - courses
   /leaderboard:
     get:
       consumes:
-      - application/json
-      description: 'Возвращает топ-10 пользователей по баллам, опционально для конкретного
-        курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.'
+        - application/json
+      description:
+        "Возвращает топ-10 пользователей по баллам, опционально для конкретного
+        урока. Требуется JWT-токен. Доступно для ролей: student, teacher, admin."
       parameters:
-      - description: ID курса для фильтрации
-        in: query
-        name: course_id
-        type: integer
+        - description: ID урока для фильтрации
+          in: query
+          name: course_id
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.User'
+              $ref: "#/definitions/model.User"
             type: array
         "400":
           description: error
@@ -662,25 +674,26 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Получить таблицу лидеров
       tags:
-      - leaderboard
+        - leaderboard
   /login:
     post:
       consumes:
-      - application/json
-      description: Аутентифицирует пользователя и возвращает JWT-токен. Доступно без
+        - application/json
+      description:
+        Аутентифицирует пользователя и возвращает JWT-токен. Доступно без
         авторизации.
       parameters:
-      - description: Учетные данные
-        in: body
-        name: credentials
-        required: true
-        schema:
-          type: object
+        - description: Учетные данные
+          in: body
+          name: credentials
+          required: true
+          schema:
+            type: object
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message, token
@@ -707,22 +720,23 @@ paths:
             type: object
       summary: Вход пользователя
       tags:
-      - auth
+        - auth
   /register:
     post:
       consumes:
-      - application/json
-      description: Регистрирует нового пользователя и возвращает JWT-токен. Доступно
+        - application/json
+      description:
+        Регистрирует нового пользователя и возвращает JWT-токен. Доступно
         без авторизации.
       parameters:
-      - description: Данные пользователя
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/model.User'
+        - description: Данные пользователя
+          in: body
+          name: user
+          required: true
+          schema:
+            $ref: "#/definitions/model.User"
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message, token
@@ -743,29 +757,30 @@ paths:
             type: object
       summary: Регистрация пользователя
       tags:
-      - auth
+        - auth
   /submissions/{id}/grade:
     put:
       consumes:
-      - application/json
-      description: 'Устанавливает оценку для решения. Требуется JWT-токен. Доступно
-        только для ролей: teacher, admin.'
+        - application/json
+      description:
+        "Устанавливает оценку для решения. Требуется JWT-токен. Доступно
+        только для ролей: teacher, admin."
       parameters:
-      - description: ID решения
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Оценка (0-5)
-        in: body
-        name: grade
-        required: true
-        schema:
-          additionalProperties:
-            type: number
-          type: object
+        - description: ID решения
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: Оценка (0-5)
+          in: body
+          name: grade
+          required: true
+          schema:
+            additionalProperties:
+              type: number
+            type: object
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message
@@ -804,32 +819,33 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Установить оценку
       tags:
-      - submissions
+        - submissions
   /users/{id}/role:
     put:
       consumes:
-      - application/json
-      description: 'Обновляет роль указанного пользователя. Требуется JWT-токен. Доступно
-        только для роли: admin.'
+        - application/json
+      description:
+        "Обновляет роль указанного пользователя. Требуется JWT-токен. Доступно
+        только для роли: admin."
       parameters:
-      - description: ID пользователя
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Новая роль
-        in: body
-        name: role
-        required: true
-        schema:
-          additionalProperties:
-            type: string
-          type: object
+        - description: ID пользователя
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: Новая роль
+          in: body
+          name: role
+          required: true
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: message
@@ -840,41 +856,42 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/error.APIError'
+            $ref: "#/definitions/error.APIError"
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Обновить роль пользователя
       tags:
-      - users
+        - users
   /users/me:
     get:
       consumes:
-      - application/json
-      description: 'Возвращает данные текущего аутентифицированного пользователя.
-        Требуется JWT-токен. Доступно для ролей: student, teacher, admin.'
+        - application/json
+      description:
+        "Возвращает данные текущего аутентифицированного пользователя.
+        Требуется JWT-токен. Доступно для ролей: student, teacher, admin."
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.User'
+            $ref: "#/definitions/model.User"
         "401":
           description: error
           schema:
@@ -894,24 +911,25 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Получить профиль пользователя
       tags:
-      - users
+        - users
   /users/me/submissions:
     get:
       consumes:
-      - application/json
-      description: 'Возвращает все решения текущего аутентифицированного пользователя.
-        Требуется JWT-токен. Доступно для ролей: student, teacher, admin.'
+        - application/json
+      description:
+        "Возвращает все решения текущего аутентифицированного пользователя.
+        Требуется JWT-токен. Доступно для ролей: student, teacher, admin."
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.Submission'
+              $ref: "#/definitions/model.Submission"
             type: array
         "401":
           description: error
@@ -926,10 +944,10 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       summary: Получить решения пользователя
       tags:
-      - submissions
+        - submissions
 securityDefinitions:
   BearerAuth:
     description: Enter the JWT token with the "Bearer " prefix, e.g., "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."

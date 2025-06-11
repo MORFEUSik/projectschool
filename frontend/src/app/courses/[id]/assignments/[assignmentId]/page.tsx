@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 import Image from 'next/image';
 import { QuizForm } from '@/shared/ui/QuizForm';
 import { AxiosError } from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Assignment {
   id: number;
@@ -105,7 +106,6 @@ export default function AssignmentPage() {
           }));
           setSubtasks(normalizedSubtasks);
 
-          // Проверяем, отправлено ли решение
           try {
             const submissionRes = await api.get(`/assignments/${assignmentId}/submit-quiz`);
             if (submissionRes.data) {
@@ -152,154 +152,265 @@ export default function AssignmentPage() {
   };
 
   if (!user) {
-    return <div className="text-center mt-8">Пожалуйста, войдите в систему</div>;
+    return (
+      <div className="container text-center mt-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Пожалуйста, войдите в систему
+        </motion.div>
+      </div>
+    );
   }
 
-  if (isLoading) return <div className="text-center mt-8">Загрузка...</div>;
-  if (error && !assignment) return <div className="text-center mt-8 text-red-500">Ошибка: {error}</div>;
-  if (!assignment) return <div className="text-center mt-8">Задание не найдено</div>;
+  if (isLoading)
+    return (
+      <div className="container text-center mt-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Загрузка...
+        </motion.div>
+      </div>
+    );
+
+  if (error && !assignment)
+    return (
+      <div className="container text-center mt-8 text-red-500">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Ошибка: {error}
+        </motion.div>
+      </div>
+    );
+
+  if (!assignment)
+    return (
+      <div className="container text-center mt-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          Задание не найдено
+        </motion.div>
+      </div>
+    );
 
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h1 className="text-3xl font-bold mb-6">{assignment.title}</h1>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="container mt-8"
+    >
+		<motion.h1
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5, delay: 0.1 }}
+  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+>
+  {assignment.title}
+</motion.h1>
 
-      <Card className="p-6 mb-6">
-        <div className="prose">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-            {assignment.description || 'Описание отсутствует'}
-          </ReactMarkdown>
-        </div>
-
-        {assignment.file_url && !imageError && (
-          <div className="mt-4">
-            {assignment.file_url.endsWith('.pdf') ? (
-              <a
-                href={assignment.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Просмотреть PDF
-              </a>
-            ) : (
-              <>
-                <Image
-                  src={assignment.file_url}
-                  alt="Assignment file"
-                  width={500}
-                  height={500}
-                  className="rounded"
-                  onError={() => setImageError('Ошибка загрузки изображения')}
-                />
-                {imageError && <p className="text-red-500 text-sm">{imageError}</p>}
-              </>
-            )}
+      <Card className="mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="p-6"
+        >
+          <div className="prose dark:prose-invert max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+              {assignment.description || 'Описание отсутствует'}
+            </ReactMarkdown>
           </div>
-        )}
-        <p className="mt-4">
-          <strong>Макс. балл:</strong> {assignment.max_score}
-        </p>
-        <p>
-          <strong>Срок:</strong>{' '}
-          {new Date(assignment.due_date).toLocaleString('ru-RU', {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          })}
-        </p>
+
+          {assignment.file_url && !imageError && (
+            <div className="mt-4">
+              {assignment.file_url.endsWith('.pdf') ? (
+                <a
+                  href={assignment.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-700 transition hover:scale-105 inline-block"
+                >
+                  Просмотреть PDF
+                </a>
+              ) : (
+                <>
+                  <Image
+                    src={assignment.file_url}
+                    alt="Assignment file"
+                    width={500}
+                    height={500}
+                    className="rounded-lg shadow-md"
+                    onError={() => setImageError('Ошибка загрузки изображения')}
+                  />
+                  {imageError && <p className="text-red-500 text-sm mt-2">{imageError}</p>}
+                </>
+              )}
+            </div>
+          )}
+          <div className="mt-4 space-y-2">
+            <p className="text-gray-700 dark:text-gray-200">
+              <strong>Макс. балл:</strong> {assignment.max_score}
+            </p>
+            <p className="text-gray-700 dark:text-gray-200">
+              <strong>Срок:</strong>{' '}
+              {new Date(assignment.due_date).toLocaleString('ru-RU', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+            </p>
+          </div>
+        </motion.div>
       </Card>
 
       {isStudent && !isDeadlinePassed && assignment.type === 'text' && !isSubmitted && (
-        <Card className="mb-6 p-6">
-          <h3 className="text-xl font-semibold mb-4">Отправить решение</h3>
-          <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
-            <div>
-              <label htmlFor="content" className="block mb-1 text-sm font-medium">
-                Ответ
-              </label>
-              <textarea
-                id="content"
-                {...submissionForm.register('content')}
-                className="w-full rounded border p-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                rows={5}
-                placeholder="Введите ваш ответ"
-              />
-              {submissionForm.formState.errors.content && (
-                <p className="text-sm text-red-500">
-                  {submissionForm.formState.errors.content.message}
-                </p>
-              )}
-            </div>
-            <Button type="submit" disabled={submissionForm.formState.isSubmitting}>
-              {submissionForm.formState.isSubmitting ? 'Отправляется...' : 'Отправить'}
-            </Button>
-          </form>
+        <Card className="mb-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="p-6"
+          >
+            <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">
+              Отправить решение
+            </h3>
+            <form onSubmit={submissionForm.handleSubmit(handleSubmit)} className="space-y-4">
+              <div>
+                <label htmlFor="content" className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  Ответ
+                </label>
+                <textarea
+                  id="content"
+                  {...submissionForm.register('content')}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white/80 dark:bg-gray-800/80 p-3 focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+                  rows={5}
+                  placeholder="Введите ваш ответ"
+                />
+                {submissionForm.formState.errors.content && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {submissionForm.formState.errors.content.message}
+                  </p>
+                )}
+              </div>
+              <Button
+                type="submit"
+                disabled={submissionForm.formState.isSubmitting}
+                className="hover:scale-105 transition transform"
+              >
+                {submissionForm.formState.isSubmitting ? 'Отправляется...' : 'Отправить'}
+              </Button>
+            </form>
+          </motion.div>
         </Card>
       )}
 
       {assignment.type === 'multiple_choice' && subtasks.length > 0 && (
-        <Card className="mb-6 p-6">
-          <h3 className="text-xl font-semibold mb-4">Подзадания</h3>
-          {isStudent && !isDeadlinePassed && !isSubmitted ? (
-            <QuizForm assignmentId={Number(assignmentId)} subtasks={subtasks} onSubmit={handleQuizSubmit} />
-          ) : (
-            <div className="space-y-4">
-              {subtasks.map((subtask) => (
-                <div key={subtask.id} className="border p-4 rounded">
-                  <p className="font-semibold">{subtask.question}</p>
-                  {subtask.file_url && (
-                    <div className="mt-2">
-                      {subtask.file_url.endsWith('.pdf') ? (
-                        <a
-                          href={subtask.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Просмотреть PDF
-                        </a>
-                      ) : (
-                        <Image
-                          src={subtask.file_url}
-                          alt={`Subtask ${subtask.id} image`}
-                          width={300}
-                          height={300}
-                          className="rounded"
-                          onError={() => setImageError(`Ошибка загрузки изображения для вопроса ${subtask.id}`)}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {subtask.input_type === 'multiple_choice' && subtask.options.length > 0 && (
-                    <ul className="list-disc pl-5 mt-2">
-                      {subtask.options.map((option, idx) => (
-                        <li key={idx}>{option}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {subtask.input_type === 'text_input' && (
-                    <p className="text-sm text-gray-600 mt-2">Текстовый ответ</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+        <Card className="mb-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="p-6"
+          >
+            <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Подзадания</h3>
+            {isStudent && !isDeadlinePassed && !isSubmitted ? (
+              <QuizForm
+                assignmentId={Number(assignmentId)}
+                subtasks={subtasks}
+                onSubmit={handleQuizSubmit}
+              />
+            ) : (
+              <div className="space-y-4">
+                {subtasks.map((subtask, idx) => (
+                  <motion.div
+                    key={subtask.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.1 * idx }}
+                    className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg"
+                  >
+                    <p className="font-semibold text-gray-800 dark:text-white">{subtask.question}</p>
+                    {subtask.file_url && (
+                      <div className="mt-2">
+                        {subtask.file_url.endsWith('.pdf') ? (
+                          <a
+                            href={subtask.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700 transition hover:scale-105 inline-block"
+                          >
+                            Просмотреть PDF
+                          </a>
+                        ) : (
+                          <Image
+                            src={subtask.file_url}
+                            alt={`Subtask ${subtask.id} image`}
+                            width={300}
+                            height={300}
+                            className="rounded-lg shadow-md"
+                            onError={() =>
+                              setImageError(`Ошибка загрузки изображения для вопроса ${subtask.id}`)
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+                    {subtask.input_type === 'multiple_choice' && subtask.options.length > 0 && (
+                      <ul className="list-disc pl-5 mt-2 text-gray-700 dark:text-gray-200">
+                        {subtask.options.map((option, idx) => (
+                          <li key={idx}>{option}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {subtask.input_type === 'text_input' && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Текстовый ответ</p>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
         </Card>
       )}
 
       {isSubmitted && quizResult && (
         <Card className="mt-4">
-          <div>
-            <p className="font-semibold">Оценка: {quizResult.grade.toFixed(1)}</p>
-            <p className="font-semibold">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="p-6"
+          >
+            <p className="font-semibold text-gray-800 dark:text-white">
+              Оценка: {quizResult.grade.toFixed(1)}
+            </p>
+            <p className="font-semibold text-gray-800 dark:text-white">
               Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
             </p>
-            <div className="mt-2">
+            <div className="mt-4 space-y-4">
               {quizResult.answers.map((answer, idx) => {
                 const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
                 const subtaskScore = assignment.max_score / subtasks.length;
                 return (
-                  <div key={answer.SubtaskID} className="mb-4 border-b pb-2">
-                    <p className="font-medium">
+                  <motion.div
+                    key={answer.SubtaskID}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.1 * idx }}
+                    className="border-b border-gray-200 dark:border-gray-700 pb-4"
+                  >
+                    <p className="font-medium text-gray-800 dark:text-white">
                       Вопрос {idx + 1}: {subtask?.question ?? 'Вопрос отсутствует'}
                     </p>
                     {subtask?.file_url && (
@@ -309,7 +420,7 @@ export default function AssignmentPage() {
                             href={subtask.file_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 underline"
+                            className="text-blue-600 hover:text-blue-700 transition hover:scale-105 inline-block"
                           >
                             Просмотреть PDF
                           </a>
@@ -319,6 +430,7 @@ export default function AssignmentPage() {
                             alt={`Вопрос ${idx + 1}`}
                             width={300}
                             height={200}
+                            className="rounded-lg shadow-md"
                             onError={() =>
                               setImageError(`Ошибка загрузки изображения для вопроса ${idx + 1}`)
                             }
@@ -326,23 +438,25 @@ export default function AssignmentPage() {
                         )}
                       </div>
                     )}
-                    <p>
+                    <p className="text-gray-700 dark:text-gray-200">
                       Ваш ответ:{' '}
                       <span className={answer.IsCorrect ? 'text-green-600' : 'text-red-600'}>
                         {answer.Answer || 'Не отвечено'}
                       </span>
                     </p>
                     {!answer.IsCorrect && answer.CorrectAnswer && (
-                      <p>Правильный ответ: {answer.CorrectAnswer}</p>
+                      <p className="text-gray-700 dark:text-gray-200">
+                        Правильный ответ: {answer.CorrectAnswer}
+                      </p>
                     )}
-                    <p>Попытки: {answer.Attempts}</p>
-                    <p>
+                    <p className="text-gray-700 dark:text-gray-200">Попытки: {answer.Attempts}</p>
+                    <p className="text-gray-700 dark:text-gray-200">
                       Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
                     </p>
                     {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
-                      <div>
-                        <p>Варианты:</p>
-                        <ul className="list-disc ml-5">
+                      <div className="mt-2">
+                        <p className="text-gray-700 dark:text-gray-200">Варианты:</p>
+                        <ul className="list-disc ml-5 text-gray-700 dark:text-gray-200">
                           {subtask.options.map((option, optIdx) => (
                             <li
                               key={optIdx}
@@ -360,13 +474,13 @@ export default function AssignmentPage() {
                         </ul>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
-          </div>
+          </motion.div>
         </Card>
       )}
-    </div>
+    </motion.div>
   );
 }

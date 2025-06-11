@@ -6,6 +6,7 @@ import { api } from '@/shared/api';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { Card } from '@/shared/ui/Card';
 import { AxiosError } from 'axios';
+import { motion } from 'framer-motion';
 
 interface ErrorResponse {
   error?: string;
@@ -57,7 +58,14 @@ export default function RegisterPage() {
 
   return (
     <div className="max-w-md mx-auto mt-12 px-4">
-      <h1 className="text-4xl font-extrabold text-center text-blue-600 mb-8">Регистрация</h1>
+		<motion.h1
+			  initial={{ opacity: 0, y: 20 }}
+			  animate={{ opacity: 1, y: 0 }}
+			  transition={{ duration: 0.5, delay: 0.1 }}
+			  className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+			>
+			 Регистрация
+			</motion.h1>
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}

@@ -22,8 +22,13 @@ export function useUser() {
   };
 
   useEffect(() => {
-    fetchUser();
-  }, []);
+  if (!localStorage.getItem('token')) {
+    setIsLoading(false);
+    return;
+  }
+  fetchUser();
+}, []);
+
 
   return { user, isLoading, error, refetch: fetchUser };
 }

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/MORFEUSik/projectschool/backend/internal/error" // Исправлен импорт
+	"github.com/MORFEUSik/projectschool/backend/internal/error" // Правильный импорт
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
@@ -73,7 +73,7 @@ func ListAchievements(achievementService service.AchievementService) gin.Handler
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param body body object true "Данные достижения" example={"title":"Новое достижение","description":"Описание достижения","condition":"points_100"}
+// @Param body body object true "Данные достижения" example={"title":"Новое достижение","description":"Описание достижения","condition_type":"points","threshold":100}
 // @Success 200 {object} map[string]string "message"
 // @Failure 400 {object} error.APIError
 // @Failure 401 {object} error.APIError
@@ -90,9 +90,10 @@ func CreateAchievement(achievementService service.AchievementService) gin.Handle
 		}
 
 		var input struct {
-			Title       string `json:"title" binding:"required,min=3,max=100"`
-			Description string `json:"description" binding:"required,min=3,max=255"`
-			Condition   string `json:"condition" binding:"required"`
+			Title         string `json:"title" binding:"required,min=3,max=100"`
+			Description   string `json:"description" binding:"required,min=3,max=255"`
+			ConditionType string `json:"condition_type" binding:"required,oneof=points courses submissions"`
+			Threshold     uint   `json:"threshold" binding:"required,gte=1"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -101,9 +102,10 @@ func CreateAchievement(achievementService service.AchievementService) gin.Handle
 		}
 
 		achievement := &model.GlobalAchievement{
-			Title:       input.Title,
-			Description: input.Description,
-			Condition:   input.Condition,
+			Title:         input.Title,
+			Description:   input.Description,
+			ConditionType: input.ConditionType,
+			Threshold:     input.Threshold,
 		}
 
 		logger.Log.Infof("Admin %d attempting to create achievement %s", userID, input.Title)
@@ -132,7 +134,7 @@ func CreateAchievement(achievementService service.AchievementService) gin.Handle
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "ID достижения"
-// @Param body body object true "Данные достижения" example={"title":"Обновленное достижение","description":"Новое описание","condition":"points_500"}
+// @Param body body object true "Данные достижения" example={"title":"Обновленное достижение","description":"Новое описание","condition_type":"points","threshold":500}
 // @Success 200 {object} map[string]string "message"
 // @Failure 400 {object} error.APIError
 // @Failure 401 {object} error.APIError
@@ -157,9 +159,10 @@ func UpdateAchievement(achievementService service.AchievementService) gin.Handle
 		}
 
 		var input struct {
-			Title       string `json:"title" binding:"required,min=3,max=100"`
-			Description string `json:"description" binding:"required,min=3,max=255"`
-			Condition   string `json:"condition" binding:"required"`
+			Title         string `json:"title" binding:"required,min=3,max=100"`
+			Description   string `json:"description" binding:"required,min=3,max=255"`
+			ConditionType string `json:"condition_type" binding:"required,oneof=points courses submissions"`
+			Threshold     uint   `json:"threshold" binding:"required,gte=1"`
 		}
 		if err := c.ShouldBindJSON(&input); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -168,9 +171,10 @@ func UpdateAchievement(achievementService service.AchievementService) gin.Handle
 		}
 
 		achievement := &model.GlobalAchievement{
-			Title:       input.Title,
-			Description: input.Description,
-			Condition:   input.Condition,
+			Title:         input.Title,
+			Description:   input.Description,
+			ConditionType: input.ConditionType,
+			Threshold:     input.Threshold,
 		}
 
 		logger.Log.Infof("Admin %d attempting to update achievement %d", userID, id)

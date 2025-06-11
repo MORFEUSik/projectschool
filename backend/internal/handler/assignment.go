@@ -23,14 +23,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// ListAssignments возвращает список заданий для курса
+// ListAssignments возвращает список заданий для урока
 // @Summary Получить список заданий
-// @Description Возвращает список заданий для указанного курса. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
+// @Description Возвращает список заданий для указанного урока. Требуется JWT-токен. Доступно для ролей: student, teacher, admin.
 // @Tags assignments
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param id path int true "ID курса"
+// @Param id path int true "ID урока"
 // @Success 200 {array} model.Assignment
 // @Failure 400 {object} map[string]string "error"
 // @Failure 401 {object} map[string]string "error"
@@ -41,7 +41,7 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 		courseID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			logger.Log.Errorf("Invalid course ID: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID курса"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID урока"})
 			return
 		}
 		assignments, err := assignmentService.ListByCourse(uint(courseID))
@@ -56,7 +56,7 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 
 // CreateAssignment создает новое задание
 // @Summary Создать задание
-// @Description Создает новое задание для курса с возможностью загрузки файла. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
+// @Description Создает новое задание для урока с возможностью загрузки файла. Требуется JWT-токен. Доступно только для ролей: teacher, admin.
 // @Tags assignments
 // @Accept multipart/form-data
 // @Produce json
@@ -65,7 +65,7 @@ func ListAssignments(assignmentService service.AssignmentService) gin.HandlerFun
 // @Param description formData string false "Описание задания (поддерживает HTML, например, <img src='/uploads/...'>)"
 // @Param max_score formData integer true "Максимальный балл"
 // @Param due_date formData string true "Срок сдачи (ISO 8601)"
-// @Param course_id formData integer true "ID курса"
+// @Param course_id formData integer true "ID урока"
 // @Param type formData string true "Тип задания (text | multiple_choice)"
 // @Param subtasks_json formData string false "JSON подзаданий для multiple_choice"
 // @Param file formData file false "Файл (jpg, png, pdf)"
@@ -167,18 +167,18 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 			return
 		}
 
-		// Проверка существования курса
+		// Проверка существования урока
 		var course model.Course
 		if err := db.DB.First(&course, input.CourseID).Error; err != nil {
 			logger.Log.Errorf("Course %d not found: %v", input.CourseID, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Курс не найден"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "урок не найден"})
 			return
 		}
 
-		// Проверка: принадлежит ли курс учителю (только для роли teacher)
+		// Проверка: принадлежит ли урок учителю (только для роли teacher)
 		if user.Role == model.Teacher && course.TeacherID != userID {
 			logger.Log.Errorf("Teacher %d does not own course %d", userID, course.TeacherID)
-			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого курса"})
+			c.JSON(http.StatusForbidden, gin.H{"error": "Вы не можете создавать задания для этого урока"})
 			return
 		}
 
@@ -327,13 +327,13 @@ func CreateAssignment(assignmentService service.AssignmentService) gin.HandlerFu
 	}
 }
 
-// GetAssignment возвращает задание по ID в контексте курса
+// GetAssignment возвращает задание по ID в контексте урока
 func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		courseID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			logger.Log.Errorf("Invalid course ID: %v", err)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID курса"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID урока"})
 			return
 		}
 
@@ -355,10 +355,10 @@ func GetAssignment(assignmentService service.AssignmentService) gin.HandlerFunc 
 			return
 		}
 
-		// Проверка, что задание принадлежит курсу
+		// Проверка, что задание принадлежит уроку
 		if assignment.CourseID != uint(courseID) {
 			logger.Log.Errorf("Assignment %d does not belong to course %d", assignmentID, courseID)
-			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Задание не принадлежит этому курсу"})
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Задание не принадлежит этому уроку"})
 			return
 		}
 
