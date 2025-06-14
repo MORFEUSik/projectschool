@@ -61,7 +61,7 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 			if len(submissions) >= int(ach.Threshold) {
 				count := 0
 				for _, sub := range submissions {
-					if sub.Grade >= 4.0 {
+					if sub.Grade >= 8.0 {
 						count++
 						if uint(count) >= ach.Threshold {
 							conditionMet = true

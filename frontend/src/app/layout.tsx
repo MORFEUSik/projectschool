@@ -55,9 +55,13 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           <div className="flex flex-wrap gap-3 text-sm items-center">
             <NavLink href="/courses" label="Уроки" />
             <NavLink href="/leaderboard" label="Лидерборд" />
-            <NavLink href="/submissions" label="Мои решения" />
+            {token && user?.role === 'student' && (
+              <>
+                <NavLink href="/submissions" label="Мои решения" />
+                <NavLink href="/notifications" label="🔔" className="hover:scale-105 transition-transform" />
+              </>
+            )}
             <NavLink href="/profile" label="Профиль" />
-            {token && <NavLink href="/notifications" label="🔔" className="hover:scale-105 transition-transform" />}
             {token && user?.role === 'admin' && <NavLink href="/admin" label="Админка" />}
             {token ? (
               <button onClick={logout} className="text-red-600 hover:text-red-700 transition font-medium">

@@ -367,7 +367,7 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 		for _, submission := range assignment.Submissions {
 			if submission.UserID == userID && submission.Grade != 0 {
 				completedAssignments++
-				totalPoints += submission.Grade * float64(assignment.MaxScore) / 5.0
+				totalPoints += submission.Grade * float64(assignment.MaxScore) / 10.0
 			}
 		}
 	}

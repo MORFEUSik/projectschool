@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -62,7 +63,40 @@ func ListAchievements(achievementService service.AchievementService) gin.Handler
 			return
 		}
 
-		c.JSON(http.StatusOK, achievements)
+		// Формируем ответ с вычисленным полем condition
+		type ResponseAchievement struct {
+			ID            uint   `json:"ID"`
+			Title         string `json:"Title"`
+			Description   string `json:"Description"`
+			ConditionType string `json:"ConditionType"`
+			Threshold     uint   `json:"Threshold"`
+			Condition     string `json:"Condition"` // Добавляем для фронтенда
+		}
+
+		response := make([]ResponseAchievement, len(achievements))
+		for i, ach := range achievements {
+			var condition string
+			switch ach.ConditionType {
+			case "points":
+				condition = fmt.Sprintf("Набрать %d баллов", ach.Threshold)
+			case "courses":
+				condition = fmt.Sprintf("Завершить %d курсов", ach.Threshold)
+			case "submissions":
+				condition = fmt.Sprintf("Сдать %d заданий с оценкой 8+", ach.Threshold)
+			default:
+				condition = "Условие не указано"
+			}
+			response[i] = ResponseAchievement{
+				ID:            ach.ID,
+				Title:         ach.Title,
+				Description:   ach.Description,
+				ConditionType: ach.ConditionType,
+				Threshold:     ach.Threshold,
+				Condition:     condition,
+			}
+		}
+
+		c.JSON(http.StatusOK, response)
 	}
 }
 

@@ -3,24 +3,30 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 // CreateCourseInput defines the input structure for creating a course
 type CreateCourseInput struct {
-	Title       string `json:"title" binding:"required,min=3,max=100" swaggertype:"string" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
-	Description string `json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
-	Subject     string `json:"subject" binding:"required" swaggertype:"string" example:"Математика" description:"Предмет урока (обязательное)"`
-	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
+	Title       string `json:"title" binding:"required,min=3,max=100" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
+	Description string `json:"description" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
+	Subject     string `json:"subject" binding:"required" example:"Математика" description:"Предмет урока"`
+	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" example:"6" description:"Номер класса (1-11)"`
+	MaterialURL string `json:"material_url" example:"/uploads/materials/math101.pdf" description:"Ссылка на PDF-материал (опционально)"`
 }
 
 // ListCourses возвращает список уроков
@@ -111,6 +117,7 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			Subject:     input.Subject,
 			ClassNumber: input.ClassNumber,
 			TeacherID:   userID.(uint),
+			MaterialURL: input.MaterialURL,
 		}
 
 		logger.Log.Infof("Creating course: %+v", course)
@@ -564,7 +571,7 @@ func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
-		// Получаем курсы, на которые записан пользователь
+		// Получаем уроки, на которые записан пользователь
 		courses, err := courseService.GetEnrolledCourses(uint(userID))
 		if err != nil {
 			logger.Log.Errorf("Failed to fetch enrolled courses for user %d: %v", userID, err)
@@ -574,5 +581,97 @@ func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
 
 		logger.Log.Infof("Fetched %d enrolled courses for user %d", len(courses), userID)
 		c.JSON(http.StatusOK, gin.H{"courses": courses})
+	}
+}
+
+// UploadCourseMaterial загружает PDF-материал для урока
+// @Summary Загрузить материал урока
+// @Description Загружает PDF-файл для урока. Доступно для учителей и админов. Требуется JWT-токен.
+// @Tags courses
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID урока"
+// @Param file formData file true "PDF-файл"
+// @Success 200 {object} map[string]string "file_url"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/material/upload [post]
+func UploadCourseMaterial() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		courseID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID урока"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+
+		var course model.Course
+		if err := db.DB.First(&course, courseID).Error; err != nil {
+			logger.Log.Errorf("Course %d not found: %v", courseID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Урок не найден"})
+			return
+		}
+
+		if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
+			logger.Log.Warnf("User %d has no permission to upload material for course %d", userID, courseID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Нет прав для загрузки материала"})
+			return
+		}
+
+		file, err := c.FormFile("file")
+		if err != nil {
+			logger.Log.Errorf("File not provided: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Файл не загружен"})
+			return
+		}
+
+		if filepath.Ext(file.Filename) != ".pdf" {
+			logger.Log.Errorf("Invalid file format: %s", file.Filename)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Допустимы только PDF-файлы"})
+			return
+		}
+
+		uploadDir := filepath.Join("uploads", "materials")
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Log.Errorf("Failed to create upload directory: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
+			return
+		}
+
+		filename := fmt.Sprintf("%d_%s", courseID, file.Filename)
+		filePath := filepath.Join(uploadDir, filename)
+		if err := c.SaveUploadedFile(file, filePath); err != nil {
+			logger.Log.Errorf("Failed to save file: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось сохранить файл"})
+			return
+		}
+
+		// Обновляем поле MaterialURL в курсе
+		if err := db.DB.Model(&course).Update("material_url", fmt.Sprintf("/%s", filePath)).Error; err != nil {
+			logger.Log.Errorf("Failed to update course material URL: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка обновления урока"})
+			return
+		}
+
+		logger.Log.Infof("Material uploaded for course %d by user %d: %s", courseID, userID, filePath)
+		util.LogUserAction(repository.NewActionLogRepository(db.DB), userID.(uint), "upload_material", fmt.Sprintf("Загружен материал для урока ID: %d", courseID))
+		c.JSON(http.StatusOK, gin.H{"file_url": fmt.Sprintf("/%s", filePath)})
 	}
 }

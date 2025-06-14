@@ -2,17 +2,18 @@
 
 import { Button } from '@/shared/ui/Button';
 import clsx from 'clsx';
-import React from 'react'; // Явный импорт React
+import React from 'react';
 
 interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string | React.JSX.Element; // Явное использование React.JSX.Element
+  message: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   className?: string;
+  confirmButtonClass?: string;
 }
 
 export default function ConfirmModal({
@@ -24,14 +25,15 @@ export default function ConfirmModal({
   confirmText = 'Подтвердить',
   cancelText = 'Отменить',
   className,
+  confirmButtonClass = 'bg-blue-600 hover:bg-blue-700',
 }: ConfirmModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
       <div
         className={clsx(
-          'bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 card-shadow animate-fade-in-up',
+          'bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4 card-shadow animate-fade-in-up',
           className
         )}
       >
@@ -46,7 +48,7 @@ export default function ConfirmModal({
           </Button>
           <Button
             onClick={onConfirm}
-            className="bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
+            className={clsx('text-white hover:scale-105 transition-transform duration-200', confirmButtonClass)}
           >
             {confirmText}
           </Button>

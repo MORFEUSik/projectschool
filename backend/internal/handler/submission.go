@@ -72,7 +72,7 @@ func SetGrade(submissionService service.SubmissionService) gin.HandlerFunc {
 		logger.Log.Info("Processing SetGrade request")
 
 		var gradeInput struct {
-			Grade float64 `json:"grade" binding:"required,gte=0,lte=5"`
+			Grade float64 `json:"grade" binding:"required,gte=0,lte=10"`
 		}
 		if err := c.ShouldBindJSON(&gradeInput); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)

@@ -22,9 +22,9 @@
 html,
 body {
   height: 100%;
-  min-height: 100dvh; /* Динамическая высота viewport */
+  min-height: 100dvh;
   margin: 0;
-  overflow-x: hidden; /* Предотвращаем горизонтальный скролл */
+  overflow-x: hidden;
 }
 
 body {
@@ -35,20 +35,19 @@ body {
     #f9a8d4 50%,
     #93c5fd 75%,
     #a5b4fc 100%
-  ); /* Светлая тема: переливающийся градиент с индиго, жёлтым, розовым и голубым */
+  );
   background-attachment: fixed;
-  background-size: 100% 300%; /* Удлинённый градиент для плавности */
+  background-size: 100% 300%;
   background-repeat: no-repeat;
-  background-position: 0% 0%; /* Начальная позиция */
+  background-position: 0% 0%;
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
   display: flex;
   flex-direction: column;
   position: relative;
-  animation: shimmer 25s ease-in-out infinite; /* Переливающаяся анимация */
+  animation: shimmer 25s ease-in-out infinite;
 }
 
-/* Переливающаяся анимация */
 @keyframes shimmer {
   0% {
     background-position: 0% 0%;
@@ -61,21 +60,19 @@ body {
   }
 }
 
-/* Добавляем тонкий шум для текстуры */
 body::before {
   content: "";
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  height: 100dvh; /* Полная высота */
+  height: 100dvh;
   background-image: url("/images/noise.svg");
-  opacity: 0.2; /* Ещё чуть заметнее */
+  opacity: 0.2;
   pointer-events: none;
   z-index: -1;
 }
 
-/* Темная тема */
 @media (prefers-color-scheme: dark) {
   body {
     background: linear-gradient(
@@ -85,7 +82,7 @@ body::before {
       #6b21a8 50%,
       #1e40af 75%,
       #1e3a8a 100%
-    ); /* Тёмная тема: переливающийся градиент с синим, пурпурным и фиолетовым */
+    );
     background-attachment: fixed;
     background-size: 100% 300%;
     background-repeat: no-repeat;
@@ -94,7 +91,6 @@ body::before {
   }
 }
 
-/* Принудительное применение темы через атрибут data-theme */
 [data-theme="light"] {
   background: linear-gradient(
     135deg,
@@ -125,49 +121,52 @@ body::before {
   animation: shimmer 25s ease-in-out infinite;
 }
 
-/* Глобальный контейнер */
 .container {
   @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
 }
 
-/* Улучшение карточек */
 .card {
   @apply bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .card:hover {
-  @apply transform scale-105 shadow-xl;
+  @apply shadow-xl;
 }
 
-/* Прозрачные карточки для профиля */
+.card-no-scale {
+  @apply bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
+  transition: box-shadow 0.3s ease;
+}
+
+.card-no-scale:hover {
+  @apply shadow-xl;
+}
+
 .card-transparent {
   @apply bg-white/20 dark:bg-gray-900/20 backdrop-blur-lg rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .card-transparent:hover {
-  @apply transform scale-105 shadow-xl;
+  @apply shadow-xl;
 }
 
-/* Карточки с минимальным масштабированием */
 .card-subtle {
   @apply bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .card-subtle:hover {
-  @apply transform scale-[1.005] shadow-xl;
+  @apply shadow-xl;
 }
 
-/* Плавные переходы для интерактивных элементов */
 button,
 a,
 .interactive {
   @apply transition-all duration-300 ease-in-out;
 }
 
-/* Стили для задержки анимации */
 .animation-delay-100 {
   animation-delay: 100ms;
 }
@@ -176,7 +175,6 @@ a,
   animation-delay: 200ms;
 }
 
-/* Прогресс-бар */
 .animate-progress {
   width: 100%;
   animation: progress 2s infinite linear;
@@ -191,7 +189,6 @@ a,
   }
 }
 
-/* Переливающийся фон при наведении */
 .card-hover-gradient::before {
   content: "";
   position: absolute;
@@ -214,7 +211,6 @@ a,
   opacity: 1;
 }
 
-/* Тень для карточки */
 .card-shadow {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -225,7 +221,6 @@ a,
     0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-/* Анимация появления */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -239,4 +234,8 @@ a,
 
 .animate-fade-in-up {
   animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.custom-datepicker-popper {
+  z-index: 1000 !important;
 }

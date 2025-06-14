@@ -164,7 +164,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
-		points = uint(math.Round(grade * float64(assignment.MaxScore) / 5.0))
+		points = uint(math.Round(grade * float64(assignment.MaxScore) / 10.0))
 		submissionUser.Points += points
 		if err := tx.Save(&submissionUser).Error; err != nil {
 			return err
@@ -425,20 +425,7 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 		}
 	}
 
-	percent := totalScore / float64(assignment.MaxScore) * 100
-	var grade float64
-	switch {
-	case percent >= 80:
-		grade = 5
-	case percent >= 60:
-		grade = 4
-	case percent >= 40:
-		grade = 3
-	case percent >= 20:
-		grade = 2
-	default:
-		grade = 1
-	}
+	grade := totalScore / 10
 
 	submission := model.Submission{
 		AssignmentID: assignmentID,

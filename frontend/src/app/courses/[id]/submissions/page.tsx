@@ -62,8 +62,8 @@ export default function CourseSubmissionsPage() {
 
   const handleSetGrade = async (submissionId: number) => {
     const grade = parseFloat(gradeInputs[submissionId]);
-    if (isNaN(grade) || grade < 0 || grade > 5) {
-      toast.error('Оценка должна быть от 0 до 5');
+    if (isNaN(grade) || grade < 0 || grade > 10) {
+      toast.error('Оценка должна быть от 0 до 10');
       return;
     }
     try {
@@ -170,22 +170,24 @@ export default function CourseSubmissionsPage() {
                             type="number"
                             step="0.1"
                             min="0"
-                            max="5"
+                            max="10"
                             value={gradeInputs[submission.id] ?? submission.score.toString()}
                             onChange={(e) => handleGradeChange(submission.id, e.target.value)}
                             className="w-16"
                           />
                           <span
-                            className={`text-sm px-2 py-1 rounded ${
-                              submission.score >= 4
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                                : submission.score >= 3
-                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-                            }`}
-                          >
-                            {submission.score.toFixed(1)}
-                          </span>
+  className={`text-sm px-2 py-1 rounded ${
+    submission.score >= 8
+      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+      : submission.score >= 5
+      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+  }`}
+>
+  {submission.score.toFixed(1)}
+</span>
+
+
                         </div>
                       </td>
                       <td className="py-3 px-4">

@@ -14,6 +14,7 @@ type UserRepository interface {
 	FindTopByPoints(limit int) ([]model.User, error)
 	FindTopByPointsInCourse(courseID uint, limit int) ([]model.User, error)
 	UpdateRole(id uint, role model.Role) error
+	Delete(id uint) error
 }
 
 type userRepository struct {
@@ -65,4 +66,9 @@ func (r *userRepository) FindTopByPointsInCourse(courseID uint, limit int) ([]mo
 func (r *userRepository) UpdateRole(id uint, role model.Role) error {
 	logger.Log.Infof("Updating role for user %d to %s", id, role)
 	return r.db.Model(&model.User{}).Where("id = ?", id).Update("role", role).Error
+}
+
+func (r *userRepository) Delete(id uint) error {
+	logger.Log.Infof("Deleting user %d", id)
+	return r.db.Delete(&model.User{}, id).Error
 }

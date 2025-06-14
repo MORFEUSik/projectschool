@@ -37,7 +37,7 @@ interface LogEntry {
   action: string;
   details: string;
   created_at: string;
-  user?: User | null; // Сделали user необязательным
+  user?: User | null;
 }
 
 type FilterType = 'all' | 'create' | 'update' | 'delete' | 'enroll' | 'submit' | 'achieve';
@@ -64,7 +64,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
     { id: 'create', label: 'Создание' },
     { id: 'update', label: 'Обновление' },
     { id: 'delete', label: 'Удаление' },
-    { id: 'enroll', label: 'урокы' },
+    { id: 'enroll', label: 'Уроки' },
     { id: 'submit', label: 'Оценки' },
     { id: 'achieve', label: 'Достижения' },
   ];
@@ -79,7 +79,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
     if (action.includes('enroll'))
       return { id: 'enroll', label: 'Запись на урок', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: AcademicCapIcon };
     if (action.includes('submit'))
-      return { id: 'submit', label: 'Сдача задания', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300', icon: CheckCircleIcon };
+      return { id: 'submit', label: 'Сдача задания', color: 'bg-yellow-800 text-white dark:bg-yellow-900 dark:text-yellow-300', icon: CheckCircleIcon };
     if (action.includes('achieve'))
       return { id: 'achieve', label: 'Получение достижения', color: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300', icon: StarIcon };
     return null;
@@ -148,8 +148,9 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="p-4 card-shadow dark:bg-gray-800">
+    <div className="w-[50rem] mx-auto space-y-4 flex flex-col">
+      {/* Фильтры в отдельном контейнере */}
+      <Card className="p-4 w-full shadow-sm rounded-xl dark:bg-gray-800 z-10">
         <div className="flex flex-wrap gap-4 justify-center sm:justify-start">
           <div className="flex flex-wrap gap-2">
             {filterOptions.map((f) => (
@@ -181,6 +182,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
               <DatePicker
                 selected={startDate}
                 onChange={(date: Date | null) => setStartDate(date)}
+                popperClassName="custom-datepicker-popper"
                 placeholderText="Дата с"
                 className="w-full pl-10 pr-4 py-2 border border-blue-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-300 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 dateFormat="dd.MM.yyyy"
@@ -191,6 +193,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
               <DatePicker
                 selected={endDate}
                 onChange={(date: Date | null) => setEndDate(date)}
+                popperClassName="custom-datepicker-popper"
                 placeholderText="Дата по"
                 className="w-full pl-10 pr-4 py-2 border border-blue-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-300 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 dateFormat="dd.MM.yyyy"
@@ -200,23 +203,25 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
           </div>
           <Button
             onClick={handleExportCSV}
-            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-md hover:scale-105 transition-transform duration-200"
+            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-md hover:ring-2 hover:ring-green-300 transition-all duration-200"
           >
             <DocumentArrowDownIcon className="h-5 w-5" />
             Экспорт CSV
           </Button>
         </div>
       </Card>
-      <div className="max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+
+      {/* Контейнер логов с прокруткой */}
+      <div className="flex-1 overflow-y-auto">
         {paginatedLogs.length === 0 ? (
-          <Card className="p-6 text-center card-shadow dark:bg-gray-800">
+          <Card className="p-6 text-center w-full shadow-sm rounded-xl dark:bg-gray-800">
             <DocumentTextIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-300 mb-2" />
             <p className="text-gray-600 dark:text-gray-300">
-              Нет логов для &quot;{filterOptions.find((f) => f.id === filter)?.label || filter}&quot;. Действия появятся позже!
+              Нет логов для "{filterOptions.find((f) => f.id === filter)?.label || filter}". Действия появятся позже!
             </p>
           </Card>
         ) : (
-          <ul className="space-y-4">
+          <ul className="w-full space-y-4">
             {paginatedLogs.map((log, index) => {
               const actionType = getActionType(log.action);
               if (!actionType) return null;
@@ -225,7 +230,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
                 <li key={log.id}>
                   <Card
                     className={clsx(
-                      'p-4 card-shadow dark:bg-gray-800 transition-transform duration-200 hover:scale-[1.01] hover:shadow-lg hover:z-10'
+                      'p-4 w-full shadow-sm rounded-xl dark:bg-gray-800 hover:shadow-md'
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -249,17 +254,6 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
                           <span className="font-medium">Роль:</span> {log.user?.role || (log.user_id === 0 ? 'Система' : 'Неизвестно')}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{log.details}</p>
-                        <div className="mt-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-300">
-                            <span>Активность:</span>
-                            <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full">
-                              <div
-                                className="h-full bg-blue-600 rounded-full"
-                                style={{ width: `${Math.min((index + 1) * 20, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
                         <span className="text-xs text-gray-500 dark:text-gray-300">
                           {new Date(log.created_at).toLocaleString('ru-RU', {
                             dateStyle: 'medium',
@@ -275,8 +269,9 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
           </ul>
         )}
       </div>
+
       {totalPages > 1 && (
-        <Card className="p-4 card-shadow dark:bg-gray-800">
+        <Card className="p-4 w-full shadow-sm rounded-xl dark:bg-gray-800 mt-4">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="flex gap-2 items-center">
               <Button

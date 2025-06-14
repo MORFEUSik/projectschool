@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -24,6 +23,7 @@ type UserService interface {
 	UpdateProfile(userID uint, username, email, fullName string) error
 	ListAll() ([]model.User, error)
 	GetAchievements(userID uint) ([]model.UserAchievement, error)
+	Delete(userID, adminID uint) error
 }
 
 type userService struct {
@@ -312,4 +312,54 @@ func (s *userService) GetAchievements(userID uint) ([]model.UserAchievement, err
 		logger.Log.Errorf("Failed to create action log: %v", err)
 	}
 	return achievements, nil
+}
+
+func (s *userService) Delete(userID, adminID uint) error {
+	logger.Log.Infof("Admin %d attempting to delete user %d", adminID, userID)
+
+	if userID == adminID {
+		logger.Log.Warnf("Admin %d cannot delete themselves", adminID)
+		return errors.New("нельзя удалить самого себя")
+	}
+
+	admin, err := s.repo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		logger.Log.Errorf("User %d not found: %v", userID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("пользователь не найден")
+		}
+		return err
+	}
+
+	if user.Role == model.Admin {
+		logger.Log.Warnf("Cannot delete admin user %d", userID)
+		return errors.New("нельзя удалить администратора")
+	}
+
+	if err := s.repo.Delete(userID); err != nil {
+		logger.Log.Errorf("Failed to delete user %d: %v", userID, err)
+		return err
+	}
+
+	logger.Log.Infof("User %d deleted by admin %d", userID, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "delete_user",
+		Details:   fmt.Sprintf("Админ удалил пользователя %d", userID),
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
 }

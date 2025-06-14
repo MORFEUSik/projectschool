@@ -393,15 +393,15 @@ export default function AssignmentPage() {
             className="p-6"
           >
             <p className="font-semibold text-gray-800 dark:text-white">
-              Оценка: {quizResult.grade.toFixed(1)}
-            </p>
+  Оценка: {quizResult.grade.toFixed(1)}
+</p>
             <p className="font-semibold text-gray-800 dark:text-white">
               Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
             </p>
             <div className="mt-4 space-y-4">
               {quizResult.answers.map((answer, idx) => {
                 const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
-                const subtaskScore = assignment.max_score / subtasks.length;
+                const subtaskScore = answer.Score + (answer.IsCorrect ? 0 : 0);
                 return (
                   <motion.div
                     key={answer.SubtaskID}
@@ -451,8 +451,9 @@ export default function AssignmentPage() {
                     )}
                     <p className="text-gray-700 dark:text-gray-200">Попытки: {answer.Attempts}</p>
                     <p className="text-gray-700 dark:text-gray-200">
-                      Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
-                    </p>
+  Баллы за подзадание: {answer.Score.toFixed(1)}
+</p>
+
                     {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
                       <div className="mt-2">
                         <p className="text-gray-700 dark:text-gray-200">Варианты:</p>

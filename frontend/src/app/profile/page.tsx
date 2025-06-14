@@ -77,10 +77,8 @@ export default function ProfilePage() {
     try {
       let response;
       if (user.role === 'student') {
-        // Запрашиваем курсы, на которые записан ученик
         response = await api.get('/enrollments', { params: { userID: user.id } });
       } else if (user.role === 'teacher' || user.role === 'admin') {
-        // Запрашиваем курсы, созданные учителем или админом
         response = await api.get('/courses', { params: { teacherID: user.id } });
       }
       setCourses(response.data.courses || []);
@@ -151,162 +149,161 @@ export default function ProfilePage() {
           className="p-6 mb-6 card-transparent card-shadow card-hover-gradient animate-fade-in-up"
           style={{ animationDelay: '200ms' }}
         >
-          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Аватар</h2>
-          <div className="flex items-center gap-4">
-            {isLoading ? (
-              <div className="animate-pulse h-24 w-24 rounded-full bg-gray-200" />
-            ) : (
-              <img
-                src={user?.avatar_url || avatarOptions[0]}
-                alt="avatar"
-                className="w-24 h-24 rounded-full border-4 border-blue-600 dark:border-blue-400 object-cover hover:scale-105 transition-transform duration-200"
-              />
-            )}
-            <Button
-              onClick={() => setAvatarModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
-            >
-              Выбрать аватар
-            </Button>
-          </div>
-        </Card>
-
-        <Card
-          className="p-6 card-transparent card-shadow card-hover-gradient animate-fade-in-up"
-          style={{ animationDelay: '300ms' }}
-        >
-          {isEditing ? (
-            <form onSubmit={handleEdit} className="space-y-4">
-              {editError && (
-                <p className="bg-red-500 dark:bg-red-600 text-white dark:text-gray-100 p-3 rounded text-sm animate-pulse mx-auto text-center">
-                  {editError}
-                </p>
-              )}
-
-              <div>
-                <label
-                  htmlFor="username"
-                  className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
-                >
-                  Имя
-                </label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  placeholder="Введите имя"
-                  className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+          <div className="flex flex-col sm:flex-row gap-6">
+            <div className="flex flex-col items-center sm:items-start">
+              {isLoading ? (
+                <div className="animate-pulse h-24 w-24 rounded-full bg-gray-200" />
+              ) : (
+                <img
+                  src={user?.avatar_url || avatarOptions[0]}
+                  alt="avatar"
+                  className="w-24 h-24 rounded-full border-4 border-blue-600 dark:border-blue-400 object-cover"
                 />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="fullName"
-                  className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
-                >
-                  ФИО
-                </label>
-                <Input
-                  id="fullName"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  placeholder="Иванов Иван Иванович"
-                  className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="example@domain.com"
-                  className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
-                />
-              </div>
-
-              <div
-                className="flex flex-col sm:flex-row justify-end gap-3 pt-3 animate-pulse"
-                style={{ animationDelay: '400ms' }}
-              >
-                <Button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
-                >
-                  Сохранить
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  variant="outline"
-                  className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
-                >
-                  Отмена
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="space-y-4 text-gray-900 dark:text-gray-100">
-              <p>
-                <strong>Имя:</strong> {user.username}
-              </p>
-              {user.full_name && (
-                <p>
-                  <strong>ФИО:</strong> {user.full_name}
-                </p>
               )}
-              <p>
-                <strong>Email:</strong> {user.email}
-              </p>
-              <p
-                className="relative group"
-                data-tooltip="Роль определяет ваш уровень доступа"
+              <Button
+                onClick={() => setAvatarModalOpen(true)}
+                className="mt-4 bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200"
               >
-                <strong>Роль:</strong> {user.role}
-                <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-                  Роль определяет ваш уровень доступа
-                </span>
-              </p>
-              {user.role === 'student' && (
-                <p>
-                  <strong>Класс:</strong> {user.class_number}
-                </p>
-              )}
-              <p>
-                <strong>Баллы:</strong> {user.points}
-              </p>
+                Выбрать аватар
+              </Button>
+            </div>
 
-              <div
-                className="mt-6 flex flex-col sm:flex-row gap-3 justify-end animate-pulse"
-                style={{ animationDelay: '400ms' }}
-              >
-                <Button
-                  onClick={() => setIsEditing(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+            {isEditing ? (
+              <form onSubmit={handleEdit} className="flex-1 space-y-4">
+                {editError && (
+                  <p className="bg-red-500 dark:bg-red-600 text-white dark:text-gray-100 p-3 rounded text-sm animate-pulse mx-auto text-center">
+                    {editError}
+                  </p>
+                )}
+                <div>
+                  <label
+                    htmlFor="username"
+                    className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+                  >
+                    Имя
+                  </label>
+                  <Input
+                    id="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    placeholder="Введите имя"
+                    className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="fullName"
+                    className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+                  >
+                    ФИО
+                  </label>
+                  <Input
+                    id="fullName"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    placeholder="Иванов Иван Иванович"
+                    className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+                  >
+                    Email
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="example@domain.com"
+                    className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+                  />
+                </div>
+                <div
+                  className="flex flex-col sm:flex-row justify-end gap-3 pt-3 animate-pulse"
+                  style={{ animationDelay: '400ms' }}
                 >
-                  Редактировать профиль
-                </Button>
-                <Link href="/achievements">
                   <Button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+                  >
+                    Сохранить
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
                     variant="outline"
                     className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
                   >
-                    Мои достижения 🏆
+                    Отмена
                   </Button>
-                </Link>
+                </div>
+              </form>
+            ) : (
+              <div className="flex-1 space-y-4 text-gray-900 dark:text-gray-100">
+                <p>
+                  <strong>Имя:</strong> {user.username}
+                </p>
+                {user.full_name && (
+                  <p>
+                    <strong>ФИО:</strong> {user.full_name}
+                  </p>
+                )}
+                <p>
+                  <strong>Email:</strong> {user.email}
+                </p>
+                <p
+                  className="relative group"
+                  data-tooltip="Роль определяет ваш уровень доступа"
+                >
+                  <strong>Роль:</strong> {user.role}
+                  <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                    Роль определяет ваш уровень доступа
+                  </span>
+                </p>
+                {user.role === 'student' && (
+                  <p>
+                    <strong>Класс:</strong> {user.class_number}
+                  </p>
+                )}
+                {user.role === 'student' && (
+  <p>
+    <strong>Баллы:</strong>{' '}
+    <span className="font-semibold text-blue-600 dark:text-blue-400">
+      {user.points ?? 0}
+    </span>
+  </p>
+)}
+
+                <div
+                  className="mt-6 flex flex-col sm:flex-row gap-3 justify-end animate-pulse"
+                  style={{ animationDelay: '400ms' }}
+                >
+                  <Button
+                    onClick={() => setIsEditing(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+                  >
+                    Редактировать профиль
+                  </Button>
+                  {user.role === 'student' && (
+                    <Link href="/achievements">
+                      <Button
+                        variant="outline"
+                        className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
+                      >
+                        Мои достижения 🏆
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
 
         <Card
@@ -314,7 +311,7 @@ export default function ProfilePage() {
           style={{ animationDelay: '400ms' }}
         >
           <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">
-            {user.role === 'student' ? 'Мои курсы' : 'Созданные курсы'}
+            {user.role === 'student' ? 'Мои уроки' : 'Созданные уроки'}
           </h2>
           {isCoursesLoading ? (
             <div className="space-y-4">
@@ -326,7 +323,7 @@ export default function ProfilePage() {
             <p className="text-center text-red-500">{coursesError}</p>
           ) : courses.length === 0 ? (
             <p className="text-center text-gray-500 dark:text-gray-400">
-              {user.role === 'student' ? 'Вы не записаны на курсы' : 'Вы не создали курсы'}
+              {user.role === 'student' ? 'Вы не записаны на уроки' : 'Вы не создали уроки'}
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

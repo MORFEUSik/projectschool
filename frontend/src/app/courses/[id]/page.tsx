@@ -23,7 +23,7 @@ import {
   ChartOptions,
 } from 'chart.js';
 import ConfirmModal from '@/widgets/ConfirmModal';
-import { ArrowRightIcon, PlusIcon, TrashIcon, ChartBarIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, PlusIcon, TrashIcon, ChartBarIcon, CheckCircleIcon, XCircleIcon, DocumentIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -35,6 +35,7 @@ interface Course {
   subject: string;
   class_number: number;
   teacher: { username: string };
+  material_url?: string; // Новое поле для ссылки на PDF
 }
 
 interface Progress {
@@ -60,7 +61,7 @@ export default function CoursePage() {
   const { user } = useUser();
 
   const courseId = typeof id === 'string' ? id : '';
-  const { assignments, loading: assignmentsLoading, error: assignmentsError } = useAssignments(courseId);
+const { assignments, loading: assignmentsLoading, error: assignmentsError, mutate } = useAssignments(courseId);
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseError, setCourseError] = useState('');
@@ -74,6 +75,8 @@ export default function CoursePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [modalAction, setModalAction] = useState<'unenroll' | 'delete'>('unenroll');
+  const [materialFile, setMaterialFile] = useState<File | null>(null); // Для загрузки PDF
+  const [isUploading, setIsUploading] = useState(false); // Состояние загрузки
 
   const fetchCourse = async () => {
     setCourseLoading(true);
@@ -134,6 +137,30 @@ export default function CoursePage() {
       const axiosError = err as AxiosError<ErrorResponse>;
       toast.error(axiosError.response?.data?.error || 'Ошибка проверки записи');
       setIsEnrolled(false);
+    }
+  };
+
+  const handleUploadMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!materialFile) {
+      toast.error('Выберите PDF-файл');
+      return;
+    }
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', materialFile);
+    try {
+      await api.post(`/courses/${courseId}/material/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMaterialFile(null);
+      await fetchCourse(); // Обновляем данные урока
+      toast.success('Материал загружен');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при загрузке материала');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -223,6 +250,32 @@ export default function CoursePage() {
     ],
   };
 
+  const handleDeleteAssignment = async (assignmentId: number) => {
+  if (!confirm('Вы уверены, что хотите удалить это задание?')) return;
+
+  try {
+    await api.delete(`/assignments/${assignmentId}`);
+    toast.success('Задание удалено');
+
+    // Увеличиваем задержку для каскадных удалений
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Явно запрашиваем новые данные с сервера
+    const updatedAssignments = await api.get(`/courses/${courseId}/assignments`);
+    
+    // Обновляем кэш SWR
+    await mutate(updatedAssignments.data, { revalidate: false });
+
+    // Обновляем другие данные
+    await Promise.all([fetchCourse(), fetchStats(), fetchProgress()]);
+  } catch (err) {
+    const axiosErr = err as AxiosError<ErrorResponse>;
+    toast.error(axiosErr.response?.data?.error || 'Ошибка при удалении');
+  }
+};
+
+
+
   const chartOptions: ChartOptions<'line'> = {
     responsive: true,
     plugins: {
@@ -258,6 +311,16 @@ export default function CoursePage() {
           <p><strong>Класс:</strong> {course.class_number}</p>
           <p><strong>Преподаватель:</strong> {course.teacher.username}</p>
         </div>
+        {course?.material_url && (
+  <a
+    href={`http://localhost:8080${course.material_url}`} // обязательно абсолютный путь!
+    download // ← ключевая штука, иначе откроется
+    className="text-blue-600 hover:underline"
+  >
+    Скачать PDF
+  </a>
+)}
+
         {user?.role === 'student' && (
           <div className="flex justify-start animate-fade-in-up animation-delay-200">
             {isEnrolled ? (
@@ -282,6 +345,29 @@ export default function CoursePage() {
         )}
       </Card>
 
+      {['teacher', 'admin'].includes(user?.role || '') && (
+        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-200">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <DocumentIcon className="w-6 h-6" /> Загрузка материала
+          </h2>
+          <form onSubmit={handleUploadMaterial} className="space-y-4">
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={(e) => setMaterialFile(e.target.files?.[0] || null)}
+              className="w-full text-gray-600 dark:text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-blue-300 dark:hover:file:bg-gray-600"
+            />
+            <Button
+              type="submit"
+              className="w-full hover:scale-105 transition-transform duration-300"
+              disabled={isUploading}
+            >
+              {isUploading ? 'Загрузка...' : 'Загрузить PDF'}
+            </Button>
+          </form>
+        </Card>
+      )}
+
       <ConfirmModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -298,43 +384,46 @@ export default function CoursePage() {
       />
 
       {['teacher', 'admin'].includes(user?.role || '') && (
-  <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
-    <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-      <ChartBarIcon className="w-6 h-6" /> Статистика урока
-    </h2>
-    {statsLoading ? (
-      <div className="text-center animate-pulse">Загрузка...</div>
-    ) : statsError ? (
-      <div className="text-red-500 text-center">{statsError}</div>
-    ) : stats ? (
-      <>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
-          </div>
-          <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
-          </div>
-          <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
-            <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <Link href={`/courses/${courseId}/submissions`}>
-            <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
-              <ChartBarIcon className="w-5 h-5" /> Решения студентов
-            </Button>
-          </Link>
-        </div>
-      </>
-    ) : (
-      <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
-    )}
-  </Card>
-)}
+        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <ChartBarIcon className="w-6 h-6" /> Статистика урока
+          </h2>
+          {statsLoading ? (
+            <div className="text-center animate-pulse">Загрузка...</div>
+          ) : statsError ? (
+  <div className="text-center text-gray-500 dark:text-gray-400">
+    Пока нет решений студентов
+  </div>
+)
+ : stats ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
+                </div>
+                <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
+                </div>
+                <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Link href={`/courses/${courseId}/submissions`}>
+                  <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
+                    <ChartBarIcon className="w-5 h-5" /> Решения студентов
+                  </Button>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
+          )}
+        </Card>
+      )}
 
       {user?.role === 'student' && (
         <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
@@ -360,9 +449,9 @@ export default function CoursePage() {
                     <p className="text-2xl font-bold text-green-600 dark:text-green-300">{completionRate.toFixed(1)}%</p>
                   </div>
                   <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Баллы</p>
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{totalPoints.toFixed(1)}</p>
-                  </div>
+  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Баллы</p>
+  <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{totalPoints.toFixed(1)}</p>
+</div>
                 </div>
                 <div className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-6">
                   <div
@@ -402,29 +491,50 @@ export default function CoursePage() {
         {assignments.length === 0 ? (
           <div className="text-center text-gray-500 dark:text-gray-400">Заданий нет</div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {assignments.map((assignment, index) => (
-              <Link href={`/courses/${courseId}/assignments/${assignment.id}`} key={assignment.id}>
-                <Card
-                  className={clsx(
-                    'p-6 card-shadow card-hover-gradient hover:scale-[1.01] transition-all duration-300 animate-fade-in-up',
-                    { 'animation-delay-100': index % 3 === 0, 'animation-delay-200': index % 3 === 1, 'animation-delay-300': index % 3 === 2 }
-                  )}
-                >
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">{assignment.title}</h3>
-                    <Button variant="outline" className="flex items-center gap-2">
-                      Открыть <ArrowRightIcon className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">{assignment.description}</p>
-                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <p><strong>Макс. балл:</strong> {assignment.max_score}</p>
-                    <p><strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}</p>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+  <Card
+    key={assignment.id}
+    className={clsx(
+      'p-6 relative card-shadow card-hover-gradient hover:scale-[1.01] transition-all duration-300 animate-fade-in-up',
+      {
+        'animation-delay-100': index % 3 === 0,
+        'animation-delay-200': index % 3 === 1,
+        'animation-delay-300': index % 3 === 2,
+      }
+    )}
+  >
+    <div className="flex justify-between items-start">
+      <div>
+        <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">{assignment.title}</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">{assignment.description}</p>
+        <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <p><strong>Макс. балл:</strong> {assignment.max_score}</p>
+          <p><strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}</p>
+        </div>
+      </div>
+
+      {(user?.role === 'teacher' || user?.role === 'admin') && (
+        <button
+          onClick={() => handleDeleteAssignment(assignment.id)}
+          className="text-red-500 hover:text-red-700"
+          title="Удалить задание"
+        >
+          <TrashIcon className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+
+    <div className="mt-4 flex justify-end">
+      <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+        <Button variant="outline" className="flex items-center gap-2">
+          Открыть <ArrowRightIcon className="w-4 h-4" />
+        </Button>
+      </Link>
+    </div>
+  </Card>
+))}
+
           </div>
         )}
       </Card>

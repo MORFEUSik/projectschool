@@ -260,9 +260,13 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           <div className="flex flex-wrap gap-3 text-sm items-center">
             <NavLink href="/courses" label="Уроки" />
             <NavLink href="/leaderboard" label="Лидерборд" />
-            <NavLink href="/submissions" label="Мои решения" />
+            {token && user?.role === 'student' && (
+              <>
+                <NavLink href="/submissions" label="Мои решения" />
+                <NavLink href="/notifications" label="🔔" className="hover:scale-105 transition-transform" />
+              </>
+            )}
             <NavLink href="/profile" label="Профиль" />
-            {token && <NavLink href="/notifications" label="🔔" className="hover:scale-105 transition-transform" />}
             {token && user?.role === 'admin' && <NavLink href="/admin" label="Админка" />}
             {token ? (
               <button onClick={logout} className="text-red-600 hover:text-red-700 transition font-medium">
@@ -304,6 +308,7 @@ function NavLink({ href, label, className }: { href: string; label: string; clas
     </Link>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1005,7 +1010,7 @@ import {
   ChartOptions,
 } from 'chart.js';
 import ConfirmModal from '@/widgets/ConfirmModal';
-import { ArrowRightIcon, PlusIcon, TrashIcon, ChartBarIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, PlusIcon, TrashIcon, ChartBarIcon, CheckCircleIcon, XCircleIcon, DocumentIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -1017,6 +1022,7 @@ interface Course {
   subject: string;
   class_number: number;
   teacher: { username: string };
+  material_url?: string; // Новое поле для ссылки на PDF
 }
 
 interface Progress {
@@ -1042,7 +1048,7 @@ export default function CoursePage() {
   const { user } = useUser();
 
   const courseId = typeof id === 'string' ? id : '';
-  const { assignments, loading: assignmentsLoading, error: assignmentsError } = useAssignments(courseId);
+const { assignments, loading: assignmentsLoading, error: assignmentsError, mutate } = useAssignments(courseId);
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLoading, setCourseLoading] = useState(true);
   const [courseError, setCourseError] = useState('');
@@ -1056,6 +1062,8 @@ export default function CoursePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [modalAction, setModalAction] = useState<'unenroll' | 'delete'>('unenroll');
+  const [materialFile, setMaterialFile] = useState<File | null>(null); // Для загрузки PDF
+  const [isUploading, setIsUploading] = useState(false); // Состояние загрузки
 
   const fetchCourse = async () => {
     setCourseLoading(true);
@@ -1116,6 +1124,30 @@ export default function CoursePage() {
       const axiosError = err as AxiosError<ErrorResponse>;
       toast.error(axiosError.response?.data?.error || 'Ошибка проверки записи');
       setIsEnrolled(false);
+    }
+  };
+
+  const handleUploadMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!materialFile) {
+      toast.error('Выберите PDF-файл');
+      return;
+    }
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', materialFile);
+    try {
+      await api.post(`/courses/${courseId}/material/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMaterialFile(null);
+      await fetchCourse(); // Обновляем данные урока
+      toast.success('Материал загружен');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      toast.error(axiosError.response?.data?.error || 'Ошибка при загрузке материала');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -1205,6 +1237,32 @@ export default function CoursePage() {
     ],
   };
 
+  const handleDeleteAssignment = async (assignmentId: number) => {
+  if (!confirm('Вы уверены, что хотите удалить это задание?')) return;
+
+  try {
+    await api.delete(`/assignments/${assignmentId}`);
+    toast.success('Задание удалено');
+
+    // Увеличиваем задержку для каскадных удалений
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Явно запрашиваем новые данные с сервера
+    const updatedAssignments = await api.get(`/courses/${courseId}/assignments`);
+    
+    // Обновляем кэш SWR
+    await mutate(updatedAssignments.data, { revalidate: false });
+
+    // Обновляем другие данные
+    await Promise.all([fetchCourse(), fetchStats(), fetchProgress()]);
+  } catch (err) {
+    const axiosErr = err as AxiosError<ErrorResponse>;
+    toast.error(axiosErr.response?.data?.error || 'Ошибка при удалении');
+  }
+};
+
+
+
   const chartOptions: ChartOptions<'line'> = {
     responsive: true,
     plugins: {
@@ -1240,6 +1298,16 @@ export default function CoursePage() {
           <p><strong>Класс:</strong> {course.class_number}</p>
           <p><strong>Преподаватель:</strong> {course.teacher.username}</p>
         </div>
+        {course?.material_url && (
+  <a
+    href={`http://localhost:8080${course.material_url}`} // обязательно абсолютный путь!
+    download // ← ключевая штука, иначе откроется
+    className="text-blue-600 hover:underline"
+  >
+    Скачать PDF
+  </a>
+)}
+
         {user?.role === 'student' && (
           <div className="flex justify-start animate-fade-in-up animation-delay-200">
             {isEnrolled ? (
@@ -1264,6 +1332,29 @@ export default function CoursePage() {
         )}
       </Card>
 
+      {['teacher', 'admin'].includes(user?.role || '') && (
+        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-200">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <DocumentIcon className="w-6 h-6" /> Загрузка материала
+          </h2>
+          <form onSubmit={handleUploadMaterial} className="space-y-4">
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={(e) => setMaterialFile(e.target.files?.[0] || null)}
+              className="w-full text-gray-600 dark:text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-blue-300 dark:hover:file:bg-gray-600"
+            />
+            <Button
+              type="submit"
+              className="w-full hover:scale-105 transition-transform duration-300"
+              disabled={isUploading}
+            >
+              {isUploading ? 'Загрузка...' : 'Загрузить PDF'}
+            </Button>
+          </form>
+        </Card>
+      )}
+
       <ConfirmModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -1280,43 +1371,46 @@ export default function CoursePage() {
       />
 
       {['teacher', 'admin'].includes(user?.role || '') && (
-  <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
-    <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-      <ChartBarIcon className="w-6 h-6" /> Статистика урока
-    </h2>
-    {statsLoading ? (
-      <div className="text-center animate-pulse">Загрузка...</div>
-    ) : statsError ? (
-      <div className="text-red-500 text-center">{statsError}</div>
-    ) : stats ? (
-      <>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
-          </div>
-          <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
-          </div>
-          <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
-            <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <Link href={`/courses/${courseId}/submissions`}>
-            <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
-              <ChartBarIcon className="w-5 h-5" /> Решения студентов
-            </Button>
-          </Link>
-        </div>
-      </>
-    ) : (
-      <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
-    )}
-  </Card>
-)}
+        <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <ChartBarIcon className="w-6 h-6" /> Статистика урока
+          </h2>
+          {statsLoading ? (
+            <div className="text-center animate-pulse">Загрузка...</div>
+          ) : statsError ? (
+  <div className="text-center text-gray-500 dark:text-gray-400">
+    Пока нет решений студентов
+  </div>
+)
+ : stats ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900 rounded-lg text-center">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Студентов</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">{stats.students_count}</p>
+                </div>
+                <div className="p-4 bg-green-50 dark:bg-green-900 rounded-lg text-center">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Средний балл</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-300">{stats.average_grade.toFixed(2)}</p>
+                </div>
+                <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Завершено</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{stats.completion_rate.toFixed(1)}%</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Link href={`/courses/${courseId}/submissions`}>
+                  <Button className="hover:scale-105 transition-transform duration-300 flex items-center gap-2">
+                    <ChartBarIcon className="w-5 h-5" /> Решения студентов
+                  </Button>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="text-center text-gray-500 dark:text-gray-400">Нет данных</div>
+          )}
+        </Card>
+      )}
 
       {user?.role === 'student' && (
         <Card className="p-6 mb-6 card-shadow card-hover-gradient animate-fade-in-up animation-delay-300">
@@ -1342,9 +1436,9 @@ export default function CoursePage() {
                     <p className="text-2xl font-bold text-green-600 dark:text-green-300">{completionRate.toFixed(1)}%</p>
                   </div>
                   <div className="p-4 bg-purple-50 dark:bg-purple-900 rounded-lg text-center">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Баллы</p>
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{totalPoints.toFixed(1)}</p>
-                  </div>
+  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Баллы</p>
+  <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">{totalPoints.toFixed(1)} (из 10 за задание)</p>
+</div>
                 </div>
                 <div className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-6">
                   <div
@@ -1384,29 +1478,50 @@ export default function CoursePage() {
         {assignments.length === 0 ? (
           <div className="text-center text-gray-500 dark:text-gray-400">Заданий нет</div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {assignments.map((assignment, index) => (
-              <Link href={`/courses/${courseId}/assignments/${assignment.id}`} key={assignment.id}>
-                <Card
-                  className={clsx(
-                    'p-6 card-shadow card-hover-gradient hover:scale-[1.01] transition-all duration-300 animate-fade-in-up',
-                    { 'animation-delay-100': index % 3 === 0, 'animation-delay-200': index % 3 === 1, 'animation-delay-300': index % 3 === 2 }
-                  )}
-                >
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">{assignment.title}</h3>
-                    <Button variant="outline" className="flex items-center gap-2">
-                      Открыть <ArrowRightIcon className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">{assignment.description}</p>
-                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <p><strong>Макс. балл:</strong> {assignment.max_score}</p>
-                    <p><strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}</p>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+  <Card
+    key={assignment.id}
+    className={clsx(
+      'p-6 relative card-shadow card-hover-gradient hover:scale-[1.01] transition-all duration-300 animate-fade-in-up',
+      {
+        'animation-delay-100': index % 3 === 0,
+        'animation-delay-200': index % 3 === 1,
+        'animation-delay-300': index % 3 === 2,
+      }
+    )}
+  >
+    <div className="flex justify-between items-start">
+      <div>
+        <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">{assignment.title}</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 line-clamp-2">{assignment.description}</p>
+        <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <p><strong>Макс. балл:</strong> {assignment.max_score}</p>
+          <p><strong>Срок сдачи:</strong> {new Date(assignment.due_date).toLocaleString()}</p>
+        </div>
+      </div>
+
+      {(user?.role === 'teacher' || user?.role === 'admin') && (
+        <button
+          onClick={() => handleDeleteAssignment(assignment.id)}
+          className="text-red-500 hover:text-red-700"
+          title="Удалить задание"
+        >
+          <TrashIcon className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+
+    <div className="mt-4 flex justify-end">
+      <Link href={`/courses/${courseId}/assignments/${assignment.id}`}>
+        <Button variant="outline" className="flex items-center gap-2">
+          Открыть <ArrowRightIcon className="w-4 h-4" />
+        </Button>
+      </Link>
+    </div>
+  </Card>
+))}
+
           </div>
         )}
       </Card>
@@ -1495,8 +1610,8 @@ export default function CourseSubmissionsPage() {
 
   const handleSetGrade = async (submissionId: number) => {
     const grade = parseFloat(gradeInputs[submissionId]);
-    if (isNaN(grade) || grade < 0 || grade > 5) {
-      toast.error('Оценка должна быть от 0 до 5');
+    if (isNaN(grade) || grade < 0 || grade > 10) {
+      toast.error('Оценка должна быть от 0 до 10');
       return;
     }
     try {
@@ -1603,7 +1718,7 @@ export default function CourseSubmissionsPage() {
                             type="number"
                             step="0.1"
                             min="0"
-                            max="5"
+                            max="10"
                             value={gradeInputs[submission.id] ?? submission.score.toString()}
                             onChange={(e) => handleGradeChange(submission.id, e.target.value)}
                             className="w-16"
@@ -2047,15 +2162,15 @@ export default function AssignmentPage() {
             className="p-6"
           >
             <p className="font-semibold text-gray-800 dark:text-white">
-              Оценка: {quizResult.grade.toFixed(1)}
-            </p>
+  Оценка: {quizResult.grade.toFixed(1)} / 10
+</p>
             <p className="font-semibold text-gray-800 dark:text-white">
               Баллы: {quizResult.totalScore.toFixed(1)} / {assignment.max_score}
             </p>
             <div className="mt-4 space-y-4">
               {quizResult.answers.map((answer, idx) => {
                 const subtask = subtasks.find((s) => s.id === answer.SubtaskID);
-                const subtaskScore = assignment.max_score / subtasks.length;
+                const subtaskScore = answer.Score + (answer.IsCorrect ? 0 : 0);
                 return (
                   <motion.div
                     key={answer.SubtaskID}
@@ -2105,8 +2220,9 @@ export default function AssignmentPage() {
                     )}
                     <p className="text-gray-700 dark:text-gray-200">Попытки: {answer.Attempts}</p>
                     <p className="text-gray-700 dark:text-gray-200">
-                      Баллы: {answer.Score.toFixed(1)} / {subtaskScore.toFixed(1)}
-                    </p>
+  Баллы за подзадание: {answer.Score.toFixed(1)}
+</p>
+
                     {subtask?.input_type === 'multiple_choice' && subtask?.options.length > 0 && (
                       <div className="mt-2">
                         <p className="text-gray-700 dark:text-gray-200">Варианты:</p>
@@ -2381,10 +2497,11 @@ export default function CreateAssignmentPage() {
       }
 
       const response = await api.post('/assignments', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+  headers: { 'Content-Type': 'multipart/form-data' },
+});
+toast.success('Задание успешно создано!');
+window.location.href = `/courses/${courseId}`; // 👈 Вот здесь замена
+
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';
@@ -3264,10 +3381,8 @@ export default function ProfilePage() {
     try {
       let response;
       if (user.role === 'student') {
-        // Запрашиваем курсы, на которые записан ученик
         response = await api.get('/enrollments', { params: { userID: user.id } });
       } else if (user.role === 'teacher' || user.role === 'admin') {
-        // Запрашиваем курсы, созданные учителем или админом
         response = await api.get('/courses', { params: { teacherID: user.id } });
       }
       setCourses(response.data.courses || []);
@@ -3338,162 +3453,158 @@ export default function ProfilePage() {
           className="p-6 mb-6 card-transparent card-shadow card-hover-gradient animate-fade-in-up"
           style={{ animationDelay: '200ms' }}
         >
-          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Аватар</h2>
-          <div className="flex items-center gap-4">
-            {isLoading ? (
-              <div className="animate-pulse h-24 w-24 rounded-full bg-gray-200" />
-            ) : (
-              <img
-                src={user?.avatar_url || avatarOptions[0]}
-                alt="avatar"
-                className="w-24 h-24 rounded-full border-4 border-blue-600 dark:border-blue-400 object-cover hover:scale-105 transition-transform duration-200"
-              />
-            )}
-            <Button
-              onClick={() => setAvatarModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
-            >
-              Выбрать аватар
-            </Button>
-          </div>
-        </Card>
-
-        <Card
-          className="p-6 card-transparent card-shadow card-hover-gradient animate-fade-in-up"
-          style={{ animationDelay: '300ms' }}
-        >
-          {isEditing ? (
-            <form onSubmit={handleEdit} className="space-y-4">
-              {editError && (
-                <p className="bg-red-500 dark:bg-red-600 text-white dark:text-gray-100 p-3 rounded text-sm animate-pulse mx-auto text-center">
-                  {editError}
-                </p>
-              )}
-
-              <div>
-                <label
-                  htmlFor="username"
-                  className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
-                >
-                  Имя
-                </label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  placeholder="Введите имя"
-                  className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+          <div className="flex flex-col sm:flex-row gap-6">
+            <div className="flex flex-col items-center sm:items-start">
+              {isLoading ? (
+                <div className="animate-pulse h-24 w-24 rounded-full bg-gray-200" />
+              ) : (
+                <img
+                  src={user?.avatar_url || avatarOptions[0]}
+                  alt="avatar"
+                  className="w-24 h-24 rounded-full border-4 border-blue-600 dark:border-blue-400 object-cover"
                 />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="fullName"
-                  className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
-                >
-                  ФИО
-                </label>
-                <Input
-                  id="fullName"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  placeholder="Иванов Иван Иванович"
-                  className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="example@domain.com"
-                  className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
-                />
-              </div>
-
-              <div
-                className="flex flex-col sm:flex-row justify-end gap-3 pt-3 animate-pulse"
-                style={{ animationDelay: '400ms' }}
-              >
-                <Button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
-                >
-                  Сохранить
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  variant="outline"
-                  className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
-                >
-                  Отмена
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="space-y-4 text-gray-900 dark:text-gray-100">
-              <p>
-                <strong>Имя:</strong> {user.username}
-              </p>
-              {user.full_name && (
-                <p>
-                  <strong>ФИО:</strong> {user.full_name}
-                </p>
               )}
-              <p>
-                <strong>Email:</strong> {user.email}
-              </p>
-              <p
-                className="relative group"
-                data-tooltip="Роль определяет ваш уровень доступа"
+              <Button
+                onClick={() => setAvatarModalOpen(true)}
+                className="mt-4 bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200"
               >
-                <strong>Роль:</strong> {user.role}
-                <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-                  Роль определяет ваш уровень доступа
-                </span>
-              </p>
-              {user.role === 'student' && (
-                <p>
-                  <strong>Класс:</strong> {user.class_number}
-                </p>
-              )}
-              <p>
-                <strong>Баллы:</strong> {user.points}
-              </p>
+                Выбрать аватар
+              </Button>
+            </div>
 
-              <div
-                className="mt-6 flex flex-col sm:flex-row gap-3 justify-end animate-pulse"
-                style={{ animationDelay: '400ms' }}
-              >
-                <Button
-                  onClick={() => setIsEditing(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+            {isEditing ? (
+              <form onSubmit={handleEdit} className="flex-1 space-y-4">
+                {editError && (
+                  <p className="bg-red-500 dark:bg-red-600 text-white dark:text-gray-100 p-3 rounded text-sm animate-pulse mx-auto text-center">
+                    {editError}
+                  </p>
+                )}
+                <div>
+                  <label
+                    htmlFor="username"
+                    className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+                  >
+                    Имя
+                  </label>
+                  <Input
+                    id="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    placeholder="Введите имя"
+                    className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="fullName"
+                    className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+                  >
+                    ФИО
+                  </label>
+                  <Input
+                    id="fullName"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    placeholder="Иванов Иван Иванович"
+                    className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300"
+                  >
+                    Email
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="example@domain.com"
+                    className="border-blue-600 dark:bg-gray-800 dark:text-gray-300 focus:ring-blue-600"
+                  />
+                </div>
+                <div
+                  className="flex flex-col sm:flex-row justify-end gap-3 pt-3 animate-pulse"
+                  style={{ animationDelay: '400ms' }}
                 >
-                  Редактировать профиль
-                </Button>
-                <Link href="/achievements">
                   <Button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+                  >
+                    Сохранить
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
                     variant="outline"
                     className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
                   >
-                    Мои достижения 🏆
+                    Отмена
                   </Button>
-                </Link>
+                </div>
+              </form>
+            ) : (
+              <div className="flex-1 space-y-4 text-gray-900 dark:text-gray-100">
+                <p>
+                  <strong>Имя:</strong> {user.username}
+                </p>
+                {user.full_name && (
+                  <p>
+                    <strong>ФИО:</strong> {user.full_name}
+                  </p>
+                )}
+                <p>
+                  <strong>Email:</strong> {user.email}
+                </p>
+                <p
+                  className="relative group"
+                  data-tooltip="Роль определяет ваш уровень доступа"
+                >
+                  <strong>Роль:</strong> {user.role}
+                  <span className="absolute hidden group-hover:block bg-gray-800 dark:bg-gray-900 text-white text-xs rounded py-1 px-2 -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                    Роль определяет ваш уровень доступа
+                  </span>
+                </p>
+                {user.role === 'student' && (
+                  <p>
+                    <strong>Класс:</strong> {user.class_number}
+                  </p>
+                )}
+                <p>
+                  <strong>Баллы:</strong>{' '}
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    {user.points ?? 0}
+                  </span>
+                </p>
+                <div
+                  className="mt-6 flex flex-col sm:flex-row gap-3 justify-end animate-pulse"
+                  style={{ animationDelay: '400ms' }}
+                >
+                  <Button
+                    onClick={() => setIsEditing(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg hover:shadow-blue-600/20 transition-all duration-200"
+                  >
+                    Редактировать профиль
+                  </Button>
+                  {user.role === 'student' && (
+                    <Link href="/achievements">
+                      <Button
+                        variant="outline"
+                        className="border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-600 hover:bg-blue-600 hover:text-white dark:hover:text-white transition-colors duration-200"
+                      >
+                        Мои достижения 🏆
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
 
         <Card
@@ -3501,7 +3612,7 @@ export default function ProfilePage() {
           style={{ animationDelay: '400ms' }}
         >
           <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">
-            {user.role === 'student' ? 'Мои курсы' : 'Созданные курсы'}
+            {user.role === 'student' ? 'Мои уроки' : 'Созданные уроки'}
           </h2>
           {isCoursesLoading ? (
             <div className="space-y-4">
@@ -3513,7 +3624,7 @@ export default function ProfilePage() {
             <p className="text-center text-red-500">{coursesError}</p>
           ) : courses.length === 0 ? (
             <p className="text-center text-gray-500 dark:text-gray-400">
-              {user.role === 'student' ? 'Вы не записаны на курсы' : 'Вы не создали курсы'}
+              {user.role === 'student' ? 'Вы не записаны на уроки' : 'Вы не создали уроки'}
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -3740,15 +3851,17 @@ export default function AchievementsPage() {
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@/entities/user/hook';
-import UserManagement from './components/UserManagement'; // Исправлен импорт
+import UserManagement from './components/UserManagement';
 import AchievementManagement from './components/AchievementManagement';
-import ActionLogs from './components/ActionLogs'; // Исправлен импорт
+import ActionLogs from './components/ActionLogs';
 import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import clsx from 'clsx';
 import { UserIcon, TrophyIcon, ClipboardIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import { motion } from 'framer-motion';
+import ConfirmModal from '@/widgets/ConfirmModal';
 
 interface User {
   id: number;
@@ -3756,6 +3869,7 @@ interface User {
   email: string;
   role: string;
   class_number: number;
+  full_name: string;
 }
 
 interface ApiAchievement {
@@ -3792,6 +3906,19 @@ export default function AdminPage() {
   const [formError, setFormError] = useState('');
   const [activeTab, setActiveTab] = useState<'users' | 'achievements' | 'logs'>('users');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [roleModal, setRoleModal] = useState<{ isOpen: boolean; user: User | null; newRole: string }>({
+    isOpen: false,
+    user: null,
+    newRole: '',
+  });
+  const [deleteUserModal, setDeleteUserModal] = useState<{ isOpen: boolean; user: User | null }>({
+    isOpen: false,
+    user: null,
+  });
+  const [deleteAchievementModal, setDeleteAchievementModal] = useState<{ isOpen: boolean; achievement: Achievement | null }>({
+    isOpen: false,
+    achievement: null,
+  });
 
   const fetchData = async () => {
     try {
@@ -3824,143 +3951,296 @@ export default function AdminPage() {
     }
   }, [user]);
 
+  const handleUpdateRole = async () => {
+    if (!roleModal.user) return;
+
+    try {
+      await api.put(`/users/${roleModal.user.id}/role`, { role: roleModal.newRole.toLowerCase() });
+      fetchData();
+      setRoleModal({ isOpen: false, user: null, newRole: '' });
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка изменения роли';
+      setFormError(errorMsg);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+  if (!deleteUserModal.user) return;
+
+  try {
+    await api.delete(`/admin/users/${deleteUserModal.user.id}`); // Updated path
+    fetchData();
+    setDeleteUserModal({ isOpen: false, user: null });
+  } catch (err: unknown) {
+    const axiosError = err as AxiosError<ErrorResponse>;
+    const errorMsg = axiosError.response?.data?.error || 'Ошибка удаления пользователя';
+    setFormError(errorMsg);
+  }
+};
+
+  const handleDeleteAchievement = async () => {
+    if (!deleteAchievementModal.achievement) return;
+
+    try {
+      await api.delete(`/achievements/${deleteAchievementModal.achievement.id}`);
+      fetchData();
+      setDeleteAchievementModal({ isOpen: false, achievement: null });
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<ErrorResponse>;
+      const errorMsg = axiosError.response?.data?.error || 'Ошибка удаления достижения';
+      setFormError(errorMsg);
+    }
+  };
+
   const tabs = [
-    { id: 'users', label: 'Управление пользователями', icon: UserIcon, component: <UserManagement users={users} onSuccess={fetchData} setFormError={setFormError} /> },
-    { id: 'achievements', label: 'Управление достижениями', icon: TrophyIcon, component: <AchievementManagement achievements={achievements} onSuccess={fetchData} setFormError={setFormError} /> },
+    {
+      id: 'users',
+      label: 'Управление пользователями',
+      icon: UserIcon,
+      component: (
+        <UserManagement
+          users={users}
+          onSuccess={fetchData}
+          setFormError={setFormError}
+          openRoleModal={(user) =>
+            setRoleModal({ isOpen: true, user, newRole: user.role })
+          }
+          openDeleteModal={(user) => setDeleteUserModal({ isOpen: true, user })}
+        />
+      ),
+    },
+    {
+      id: 'achievements',
+      label: 'Управление достижениями',
+      icon: TrophyIcon,
+      component: (
+        <AchievementManagement
+          achievements={achievements}
+          onSuccess={fetchData}
+          setFormError={setFormError}
+          openDeleteModal={(achievement) => setDeleteAchievementModal({ isOpen: true, achievement })}
+        />
+      ),
+    },
     { id: 'logs', label: 'Логи действий', icon: ClipboardIcon, component: <ActionLogs logs={logs} /> },
   ] as const;
 
   if (isLoading) {
     return (
-      <div className="max-w-7xl mx-auto mt-12 px-4">
-        <h1 className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up" style={{ animationDelay: '100ms' }}>
-          🛠 Админ-панель
-        </h1>
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i} className="p-6 card-shadow dark:bg-gray-800 animate-pulse">
-              <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-              <div className="h-3 w-1/2 bg-gray-200 dark:bg-gray-700 rounded" />
-            </Card>
-          ))}
+      <div className="w-full h-auto flex flex-col bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)]">
+        <div className="max-w-[140rem] mx-auto mt-8 px-4 flex flex-col flex-1">
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+          >
+            🛠 Админ-панель
+          </motion.h1>
+          <div className="space-y-4 flex-1">
+            {[...Array(3)].map((_, i) => (
+              <Card
+                key={i}
+                className="p-6 rounded-2xl dark:bg-gray-800 animate-pulse"
+              >
+                <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                <div className="h-3 w-1/2 bg-gray-200 dark:bg-gray-700 rounded" />
+              </Card>
+            ))}
+          </div>
         </div>
+        <footer className="bg-gray-100 dark:bg-gray-800 text-center py-4 mt-auto">
+          <p className="text-gray-600 dark:text-gray-400 text-sm">© 2025 Admin Panel</p>
+        </footer>
       </div>
     );
   }
 
   if (!user || user.role !== 'admin') {
     return (
-      <div className="max-w-7xl mx-auto mt-12 px-4">
-        <h1 className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up" style={{ animationDelay: '100ms' }}>
-          🛠 Админ-панель
-        </h1>
-        <p className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-4 animate-pulse" style={{ animationDelay: '200ms' }}>
-          Доступ запрещён
-        </p>
+      <div className="w-full h-auto flex flex-col bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)]">
+        <div className="max-w-[140rem] mx-auto mt-8 px-4 flex flex-col flex-1">
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
+          >
+            🛠 Админ-панель
+          </motion.h1>
+          <p
+            className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded-2xl mb-4 animate-pulse"
+            style={{ animationDelay: '200ms' }}
+          >
+            Доступ запрещён
+          </p>
+        </div>
+        <footer className="bg-gray-100 dark:bg-gray-800 text-center py-4 mt-auto">
+          <p className="text-gray-600 dark:text-gray-400 text-sm">© 2025 Admin Panel</p>
+        </footer>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto mt-12 px-4 flex flex-col md:flex-row gap-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <Button
-        className="md:hidden bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg mb-4 flex items-center gap-2 hover:scale-105 transition-transform duration-200"
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-      >
-        {isSidebarOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
-        Меню
-      </Button>
-
-      <Card
-        className={clsx(
-          'w-full md:w-64 card-shadow dark:bg-gray-800 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 transition-transform duration-300',
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-          'fixed md:static top-0 left-0 h-full md:h-auto z-40 shadow-xl md:shadow-none p-6'
-        )}
-      >
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-6 flex items-center gap-2">
-          <ClipboardIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-          Панель управления
-        </h2>
-        <nav className="space-y-2">
-          {tabs.map((tab, index) => {
-            const Icon = tab.icon;
-            return (
-              <Button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setIsSidebarOpen(false);
-                }}
-                className={clsx(
-                  'w-full flex items-center gap-3 text-left py-3 px-4 rounded-lg transition-transform duration-200 hover:scale-105',
-                  activeTab === tab.id
-                    ? 'bg-blue-600 text-white hover:bg-blue-700 animate-pulse'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600',
-                  'animate-slide-in-left'
-                )}
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <Icon className="h-6 w-6 hover:animate-bounce" />
-                <span className="flex-1">{tab.label}</span>
-              </Button>
-            );
-          })}
-        </nav>
-      </Card>
-
-      <div className="flex-1">
-        <h1
-          className="text-4xl font-extrabold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text animate-fade-in-up"
-          style={{ animationDelay: '100ms' }}
+    <div className="w-full h-auto flex flex-col bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-64px)]">
+      <div className="max-w-[140rem] mx-auto mt-8 px-4 flex flex-col md:flex-row gap-8 flex-1 rounded-2xl shadow-lg overflow-hidden">
+        <Button
+          className="md:hidden bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-2xl mb-4 flex items-center gap-2 hover:scale-105 transition-transform duration-200"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         >
-          🛠 Админ-панель
-        </h1>
+          {isSidebarOpen ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
+          Меню
+        </Button>
 
-        {formError && (
-          <p
-            className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded mb-6 animate-pulse"
-            style={{ animationDelay: '200ms' }}
+        <Card
+          className={clsx(
+            'w-full md:w-64 rounded-2xl dark:bg-gray-800 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 transition-transform duration-300',
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+            'fixed md:static top-0 left-0 h-full md:h-auto z-40 shadow-xl md:shadow-none p-6'
+          )}
+        >
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-6 flex items-center gap-2">
+            <ClipboardIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            Панель управления
+          </h2>
+          <nav className="space-y-2">
+            {tabs.map((tab, index) => {
+              const Icon = tab.icon;
+              return (
+                <Button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setIsSidebarOpen(false);
+                  }}
+                  className={clsx(
+                    'w-full flex items-center gap-3 text-left py-3 px-4 rounded-2xl transition-transform duration-200 hover:scale-105',
+                    activeTab === tab.id
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 animate-pulse'
+                      : 'bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-400 dark:hover:bg-gray-600',
+                    'animate-slide-in-left'
+                  )}
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <Icon className="h-6 w-6 hover:animate-bounce" />
+                  <span className="flex-1">{tab.label}</span>
+                </Button>
+              );
+            })}
+          </nav>
+        </Card>
+
+        <div className="flex-1 flex flex-col">
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="text-center text-3xl sm:text-4xl font-extrabold text-gray-800 dark:text-white max-w-3xl mx-auto break-words mb-6"
           >
-            {formError}
-          </p>
+            🛠 Админ-панель
+          </motion.h1>
+
+          {formError && (
+            <p
+              className="text-center bg-red-500 dark:bg-red-600 text-white p-3 rounded-2xl mb-6 animate-pulse"
+              style={{ animationDelay: '200ms' }}
+            >
+              {formError}
+            </p>
+          )}
+
+          <div className="relative flex-1 flex flex-col">
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={clsx(
+                  'transition-all duration-600 ease-in-out w-full',
+                  activeTab === tab.id
+                    ? 'opacity-100 transform translate-x-0'
+                    : 'opacity-0 transform translate-x-10 pointer-events-none absolute top-0 left-0 w-full'
+                )}
+              >
+                <Card
+                  className={clsx(
+                    'p-8 rounded-2xl dark:bg-gray-800 animate-fade-in-up border-l-4 w-full',
+                    tab.id === 'users' && 'border-blue-600',
+                    tab.id === 'achievements' && 'border-yellow-600',
+                    tab.id === 'logs' && 'border-gray-600'
+                  )}
+                  style={{ animationDelay: '200ms' }}
+                >
+                  <h2 className="text-2xl font-semibold mb-6 text-gray-800 dark:text-gray-200">
+                    {tab.label}
+                  </h2>
+                  {tab.component}
+                </Card>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {roleModal.isOpen && roleModal.user && (
+          <ConfirmModal
+            isOpen={roleModal.isOpen}
+            onClose={() => setRoleModal({ isOpen: false, user: null, newRole: '' })}
+            onConfirm={handleUpdateRole}
+            title="Изменить роль пользователя"
+            message={
+              <div>
+                Изменить роль пользователя <span>{roleModal.user.username}</span> на:
+                <select
+                  value={roleModal.newRole}
+                  onChange={(e) =>
+                    setRoleModal({ ...roleModal, newRole: e.target.value })
+                  }
+                  className="mt-2 p-2 border border-blue-600 rounded-lg w-full dark:bg-gray-800 dark:text-gray-300"
+                >
+                  <option value="student">Ученик</option>
+                  <option value="teacher">Учитель</option>
+                  <option value="admin">Админ</option>
+                </select>
+              </div>
+            }
+            confirmText="Изменить"
+            cancelText="Отмена"
+          />
         )}
 
-        <div className="relative">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={clsx(
-                'transition-all duration-600 ease-in-out',
-                activeTab === tab.id
-                  ? 'opacity-100 transform translate-x-0'
-                  : 'opacity-0 transform translate-x-10 pointer-events-none absolute top-0 left-0 w-full'
-              )}
-            >
-              <Card
-                className={clsx(
-                  'p-8 card-shadow card-hover-gradient dark:bg-gray-800 animate-fade-in-up border-l-4',
-                  tab.id === 'users' && 'border-blue-600',
-                  tab.id === 'achievements' && 'border-yellow-600',
-                  tab.id === 'logs' && 'border-gray-600'
-                )}
-                style={{ animationDelay: '200ms' }}
-              >
-                <h2
-                  className="text-2xl font-semibold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text"
-                  style={{ animationDelay: '300ms' }}
-                >
-                  {tab.label}
-                </h2>
-                {tab.component}
-              </Card>
-            </div>
-          ))}
-        </div>
+        {deleteUserModal.isOpen && deleteUserModal.user && (
+          <ConfirmModal
+            isOpen={deleteUserModal.isOpen}
+            onClose={() => setDeleteUserModal({ isOpen: false, user: null })}
+            onConfirm={handleDeleteUser}
+            title="Удалить пользователя"
+            message={`Вы уверены, что хотите удалить пользователя ${deleteUserModal.user.username} (${deleteUserModal.user.full_name || 'Без ФИО'})?`}
+            confirmText="Удалить"
+            cancelText="Отмена"
+            confirmButtonClass="bg-red-600 hover:bg-red-700"
+          />
+        )}
+
+        {deleteAchievementModal.isOpen && deleteAchievementModal.achievement && (
+          <ConfirmModal
+            isOpen={deleteAchievementModal.isOpen}
+            onClose={() => setDeleteAchievementModal({ isOpen: false, achievement: null })}
+            onConfirm={handleDeleteAchievement}
+            title="Удалить достижение"
+            message={`Вы уверены, что хотите удалить достижение "${deleteAchievementModal.achievement.title}"?`}
+            confirmText="Удалить"
+            cancelText="Отмена"
+            confirmButtonClass="bg-red-600 hover:bg-red-700"
+          />
+        )}
       </div>
+      <footer className="bg-gray-100 dark:bg-gray-800 text-center py-4 mt-auto">
+        <p className="text-gray-600 dark:text-gray-400 text-sm">© 2025 Admin Panel</p>
+        </footer>
     </div>
   );
 }
+
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -4006,7 +4286,7 @@ interface LogEntry {
   action: string;
   details: string;
   created_at: string;
-  user?: User | null; // Сделали user необязательным
+  user?: User | null;
 }
 
 type FilterType = 'all' | 'create' | 'update' | 'delete' | 'enroll' | 'submit' | 'achieve';
@@ -4033,7 +4313,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
     { id: 'create', label: 'Создание' },
     { id: 'update', label: 'Обновление' },
     { id: 'delete', label: 'Удаление' },
-    { id: 'enroll', label: 'урокы' },
+    { id: 'enroll', label: 'Уроки' },
     { id: 'submit', label: 'Оценки' },
     { id: 'achieve', label: 'Достижения' },
   ];
@@ -4117,8 +4397,8 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="p-4 card-shadow dark:bg-gray-800">
+    <div className="w-[50rem] mx-auto space-y-4 flex flex-col">
+      <Card className="p-4 w-full shadow-sm rounded-xl dark:bg-gray-800">
         <div className="flex flex-wrap gap-4 justify-center sm:justify-start">
           <div className="flex flex-wrap gap-2">
             {filterOptions.map((f) => (
@@ -4169,23 +4449,23 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
           </div>
           <Button
             onClick={handleExportCSV}
-            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-md hover:scale-105 transition-transform duration-200"
+            className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-md hover:ring-2 hover:ring-green-300 transition-all duration-200"
           >
             <DocumentArrowDownIcon className="h-5 w-5" />
             Экспорт CSV
           </Button>
         </div>
       </Card>
-      <div className="max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+      <div className="flex-1 overflow-y-auto">
         {paginatedLogs.length === 0 ? (
-          <Card className="p-6 text-center card-shadow dark:bg-gray-800">
+          <Card className="p-6 text-center w-full shadow-sm rounded-xl dark:bg-gray-800">
             <DocumentTextIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-300 mb-2" />
             <p className="text-gray-600 dark:text-gray-300">
-              Нет логов для &quot;{filterOptions.find((f) => f.id === filter)?.label || filter}&quot;. Действия появятся позже!
+              Нет логов для "{filterOptions.find((f) => f.id === filter)?.label || filter}". Действия появятся позже!
             </p>
           </Card>
         ) : (
-          <ul className="space-y-4">
+          <ul className="w-full space-y-4">
             {paginatedLogs.map((log, index) => {
               const actionType = getActionType(log.action);
               if (!actionType) return null;
@@ -4194,7 +4474,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
                 <li key={log.id}>
                   <Card
                     className={clsx(
-                      'p-4 card-shadow dark:bg-gray-800 transition-transform duration-200 hover:scale-[1.01] hover:shadow-lg hover:z-10'
+                      'p-4 w-full shadow-sm rounded-xl dark:bg-gray-800 hover:shadow-md'
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -4218,17 +4498,6 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
                           <span className="font-medium">Роль:</span> {log.user?.role || (log.user_id === 0 ? 'Система' : 'Неизвестно')}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{log.details}</p>
-                        <div className="mt-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-300">
-                            <span>Активность:</span>
-                            <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full">
-                              <div
-                                className="h-full bg-blue-600 rounded-full"
-                                style={{ width: `${Math.min((index + 1) * 20, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
                         <span className="text-xs text-gray-500 dark:text-gray-300">
                           {new Date(log.created_at).toLocaleString('ru-RU', {
                             dateStyle: 'medium',
@@ -4245,7 +4514,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
         )}
       </div>
       {totalPages > 1 && (
-        <Card className="p-4 card-shadow dark:bg-gray-800">
+        <Card className="p-4 w-full shadow-sm rounded-xl dark:bg-gray-800 mt-4">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="flex gap-2 items-center">
               <Button
@@ -4286,6 +4555,7 @@ export default function ActionLogs({ logs }: ActionLogsProps) {
 }
 
 
+
 ════════════════════════════════════════════════════════════════════════════════
 ║ frontend/src/app/admin/components/UserManagement.tsx
 ════════════════════════════════════════════════════════════════════════════════
@@ -4300,13 +4570,13 @@ import { api } from '@/shared/api';
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import ConfirmModal from '@/widgets/ConfirmModal';
-import { EnvelopeIcon, LockClosedIcon, UserGroupIcon, UserIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
+import { EnvelopeIcon, LockClosedIcon, UserGroupIcon, UserIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 interface User {
   id: number;
   username: string;
   email: string;
+  full_name: string;
   role: string;
   class_number: number;
 }
@@ -4319,19 +4589,21 @@ interface UserManagementProps {
   users: User[];
   onSuccess: () => void;
   setFormError: (error: string) => void;
+  openRoleModal: (user: User) => void;
+  openDeleteModal: (user: User) => void;
 }
 
-export default function UserManagement({ users, onSuccess, setFormError }: UserManagementProps) {
+export default function UserManagement({ users, onSuccess, setFormError, openRoleModal, openDeleteModal }: UserManagementProps) {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserRole, setNewUserRole] = useState('teacher');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [newRole, setNewRole] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [fullNameError, setFullNameError] = useState('');
   const [filterRole, setFilterRole] = useState<'all' | 'teacher' | 'student'>('all');
   const [filterClass, setFilterClass] = useState<number | 'all'>('all');
+  const [filterFullName, setFilterFullName] = useState('');
   const [sortColumn, setSortColumn] = useState<keyof User | 'class_number'>('id');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -4350,6 +4622,12 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
     } else {
       setPasswordError('');
     }
+    if (!newUserFullName) {
+      setFullNameError('ФИО обязательно');
+      isValid = false;
+    } else {
+      setFullNameError('');
+    }
     return isValid;
   };
 
@@ -4361,45 +4639,21 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
       await api.post('/admin/create-user', {
         email: newUserEmail,
         password: newUserPassword,
+        full_name: newUserFullName,
         role: newUserRole,
       });
       toast.success('Пользователь создан');
       onSuccess();
       setNewUserEmail('');
       setNewUserPassword('');
+      setNewUserFullName('');
       setNewUserRole('teacher');
-    } catch (err: unknown) {
+    } catch (err: any) {
       const axiosError = err as AxiosError<ErrorResponse>;
       const errorMsg = axiosError.response?.data?.error || 'Ошибка регистрации';
       setFormError(errorMsg);
       toast.error(errorMsg);
       console.error('Create user error:', err);
-    }
-  };
-
-  const openRoleModal = (user: User) => {
-    setSelectedUser(user);
-    setNewRole(user.role);
-    setIsModalOpen(true);
-  };
-
-  const handleUpdateRole = async () => {
-    if (!selectedUser) return;
-
-    try {
-      await api.put(`/users/${selectedUser.id}/role`, { role: newRole.toLowerCase() });
-      toast.success('Роль обновлена');
-      onSuccess();
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMsg = axiosError.response?.data?.error || 'Ошибка изменения роли';
-      setFormError(errorMsg);
-      toast.error(errorMsg);
-      console.error('Update role error:', err);
-    } finally {
-      setIsModalOpen(false);
-      setSelectedUser(null);
-      setNewRole('');
     }
   };
 
@@ -4429,6 +4683,10 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
       }
       return false;
     })
+    .filter((user) => {
+      if (!filterFullName) return true;
+      return user.full_name.toLowerCase().includes(filterFullName.toLowerCase());
+    })
     .sort((a, b) => {
       const aValue = a[sortColumn];
       const bValue = b[sortColumn];
@@ -4438,13 +4696,13 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
     });
 
   return (
-    <div className="space-y-6">
-      <Card className="p-6 card-shadow dark:bg-gray-800 animate-fade-in-up border-l-4 border-green-600" style={{ animationDelay: '300ms' }}>
-        <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Создать пользователя</h3>
-        <form onSubmit={handleRegisterUser} className="grid gap-4 sm:grid-cols-2">
+    <div className="w-[50rem] mx-auto">
+      <Card className="p-4 rounded-xl dark:bg-gray-800 animate-fade-in-up border-l-4 border-green-500 w-full mb-4 shadow-sm" style={{ animationDelay: '300ms' }}>
+        <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-100">Создать пользователя</h3>
+        <form onSubmit={handleRegisterUser} className="grid gap-3 sm:grid-cols-2">
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <EnvelopeIcon className="h-5 w-5 text-gray-400 dark:text-gray-300" />
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+              <EnvelopeIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
             </div>
             <Input
               type="email"
@@ -4452,16 +4710,16 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
               value={newUserEmail}
               onChange={(e) => setNewUserEmail(e.target.value)}
               className={clsx(
-                'pl-10 border-blue-600 dark:bg-gray-800 dark:text-gray-300',
-                emailError && 'border-red-600'
+                'pl-8 text-sm border-blue-500 dark:bg-gray-800 dark:text-gray-200',
+                emailError && 'border-red-500'
               )}
               required
             />
             {emailError && <p className="text-red-500 text-xs mt-1">{emailError}</p>}
           </div>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <LockClosedIcon className="h-5 w-5 text-gray-400 dark:text-gray-300" />
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+              <LockClosedIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
             </div>
             <Input
               type="password"
@@ -4469,38 +4727,54 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
               value={newUserPassword}
               onChange={(e) => setNewUserPassword(e.target.value)}
               className={clsx(
-                'pl-10 border-blue-600 dark:bg-gray-800 dark:text-gray-300',
-                passwordError && 'border-red-600'
+                'pl-8 text-sm border-blue-500 dark:bg-gray-800 dark:text-gray-200',
+                passwordError && 'border-red-500'
               )}
               required
             />
             {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
           </div>
-          <div className="relative sm:col-span-2">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <UserGroupIcon className="h-5 w-5 text-gray-400 dark:text-gray-300" />
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+              <UserIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
+            </div>
+            <Input
+              type="text"
+              placeholder="ФИО"
+              value={newUserFullName}
+              onChange={(e) => setNewUserFullName(e.target.value)}
+              className={clsx(
+                'pl-8 text-sm border-blue-500 dark:bg-gray-800 dark:text-gray-200',
+                fullNameError && 'border-red-500'
+              )}
+              required
+            />
+            {fullNameError && <p className="text-red-500 text-xs mt-1">{fullNameError}</p>}
+          </div>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+              <UserGroupIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
             </div>
             <select
               value={newUserRole}
               onChange={(e) => setNewUserRole(e.target.value)}
-              className="p-2 pl-10 border border-blue-600 rounded-lg w-full dark:bg-gray-800 dark:text-gray-300"
+              className="p-2 pl-8 text-sm border border-blue-500 rounded-lg w-full dark:bg-gray-800 dark:text-gray-200"
             >
               <option value="teacher">Учитель</option>
-              <option value="student">Ученик</option>
               <option value="admin">Админ</option>
             </select>
           </div>
           <Button
             type="submit"
-            className="sm:col-span-2 bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
+            className="sm:col-span-2 bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 hover:scale-105 transition-transform duration-200"
           >
             Создать
           </Button>
         </form>
       </Card>
 
-      <Card className="p-4 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
+      <Card className="p-3 rounded-xl dark:bg-gray-800 animate-fade-in-up w-full mb-4 shadow-sm" style={{ animationDelay: '200ms' }}>
+        <div className="flex flex-col sm:flex-row gap-3 items-center">
           <div className="flex gap-2">
             {[
               { value: 'all', label: 'Все' },
@@ -4514,21 +4788,32 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
                   if (opt.value !== 'student') setFilterClass('all');
                 }}
                 className={clsx(
-                  'text-sm',
+                  'text-xs py-1 px-3',
                   filterRole === opt.value
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
                 )}
               >
                 {opt.label}
               </Button>
             ))}
           </div>
+          <div className="relative w-full sm:w-48">
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+              <UserIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
+            </div>
+            <Input
+              placeholder="Поиск по ФИО"
+              value={filterFullName}
+              onChange={(e) => setFilterFullName(e.target.value)}
+              className="pl-8 text-sm border-blue-500 dark:bg-gray-800 dark:text-gray-200 w-full"
+            />
+          </div>
           {filterRole === 'student' && (
             <select
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              className="p-2 border border-blue-600 rounded-lg dark:bg-gray-800 dark:text-gray-300"
+              className="p-2 text-sm border border-blue-500 rounded-lg dark:bg-gray-800 dark:text-gray-200"
             >
               <option value="all">Все классы</option>
               {[...Array(11)].map((_, i) => (
@@ -4542,84 +4827,101 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
             onClick={() => {
               setFilterRole('all');
               setFilterClass('all');
+              setFilterFullName('');
               setSortColumn('id');
               setSortDirection('asc');
             }}
-            className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+            className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs py-1 px-3"
           >
             Сбросить
           </Button>
         </div>
       </Card>
 
-      <Card className="p-6 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
-        <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Список пользователей</h3>
+      <Card className="p-4 rounded-xl dark:bg-gray-800 animate-fade-in-up w-full shadow-sm" style={{ animationDelay: '300ms' }}>
+        <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-100">Список пользователей</h3>
         {filteredUsers.length === 0 ? (
           <div className="text-center py-6">
-            <UserIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-            <p className="text-gray-600 dark:text-gray-400">Нет пользователей по выбранным фильтрам</p>
+            <UserIcon className="h-10 w-10 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+            <p className="text-gray-600 dark:text-gray-400 text-sm">Нет пользователей по выбранным фильтрам</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-800 dark:text-gray-300">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-xs text-left text-gray-800 dark:text-gray-200">
               <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-700">
                 <tr>
-                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('id')}>
+                  <th className="px-2 py-2 cursor-pointer min-w-[60px]" onClick={() => handleSort('id')}>
                     ID
                     {sortColumn === 'id' && (
-                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-3 w-3 inline ml-1" /> : <ArrowDownIcon className="h-3 w-3 inline ml-1" />
                     )}
                   </th>
-                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('username')}>
+                  <th className="px-2 py-2 cursor-pointer min-w-[100px]" onClick={() => handleSort('username')}>
                     Имя
                     {sortColumn === 'username' && (
-                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-3 w-3 inline ml-1" /> : <ArrowDownIcon className="h-3 w-3 inline ml-1" />
                     )}
                   </th>
-                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('email')}>
+                  <th className="px-2 py-2 cursor-pointer min-w-[100px]" onClick={() => handleSort('full_name')}>
+                    ФИО
+                    {sortColumn === 'full_name' && (
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-3 w-3 inline ml-1" /> : <ArrowDownIcon className="h-3 w-3 inline ml-1" />
+                    )}
+                  </th>
+                  <th className="px-2 py-2 cursor-pointer min-w-[120px]" onClick={() => handleSort('email')}>
                     Email
                     {sortColumn === 'email' && (
-                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-3 w-3 inline ml-1" /> : <ArrowDownIcon className="h-3 w-3 inline ml-1" />
                     )}
                   </th>
-                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('role')}>
+                  <th className="px-2 py-2 cursor-pointer min-w-[80px]" onClick={() => handleSort('role')}>
                     Роль
                     {sortColumn === 'role' && (
-                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-3 w-3 inline ml-1" /> : <ArrowDownIcon className="h-3 w-3 inline ml-1" />
                     )}
                   </th>
-                  <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('class_number')}>
+                  <th className="px-2 py-2 cursor-pointer min-w-[80px]" onClick={() => handleSort('class_number')}>
                     Класс
                     {sortColumn === 'class_number' && (
-                      sortDirection === 'asc' ? <ArrowUpIcon className="h-4 w-4 inline ml-1" /> : <ArrowDownIcon className="h-4 w-4 inline ml-1" />
+                      sortDirection === 'asc' ? <ArrowUpIcon className="h-3 w-3 inline ml-1" /> : <ArrowDownIcon className="h-3 w-3 inline ml-1" />
                     )}
                   </th>
+                  <th className="px-2 py-2 min-w-[40px]">Действия</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.map((user, index) => (
                   <tr
                     key={user.id}
-                    className="border-b dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 animate-fade-in-up"
+                    className="border-b dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 animate-fade-in-up transition-colors duration-200"
                     style={{ animationDelay: `${400 + index * 100}ms` }}
                   >
-                    <td className="px-4 py-3">{user.id}</td>
-                    <td className="px-4 py-3">{user.username}</td>
-                    <td className="px-4 py-3">{user.email}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-2">{user.id}</td>
+                    <td className="px-2 py-2 truncate max-w-[100px]" title={user.username}>{user.username}</td>
+                    <td className="px-2 py-2 truncate max-w-[100px]" title={user.full_name || '-'}>{user.full_name || '-'}</td>
+                    <td className="px-2 py-2 truncate max-w-[120px]" title={user.email}>{user.email}</td>
+                    <td className="px-2 py-2">
                       <button
                         className={clsx(
-                          'text-blue-600 hover:underline',
-                          user.role === 'student' && 'text-green-600 dark:text-green-400',
-                          user.role === 'teacher' && 'text-blue-600 dark:text-blue-400',
-                          user.role === 'admin' && 'text-purple-600 dark:text-purple-400'
+                          'text-blue-500 hover:underline text-xs',
+                          user.role === 'student' && 'text-green-500 dark:text-green-400',
+                          user.role === 'teacher' && 'text-blue-500 dark:text-blue-400',
+                          user.role === 'admin' && 'text-purple-500 dark:text-purple-400'
                         )}
                         onClick={() => openRoleModal(user)}
                       >
                         {roleLabels[user.role] || user.role}
                       </button>
                     </td>
-                    <td className="px-4 py-3">{user.class_number > 0 ? `${user.class_number} класс` : '-'}</td>
+                    <td className="px-2 py-2">{user.class_number > 0 ? `${user.class_number} класс` : '-'}</td>
+                    <td className="px-2 py-2">
+                      <Button
+                        onClick={() => openDeleteModal(user)}
+                        className="bg-red-500 hover:bg-red-600 text-white p-1 rounded hover:scale-105 transition-transform duration-200"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -4627,35 +4929,6 @@ export default function UserManagement({ users, onSuccess, setFormError }: UserM
           </div>
         )}
       </Card>
-
-      {selectedUser && (
-        <ConfirmModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedUser(null);
-            setNewRole('');
-          }}
-          onConfirm={handleUpdateRole}
-          title="Изменить роль пользователя"
-          message={
-            <>
-              Изменить роль пользователя <strong>{selectedUser.username}</strong> на:
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                className="mt-2 p-2 border border-blue-600 rounded-lg w-full dark:bg-gray-800 dark:text-gray-300"
-              >
-                <option value="student">Ученик</option>
-                <option value="teacher">Учитель</option>
-                <option value="admin">Админ</option>
-              </select>
-            </>
-          }
-          confirmText="Изменить"
-          cancelText="Отмена"
-        />
-      )}
     </div>
   );
 }
@@ -4692,9 +4965,10 @@ interface AchievementManagementProps {
   achievements: Achievement[];
   onSuccess: () => void;
   setFormError: (error: string) => void;
+  openDeleteModal: (achievement: Achievement) => void;
 }
 
-export default function AchievementManagement({ achievements, onSuccess, setFormError }: AchievementManagementProps) {
+export default function AchievementManagement({ achievements, onSuccess, setFormError, openDeleteModal }: AchievementManagementProps) {
   const [showForm, setShowForm] = useState(false);
   const [editAchievement, setEditAchievement] = useState<Achievement | null>(null);
   const [achTitle, setAchTitle] = useState('');
@@ -4744,19 +5018,8 @@ export default function AchievementManagement({ achievements, onSuccess, setForm
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Удалить достижение?')) return;
-    try {
-      await api.delete(`/achievements/${id}`);
-      toast.success('Достижение удалено');
-      onSuccess();
-    } catch (err: unknown) {
-      const axiosError = err as AxiosError<ErrorResponse>;
-      const errorMsg = axiosError.response?.data?.error || 'Ошибка при удалении достижения';
-      setLocalFormError(errorMsg);
-      setFormError(errorMsg);
-      toast.error(errorMsg);
-    }
+  const handleDelete = (achievement: Achievement) => {
+    openDeleteModal(achievement);
   };
 
   const resetForm = () => {
@@ -4769,7 +5032,7 @@ export default function AchievementManagement({ achievements, onSuccess, setForm
   };
 
   return (
-    <div>
+    <div className="w-[50rem] mx-auto">
       <Button
         onClick={() => setShowForm(!showForm)}
         className="mb-6 bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200 flex items-center gap-2"
@@ -4779,7 +5042,7 @@ export default function AchievementManagement({ achievements, onSuccess, setForm
       </Button>
       {localFormError && <p className="text-red-500 mb-4">{localFormError}</p>}
       {showForm && (
-        <Card className="p-6 mb-4 card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+        <Card className="p-6 mb-4 w-full rounded-xl dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
           <form onSubmit={handleCreateOrUpdateAchievement} className="grid gap-4">
             <Input
               placeholder="Название достижения"
@@ -4812,12 +5075,12 @@ export default function AchievementManagement({ achievements, onSuccess, setForm
         </Card>
       )}
       {achievements.length === 0 ? (
-        <Card className="p-6 text-center card-shadow dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+        <Card className="p-6 text-center w-full rounded-xl dark:bg-gray-800 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
           <TrophyIcon className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
           <p className="text-gray-600 dark:text-gray-400">Нет достижений. Создайте первое!</p>
         </Card>
       ) : (
-        <ul className="space-y-4">
+        <ul className="w-full space-y-4">
           {achievements.map((ach, index) => (
             <li
               key={ach.id}
@@ -4826,7 +5089,7 @@ export default function AchievementManagement({ achievements, onSuccess, setForm
             >
               <Card
                 className={clsx(
-                  'p-4 card-shadow card-hover-gradient dark:bg-gray-800 transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg'
+                  'p-4 w-full rounded-xl dark:bg-gray-800 hover:shadow-lg'
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -4850,7 +5113,7 @@ export default function AchievementManagement({ achievements, onSuccess, setForm
                       Редактировать
                     </Button>
                     <Button
-                      onClick={() => handleDelete(ach.id)}
+                      onClick={() => handleDelete(ach)}
                       className="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 hover:scale-105"
                     >
                       Удалить
@@ -5899,17 +6162,18 @@ export function AvatarModal({ isOpen, onClose, currentAvatar, onAvatarUpdate }: 
 
 import { Button } from '@/shared/ui/Button';
 import clsx from 'clsx';
-import React from 'react'; // Явный импорт React
+import React from 'react';
 
 interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string | React.JSX.Element; // Явное использование React.JSX.Element
+  message: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   className?: string;
+  confirmButtonClass?: string;
 }
 
 export default function ConfirmModal({
@@ -5921,14 +6185,15 @@ export default function ConfirmModal({
   confirmText = 'Подтвердить',
   cancelText = 'Отменить',
   className,
+  confirmButtonClass = 'bg-blue-600 hover:bg-blue-700',
 }: ConfirmModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
       <div
         className={clsx(
-          'bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 card-shadow animate-fade-in-up',
+          'bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4 card-shadow animate-fade-in-up',
           className
         )}
       >
@@ -5943,7 +6208,7 @@ export default function ConfirmModal({
           </Button>
           <Button
             onClick={onConfirm}
-            className="bg-blue-600 hover:bg-blue-700 text-white hover:scale-105 transition-transform duration-200"
+            className={clsx('text-white hover:scale-105 transition-transform duration-200', confirmButtonClass)}
           >
             {confirmText}
           </Button>
@@ -6427,7 +6692,7 @@ func SetGrade(submissionService service.SubmissionService) gin.HandlerFunc {
 		logger.Log.Info("Processing SetGrade request")
 
 		var gradeInput struct {
-			Grade float64 `json:"grade" binding:"required,gte=0,lte=5"`
+			Grade float64 `json:"grade" binding:"required,gte=0,lte=10"`
 		}
 		if err := c.ShouldBindJSON(&gradeInput); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -6914,6 +7179,55 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 
 		logger.Log.Infof("User %s registered by admin %d", input.Email, userID)
 		c.JSON(http.StatusOK, gin.H{"message": "Пользователь зарегистрирован"})
+	}
+}
+
+// DeleteUser удаляет пользователя
+// @Summary Удалить пользователя
+// @Description Удаляет пользователя по ID. Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID пользователя"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 404 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /admin/users/{id} [delete] // Updated path
+func DeleteUser(userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid user ID: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID пользователя"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("Admin %d attempting to delete user %d", userID, id)
+		if err := userService.Delete(uint(id), userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to delete user %d: %v", id, err)
+			if err.Error() == "пользователь не найден" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			} else if err.Error() == "нельзя удалить самого себя" || err.Error() == "нельзя удалить администратора" || err.Error() == "недостаточно прав" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка удаления пользователя"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %d deleted by admin %d", id, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Пользователь удалён"})
 	}
 }
 
@@ -7910,24 +8224,30 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 // CreateCourseInput defines the input structure for creating a course
 type CreateCourseInput struct {
-	Title       string `json:"title" binding:"required,min=3,max=100" swaggertype:"string" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
-	Description string `json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
-	Subject     string `json:"subject" binding:"required" swaggertype:"string" example:"Математика" description:"Предмет урока (обязательное)"`
-	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
+	Title       string `json:"title" binding:"required,min=3,max=100" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
+	Description string `json:"description" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
+	Subject     string `json:"subject" binding:"required" example:"Математика" description:"Предмет урока"`
+	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" example:"6" description:"Номер класса (1-11)"`
+	MaterialURL string `json:"material_url" example:"/uploads/materials/math101.pdf" description:"Ссылка на PDF-материал (опционально)"`
 }
 
 // ListCourses возвращает список уроков
@@ -8018,6 +8338,7 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			Subject:     input.Subject,
 			ClassNumber: input.ClassNumber,
 			TeacherID:   userID.(uint),
+			MaterialURL: input.MaterialURL,
 		}
 
 		logger.Log.Infof("Creating course: %+v", course)
@@ -8471,7 +8792,7 @@ func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
-		// Получаем курсы, на которые записан пользователь
+		// Получаем уроки, на которые записан пользователь
 		courses, err := courseService.GetEnrolledCourses(uint(userID))
 		if err != nil {
 			logger.Log.Errorf("Failed to fetch enrolled courses for user %d: %v", userID, err)
@@ -8481,6 +8802,98 @@ func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
 
 		logger.Log.Infof("Fetched %d enrolled courses for user %d", len(courses), userID)
 		c.JSON(http.StatusOK, gin.H{"courses": courses})
+	}
+}
+
+// UploadCourseMaterial загружает PDF-материал для урока
+// @Summary Загрузить материал урока
+// @Description Загружает PDF-файл для урока. Доступно для учителей и админов. Требуется JWT-токен.
+// @Tags courses
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID урока"
+// @Param file formData file true "PDF-файл"
+// @Success 200 {object} map[string]string "file_url"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/material/upload [post]
+func UploadCourseMaterial() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		courseID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID урока"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+
+		var course model.Course
+		if err := db.DB.First(&course, courseID).Error; err != nil {
+			logger.Log.Errorf("Course %d not found: %v", courseID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Урок не найден"})
+			return
+		}
+
+		if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
+			logger.Log.Warnf("User %d has no permission to upload material for course %d", userID, courseID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Нет прав для загрузки материала"})
+			return
+		}
+
+		file, err := c.FormFile("file")
+		if err != nil {
+			logger.Log.Errorf("File not provided: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Файл не загружен"})
+			return
+		}
+
+		if filepath.Ext(file.Filename) != ".pdf" {
+			logger.Log.Errorf("Invalid file format: %s", file.Filename)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Допустимы только PDF-файлы"})
+			return
+		}
+
+		uploadDir := filepath.Join("uploads", "materials")
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Log.Errorf("Failed to create upload directory: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
+			return
+		}
+
+		filename := fmt.Sprintf("%d_%s", courseID, file.Filename)
+		filePath := filepath.Join(uploadDir, filename)
+		if err := c.SaveUploadedFile(file, filePath); err != nil {
+			logger.Log.Errorf("Failed to save file: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось сохранить файл"})
+			return
+		}
+
+		// Обновляем поле MaterialURL в курсе
+		if err := db.DB.Model(&course).Update("material_url", fmt.Sprintf("/%s", filePath)).Error; err != nil {
+			logger.Log.Errorf("Failed to update course material URL: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка обновления урока"})
+			return
+		}
+
+		logger.Log.Infof("Material uploaded for course %d by user %d: %s", courseID, userID, filePath)
+		util.LogUserAction(repository.NewActionLogRepository(db.DB), userID.(uint), "upload_material", fmt.Sprintf("Загружен материал для урока ID: %d", courseID))
+		c.JSON(http.StatusOK, gin.H{"file_url": fmt.Sprintf("/%s", filePath)})
 	}
 }
 
@@ -9167,14 +9580,15 @@ import (
 type Course struct {
 	ID          uint         `gorm:"primaryKey" json:"id" swaggertype:"integer" example:"1" description:"Уникальный идентификатор урока"`
 	Title       string       `gorm:"not null;unique" validate:"required,min=3,max=100" json:"title" swaggertype:"string" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
-	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
-	Subject     string       `gorm:"not null" validate:"required" json:"subject" swaggertype:"string" example:"Математика" description:"Предмет урока (обязательное)"`
-	ClassNumber int          `gorm:"not null" validate:"required,gte=1,lte=11" json:"class_number" swaggertype:"integer" example:"6" description:"Номер класса (обязательное, 1-11)"`
-	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя (устанавливается автоматически из токена)"`
-	Teacher     User         `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Информация о преподавателе"`
-	Assignments []Assignment `gorm:"foreignKey:CourseID" json:"assignments" description:"Список заданий урока"`
-	CreatedAt   time.Time    `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата создания урока"`
-	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата последнего обновления урока"`
+	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Описание урока (опционально)" description:"Описание урока"`
+	Subject     string       `gorm:"not null" validate:"required" json:"subject" swaggertype:"string" example:"Математика" description:"Предмет урока"`
+	ClassNumber int          `gorm:"not null" validate:"required,gte=1,lte=11" json:"class_number" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
+	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя"`
+	Teacher     User         `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Данные преподавателя"`
+	Assignments []Assignment `gorm:"foreignKey:CourseID" json:"assignments" description:"Список заданий"`
+	MaterialURL string       `gorm:"type:text" json:"material_url" swaggertype:"string" example:"uploads/materials/math101.pdf" description:"Ссылка на PDF-материал (опционально)"`
+	CreatedAt   time.Time    `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-06-12T00:00:00Z"`
+	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-06-12T00:00:00Z"`
 }
 
 func (c *Course) Validate() error {
@@ -9314,6 +9728,7 @@ type UserRepository interface {
 	FindTopByPoints(limit int) ([]model.User, error)
 	FindTopByPointsInCourse(courseID uint, limit int) ([]model.User, error)
 	UpdateRole(id uint, role model.Role) error
+	Delete(id uint) error
 }
 
 type userRepository struct {
@@ -9365,6 +9780,11 @@ func (r *userRepository) FindTopByPointsInCourse(courseID uint, limit int) ([]mo
 func (r *userRepository) UpdateRole(id uint, role model.Role) error {
 	logger.Log.Infof("Updating role for user %d to %s", id, role)
 	return r.db.Model(&model.User{}).Where("id = ?", id).Update("role", role).Error
+}
+
+func (r *userRepository) Delete(id uint) error {
+	logger.Log.Infof("Deleting user %d", id)
+	return r.db.Delete(&model.User{}, id).Error
 }
 
 
@@ -10343,7 +10763,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
-		points = uint(math.Round(grade * float64(assignment.MaxScore) / 5.0))
+		points = uint(math.Round(grade * float64(assignment.MaxScore) / 10.0))
 		submissionUser.Points += points
 		if err := tx.Save(&submissionUser).Error; err != nil {
 			return err
@@ -10607,13 +11027,23 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	percent := totalScore / float64(assignment.MaxScore) * 100
 	var grade float64
 	switch {
+	case percent >= 90:
+		grade = 10
 	case percent >= 80:
-		grade = 5
+		grade = 9
+	case percent >= 70:
+		grade = 8
 	case percent >= 60:
-		grade = 4
+		grade = 7
+	case percent >= 50:
+		grade = 6
 	case percent >= 40:
-		grade = 3
+		grade = 5
+	case percent >= 30:
+		grade = 4
 	case percent >= 20:
+		grade = 3
+	case percent >= 10:
 		grade = 2
 	default:
 		grade = 1
@@ -10714,7 +11144,6 @@ package service
 import (
 	"errors"
 	"fmt"
-
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -10735,6 +11164,7 @@ type UserService interface {
 	UpdateProfile(userID uint, username, email, fullName string) error
 	ListAll() ([]model.User, error)
 	GetAchievements(userID uint) ([]model.UserAchievement, error)
+	Delete(userID, adminID uint) error
 }
 
 type userService struct {
@@ -11023,6 +11453,56 @@ func (s *userService) GetAchievements(userID uint) ([]model.UserAchievement, err
 		logger.Log.Errorf("Failed to create action log: %v", err)
 	}
 	return achievements, nil
+}
+
+func (s *userService) Delete(userID, adminID uint) error {
+	logger.Log.Infof("Admin %d attempting to delete user %d", adminID, userID)
+
+	if userID == adminID {
+		logger.Log.Warnf("Admin %d cannot delete themselves", adminID)
+		return errors.New("нельзя удалить самого себя")
+	}
+
+	admin, err := s.repo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		logger.Log.Errorf("User %d not found: %v", userID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("пользователь не найден")
+		}
+		return err
+	}
+
+	if user.Role == model.Admin {
+		logger.Log.Warnf("Cannot delete admin user %d", userID)
+		return errors.New("нельзя удалить администратора")
+	}
+
+	if err := s.repo.Delete(userID); err != nil {
+		logger.Log.Errorf("Failed to delete user %d: %v", userID, err)
+		return err
+	}
+
+	logger.Log.Infof("User %d deleted by admin %d", userID, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "delete_user",
+		Details:   fmt.Sprintf("Админ удалил пользователя %d", userID),
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
 }
 
 
@@ -11606,7 +12086,7 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 		for _, submission := range assignment.Submissions {
 			if submission.UserID == userID && submission.Grade != 0 {
 				completedAssignments++
-				totalPoints += submission.Grade * float64(assignment.MaxScore) / 5.0
+				totalPoints += submission.Grade * float64(assignment.MaxScore) / 10.0
 			}
 		}
 	}
@@ -11819,7 +12299,7 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 			if len(submissions) >= int(ach.Threshold) {
 				count := 0
 				for _, sub := range submissions {
-					if sub.Grade >= 4.0 {
+					if sub.Grade >= 8.0 {
 						count++
 						if uint(count) >= ach.Threshold {
 							conditionMet = true
@@ -12109,7 +12589,7 @@ func main() {
 	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
-	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo) // Добавляем logRepo
+	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo)
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
 	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
@@ -12155,6 +12635,7 @@ func main() {
 			{
 				admin.GET("/logs", handler.GetActionLogs(actionLogService))
 				admin.POST("/create-user", handler.AdminRegister(authService, userService))
+				admin.DELETE("/users/:id", handler.DeleteUser(userService)) // Новый маршрут
 			}
 
 			// Достижения
@@ -12182,6 +12663,7 @@ func main() {
 					courseGroup.GET("/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
 					courseGroup.GET("/progress", handler.RoleMiddleware(model.Student), handler.GetCourseProgress(courseService))
 					courseGroup.GET("/is-enrolled", handler.RoleMiddleware(model.Student), handler.IsEnrolled(courseService))
+					courseGroup.POST("/material/upload", handler.UploadCourseMaterial())
 				}
 			}
 

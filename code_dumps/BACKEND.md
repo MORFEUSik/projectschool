@@ -468,7 +468,7 @@ func SetGrade(submissionService service.SubmissionService) gin.HandlerFunc {
 		logger.Log.Info("Processing SetGrade request")
 
 		var gradeInput struct {
-			Grade float64 `json:"grade" binding:"required,gte=0,lte=5"`
+			Grade float64 `json:"grade" binding:"required,gte=0,lte=10"`
 		}
 		if err := c.ShouldBindJSON(&gradeInput); err != nil {
 			logger.Log.Errorf("Failed to bind JSON: %v", err)
@@ -955,6 +955,55 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 
 		logger.Log.Infof("User %s registered by admin %d", input.Email, userID)
 		c.JSON(http.StatusOK, gin.H{"message": "Пользователь зарегистрирован"})
+	}
+}
+
+// DeleteUser удаляет пользователя
+// @Summary Удалить пользователя
+// @Description Удаляет пользователя по ID. Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID пользователя"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 404 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /admin/users/{id} [delete] // Updated path
+func DeleteUser(userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid user ID: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID пользователя"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("Admin %d attempting to delete user %d", userID, id)
+		if err := userService.Delete(uint(id), userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to delete user %d: %v", id, err)
+			if err.Error() == "пользователь не найден" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			} else if err.Error() == "нельзя удалить самого себя" || err.Error() == "нельзя удалить администратора" || err.Error() == "недостаточно прав" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка удаления пользователя"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %d deleted by admin %d", id, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Пользователь удалён"})
 	}
 }
 
@@ -1951,24 +2000,30 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
 	"github.com/MORFEUSik/projectschool/backend/internal/error"
 	"github.com/MORFEUSik/projectschool/backend/internal/logger"
 	"github.com/MORFEUSik/projectschool/backend/internal/model"
+	"github.com/MORFEUSik/projectschool/backend/internal/repository"
 	"github.com/MORFEUSik/projectschool/backend/internal/service"
+	"github.com/MORFEUSik/projectschool/backend/internal/util"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 // CreateCourseInput defines the input structure for creating a course
 type CreateCourseInput struct {
-	Title       string `json:"title" binding:"required,min=3,max=100" swaggertype:"string" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
-	Description string `json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
-	Subject     string `json:"subject" binding:"required" swaggertype:"string" example:"Математика" description:"Предмет урока (обязательное)"`
-	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
+	Title       string `json:"title" binding:"required,min=3,max=100" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
+	Description string `json:"description" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
+	Subject     string `json:"subject" binding:"required" example:"Математика" description:"Предмет урока"`
+	ClassNumber int    `json:"class_number" binding:"required,gte=1,lte=11" example:"6" description:"Номер класса (1-11)"`
+	MaterialURL string `json:"material_url" example:"/uploads/materials/math101.pdf" description:"Ссылка на PDF-материал (опционально)"`
 }
 
 // ListCourses возвращает список уроков
@@ -2059,6 +2114,7 @@ func CreateCourse(courseService service.CourseService) gin.HandlerFunc {
 			Subject:     input.Subject,
 			ClassNumber: input.ClassNumber,
 			TeacherID:   userID.(uint),
+			MaterialURL: input.MaterialURL,
 		}
 
 		logger.Log.Infof("Creating course: %+v", course)
@@ -2512,7 +2568,7 @@ func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
 			return
 		}
 
-		// Получаем курсы, на которые записан пользователь
+		// Получаем уроки, на которые записан пользователь
 		courses, err := courseService.GetEnrolledCourses(uint(userID))
 		if err != nil {
 			logger.Log.Errorf("Failed to fetch enrolled courses for user %d: %v", userID, err)
@@ -2522,6 +2578,98 @@ func GetEnrolledCourses(courseService service.CourseService) gin.HandlerFunc {
 
 		logger.Log.Infof("Fetched %d enrolled courses for user %d", len(courses), userID)
 		c.JSON(http.StatusOK, gin.H{"courses": courses})
+	}
+}
+
+// UploadCourseMaterial загружает PDF-материал для урока
+// @Summary Загрузить материал урока
+// @Description Загружает PDF-файл для урока. Доступно для учителей и админов. Требуется JWT-токен.
+// @Tags courses
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID урока"
+// @Param file formData file true "PDF-файл"
+// @Success 200 {object} map[string]string "file_url"
+// @Failure 400 {object} error.APIError
+// @Failure 401 {object} error.APIError
+// @Failure 403 {object} error.APIError
+// @Failure 500 {object} error.APIError
+// @Router /courses/{id}/material/upload [post]
+func UploadCourseMaterial() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			error.HandleError(c, error.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		courseID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid course ID: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Неверный ID урока"})
+			return
+		}
+
+		var user model.User
+		if err := db.DB.First(&user, userID).Error; err != nil {
+			logger.Log.Errorf("User %d not found: %v", userID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			return
+		}
+
+		var course model.Course
+		if err := db.DB.First(&course, courseID).Error; err != nil {
+			logger.Log.Errorf("Course %d not found: %v", courseID, err)
+			error.HandleError(c, error.APIError{Status: http.StatusNotFound, Message: "Урок не найден"})
+			return
+		}
+
+		if user.Role != model.Admin && (user.Role != model.Teacher || course.TeacherID != userID) {
+			logger.Log.Warnf("User %d has no permission to upload material for course %d", userID, courseID)
+			error.HandleError(c, error.APIError{Status: http.StatusForbidden, Message: "Нет прав для загрузки материала"})
+			return
+		}
+
+		file, err := c.FormFile("file")
+		if err != nil {
+			logger.Log.Errorf("File not provided: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Файл не загружен"})
+			return
+		}
+
+		if filepath.Ext(file.Filename) != ".pdf" {
+			logger.Log.Errorf("Invalid file format: %s", file.Filename)
+			error.HandleError(c, error.APIError{Status: http.StatusBadRequest, Message: "Допустимы только PDF-файлы"})
+			return
+		}
+
+		uploadDir := filepath.Join("uploads", "materials")
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Log.Errorf("Failed to create upload directory: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка сервера"})
+			return
+		}
+
+		filename := fmt.Sprintf("%d_%s", courseID, file.Filename)
+		filePath := filepath.Join(uploadDir, filename)
+		if err := c.SaveUploadedFile(file, filePath); err != nil {
+			logger.Log.Errorf("Failed to save file: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Не удалось сохранить файл"})
+			return
+		}
+
+		// Обновляем поле MaterialURL в курсе
+		if err := db.DB.Model(&course).Update("material_url", fmt.Sprintf("/%s", filePath)).Error; err != nil {
+			logger.Log.Errorf("Failed to update course material URL: %v", err)
+			error.HandleError(c, error.APIError{Status: http.StatusInternalServerError, Message: "Ошибка обновления урока"})
+			return
+		}
+
+		logger.Log.Infof("Material uploaded for course %d by user %d: %s", courseID, userID, filePath)
+		util.LogUserAction(repository.NewActionLogRepository(db.DB), userID.(uint), "upload_material", fmt.Sprintf("Загружен материал для урока ID: %d", courseID))
+		c.JSON(http.StatusOK, gin.H{"file_url": fmt.Sprintf("/%s", filePath)})
 	}
 }
 
@@ -3208,14 +3356,15 @@ import (
 type Course struct {
 	ID          uint         `gorm:"primaryKey" json:"id" swaggertype:"integer" example:"1" description:"Уникальный идентификатор урока"`
 	Title       string       `gorm:"not null;unique" validate:"required,min=3,max=100" json:"title" swaggertype:"string" example:"Math 101" description:"Название урока (обязательное, 3-100 символов)"`
-	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Introduction to Mathematics" description:"Описание урока (опциональное)"`
-	Subject     string       `gorm:"not null" validate:"required" json:"subject" swaggertype:"string" example:"Математика" description:"Предмет урока (обязательное)"`
-	ClassNumber int          `gorm:"not null" validate:"required,gte=1,lte=11" json:"class_number" swaggertype:"integer" example:"6" description:"Номер класса (обязательное, 1-11)"`
-	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя (устанавливается автоматически из токена)"`
-	Teacher     User         `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Информация о преподавателе"`
-	Assignments []Assignment `gorm:"foreignKey:CourseID" json:"assignments" description:"Список заданий урока"`
-	CreatedAt   time.Time    `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата создания урока"`
-	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-04-18T12:00:00Z" description:"Дата последнего обновления урока"`
+	Description string       `gorm:"type:text" json:"description" swaggertype:"string" example:"Описание урока (опционально)" description:"Описание урока"`
+	Subject     string       `gorm:"not null" validate:"required" json:"subject" swaggertype:"string" example:"Математика" description:"Предмет урока"`
+	ClassNumber int          `gorm:"not null" validate:"required,gte=1,lte=11" json:"class_number" swaggertype:"integer" example:"6" description:"Номер класса (1-11)"`
+	TeacherID   uint         `gorm:"not null" validate:"required,gt=0" json:"-" description:"ID преподавателя"`
+	Teacher     User         `gorm:"foreignKey:TeacherID" validate:"-" json:"teacher" description:"Данные преподавателя"`
+	Assignments []Assignment `gorm:"foreignKey:CourseID" json:"assignments" description:"Список заданий"`
+	MaterialURL string       `gorm:"type:text" json:"material_url" swaggertype:"string" example:"uploads/materials/math101.pdf" description:"Ссылка на PDF-материал (опционально)"`
+	CreatedAt   time.Time    `gorm:"default:current_timestamp" json:"created_at" swaggertype:"string" example:"2025-06-12T00:00:00Z"`
+	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at" swaggertype:"string" example:"2025-06-12T00:00:00Z"`
 }
 
 func (c *Course) Validate() error {
@@ -3355,6 +3504,7 @@ type UserRepository interface {
 	FindTopByPoints(limit int) ([]model.User, error)
 	FindTopByPointsInCourse(courseID uint, limit int) ([]model.User, error)
 	UpdateRole(id uint, role model.Role) error
+	Delete(id uint) error
 }
 
 type userRepository struct {
@@ -3406,6 +3556,11 @@ func (r *userRepository) FindTopByPointsInCourse(courseID uint, limit int) ([]mo
 func (r *userRepository) UpdateRole(id uint, role model.Role) error {
 	logger.Log.Infof("Updating role for user %d to %s", id, role)
 	return r.db.Model(&model.User{}).Where("id = ?", id).Update("role", role).Error
+}
+
+func (r *userRepository) Delete(id uint) error {
+	logger.Log.Infof("Deleting user %d", id)
+	return r.db.Delete(&model.User{}, id).Error
 }
 
 
@@ -4384,7 +4539,7 @@ func (s *submissionService) SetGrade(submissionID, userID uint, grade float64) e
 		if err := tx.First(&submissionUser, submission.UserID).Error; err != nil {
 			return err
 		}
-		points = uint(math.Round(grade * float64(assignment.MaxScore) / 5.0))
+		points = uint(math.Round(grade * float64(assignment.MaxScore) / 10.0))
 		submissionUser.Points += points
 		if err := tx.Save(&submissionUser).Error; err != nil {
 			return err
@@ -4648,13 +4803,23 @@ func (s *submissionService) ProcessQuizSubmission(assignmentID, userID uint, ans
 	percent := totalScore / float64(assignment.MaxScore) * 100
 	var grade float64
 	switch {
+	case percent >= 90:
+		grade = 10
 	case percent >= 80:
-		grade = 5
+		grade = 9
+	case percent >= 70:
+		grade = 8
 	case percent >= 60:
-		grade = 4
+		grade = 7
+	case percent >= 50:
+		grade = 6
 	case percent >= 40:
-		grade = 3
+		grade = 5
+	case percent >= 30:
+		grade = 4
 	case percent >= 20:
+		grade = 3
+	case percent >= 10:
 		grade = 2
 	default:
 		grade = 1
@@ -4755,7 +4920,6 @@ package service
 import (
 	"errors"
 	"fmt"
-
 	"time"
 
 	"github.com/MORFEUSik/projectschool/backend/internal/db"
@@ -4776,6 +4940,7 @@ type UserService interface {
 	UpdateProfile(userID uint, username, email, fullName string) error
 	ListAll() ([]model.User, error)
 	GetAchievements(userID uint) ([]model.UserAchievement, error)
+	Delete(userID, adminID uint) error
 }
 
 type userService struct {
@@ -5064,6 +5229,56 @@ func (s *userService) GetAchievements(userID uint) ([]model.UserAchievement, err
 		logger.Log.Errorf("Failed to create action log: %v", err)
 	}
 	return achievements, nil
+}
+
+func (s *userService) Delete(userID, adminID uint) error {
+	logger.Log.Infof("Admin %d attempting to delete user %d", adminID, userID)
+
+	if userID == adminID {
+		logger.Log.Warnf("Admin %d cannot delete themselves", adminID)
+		return errors.New("нельзя удалить самого себя")
+	}
+
+	admin, err := s.repo.FindByID(adminID)
+	if err != nil {
+		logger.Log.Errorf("Admin %d not found: %v", adminID, err)
+		return errors.New("админ не найден")
+	}
+	if admin.Role != model.Admin {
+		logger.Log.Warnf("User %d is not an admin", adminID)
+		return errors.New("недостаточно прав")
+	}
+
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		logger.Log.Errorf("User %d not found: %v", userID, err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("пользователь не найден")
+		}
+		return err
+	}
+
+	if user.Role == model.Admin {
+		logger.Log.Warnf("Cannot delete admin user %d", userID)
+		return errors.New("нельзя удалить администратора")
+	}
+
+	if err := s.repo.Delete(userID); err != nil {
+		logger.Log.Errorf("Failed to delete user %d: %v", userID, err)
+		return err
+	}
+
+	logger.Log.Infof("User %d deleted by admin %d", userID, adminID)
+	log := &model.UserActionLog{
+		UserID:    adminID,
+		Action:    "delete_user",
+		Details:   fmt.Sprintf("Админ удалил пользователя %d", userID),
+		CreatedAt: time.Now(),
+	}
+	if err := s.logRepo.Create(log); err != nil {
+		logger.Log.Errorf("Failed to create action log: %v", err)
+	}
+	return nil
 }
 
 
@@ -5647,7 +5862,7 @@ func (s *courseService) GetProgress(userID, courseID uint) (map[string]interface
 		for _, submission := range assignment.Submissions {
 			if submission.UserID == userID && submission.Grade != 0 {
 				completedAssignments++
-				totalPoints += submission.Grade * float64(assignment.MaxScore) / 5.0
+				totalPoints += submission.Grade * float64(assignment.MaxScore) / 10.0
 			}
 		}
 	}
@@ -5860,7 +6075,7 @@ func (s *achievementService) AwardAchievements(userID uint, points uint, submiss
 			if len(submissions) >= int(ach.Threshold) {
 				count := 0
 				for _, sub := range submissions {
-					if sub.Grade >= 4.0 {
+					if sub.Grade >= 8.0 {
 						count++
 						if uint(count) >= ach.Threshold {
 							conditionMet = true
@@ -6150,7 +6365,7 @@ func main() {
 	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
-	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo) // Добавляем logRepo
+	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo)
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
 	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
@@ -6196,6 +6411,7 @@ func main() {
 			{
 				admin.GET("/logs", handler.GetActionLogs(actionLogService))
 				admin.POST("/create-user", handler.AdminRegister(authService, userService))
+				admin.DELETE("/users/:id", handler.DeleteUser(userService)) // Новый маршрут
 			}
 
 			// Достижения
@@ -6223,6 +6439,7 @@ func main() {
 					courseGroup.GET("/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
 					courseGroup.GET("/progress", handler.RoleMiddleware(model.Student), handler.GetCourseProgress(courseService))
 					courseGroup.GET("/is-enrolled", handler.RoleMiddleware(model.Student), handler.IsEnrolled(courseService))
+					courseGroup.POST("/material/upload", handler.UploadCourseMaterial())
 				}
 			}
 

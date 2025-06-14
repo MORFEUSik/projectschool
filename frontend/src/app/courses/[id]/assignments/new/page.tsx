@@ -235,10 +235,11 @@ export default function CreateAssignmentPage() {
       }
 
       const response = await api.post('/assignments', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Задание успешно создано!');
-      window.location.href = `/courses/${courseId}/assignments/${response.data.assignment_id}`;
+  headers: { 'Content-Type': 'multipart/form-data' },
+});
+toast.success('Задание успешно создано!');
+window.location.href = `/courses/${courseId}`; // 👈 Вот здесь замена
+
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       const errorMessage = axiosError.response?.data?.error || 'Ошибка при создании задания';

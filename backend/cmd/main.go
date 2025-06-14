@@ -91,7 +91,7 @@ func main() {
 	// Инициализация сервисов
 	authService := service.NewAuthService(userRepo)
 	courseService := service.NewCourseService(courseRepo, notificationRepo, userRepo, logRepo, db.DB)
-	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo) // Добавляем logRepo
+	assignmentService := service.NewAssignmentService(assignmentRepo, notificationRepo, db.DB, logRepo)
 	submissionService := service.NewSubmissionService(submissionRepo, userRepo, assignmentRepo, notificationRepo, logRepo)
 	userService := service.NewUserService(userRepo, logRepo)
 	notificationService := service.NewNotificationService(notificationRepo, db.DB)
@@ -137,6 +137,7 @@ func main() {
 			{
 				admin.GET("/logs", handler.GetActionLogs(actionLogService))
 				admin.POST("/create-user", handler.AdminRegister(authService, userService))
+				admin.DELETE("/users/:id", handler.DeleteUser(userService)) // Новый маршрут
 			}
 
 			// Достижения
@@ -164,6 +165,7 @@ func main() {
 					courseGroup.GET("/stats", handler.RoleMiddleware(model.Teacher, model.Admin), handler.GetCourseStats(courseService))
 					courseGroup.GET("/progress", handler.RoleMiddleware(model.Student), handler.GetCourseProgress(courseService))
 					courseGroup.GET("/is-enrolled", handler.RoleMiddleware(model.Student), handler.IsEnrolled(courseService))
+					courseGroup.POST("/material/upload", handler.UploadCourseMaterial())
 				}
 			}
 

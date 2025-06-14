@@ -234,3 +234,52 @@ func AdminRegister(authService service.AuthService, userService service.UserServ
 		c.JSON(http.StatusOK, gin.H{"message": "Пользователь зарегистрирован"})
 	}
 }
+
+// DeleteUser удаляет пользователя
+// @Summary Удалить пользователя
+// @Description Удаляет пользователя по ID. Требуется JWT-токен. Доступно только для роли: admin.
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "ID пользователя"
+// @Success 200 {object} map[string]string "message"
+// @Failure 400 {object} errorpkg.APIError
+// @Failure 401 {object} errorpkg.APIError
+// @Failure 403 {object} errorpkg.APIError
+// @Failure 404 {object} errorpkg.APIError
+// @Failure 500 {object} errorpkg.APIError
+// @Router /admin/users/{id} [delete] // Updated path
+func DeleteUser(userService service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			logger.Log.Errorf("Invalid user ID: %v", err)
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusBadRequest, Message: "Неверный ID пользователя"})
+			return
+		}
+
+		userID, exists := c.Get("userID")
+		if !exists {
+			logger.Log.Error("UserID not found in context")
+			errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusUnauthorized, Message: "Пользователь не аутентифицирован"})
+			return
+		}
+
+		logger.Log.Infof("Admin %d attempting to delete user %d", userID, id)
+		if err := userService.Delete(uint(id), userID.(uint)); err != nil {
+			logger.Log.Errorf("Failed to delete user %d: %v", id, err)
+			if err.Error() == "пользователь не найден" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusNotFound, Message: "Пользователь не найден"})
+			} else if err.Error() == "нельзя удалить самого себя" || err.Error() == "нельзя удалить администратора" || err.Error() == "недостаточно прав" {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusForbidden, Message: err.Error()})
+			} else {
+				errorpkg.HandleError(c, errorpkg.APIError{Status: http.StatusInternalServerError, Message: "Ошибка удаления пользователя"})
+			}
+			return
+		}
+
+		logger.Log.Infof("User %d deleted by admin %d", id, userID)
+		c.JSON(http.StatusOK, gin.H{"message": "Пользователь удалён"})
+	}
+}
